@@ -25,6 +25,10 @@ chruby ruby-3.1.2
 export PATH=$HOME/Library/Python/3.10/bin:$PATH
 export PATH=~/bin:$PATH
 
+export LIBRARY_PATH="$LIBRARY_PATH:$(brew --prefix)/lib"
+
+export COLORTERM=truecolor
+
 alias ls="eza -la"
 alias gst="git st"
 alias gsv="git sv"
@@ -33,6 +37,7 @@ alias grv="git rv"
 alias gch="git ch"
 alias gdd="git add"
 alias gll="git ll"
+alias gdl="git dl"
 alias grb="git rebase"
 unalias gl
 

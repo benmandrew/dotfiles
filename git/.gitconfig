@@ -1,6 +1,7 @@
 [user]
 	name = benmandrew
 	email = benmandrew@gmail.com
+	signingkey = /Users/benmandrew/.ssh/id_rsa.pub
 [pull]
 	rebase = true
 [alias]
@@ -12,9 +13,12 @@
 	d = diff
 	sv = status -vv
 	bv = for-each-ref --sort=-committerdate refs/heads/ --format='%(HEAD) %(color:yellow)%(refname:short)%(color:reset) - %(color:red)%(objectname:short)%(color:reset) - %(contents:subject) - %(color:blue)%(authorname)%(color:reset) (%(color:green)%(committerdate:relative)%(color:reset))'
+  dl = diff HEAD~1 HEAD
 [init]
 	defaultBranch = main
 [protocol "file"]
 	allow = always
 [commit]
 	gpgsign = false
+[gpg]
+	format = ssh
