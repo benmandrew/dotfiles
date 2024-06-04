@@ -22,3 +22,5 @@
 	gpgsign = false
 [gpg]
 	format = ssh
+[core]
+	excludesfile = /Users/benmandrew/.gitignore_global
