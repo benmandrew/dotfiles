@@ -41,6 +41,8 @@ alias gdl="git dl"
 alias grb="git rebase"
 unalias gl
 
+alias vim="nvim"
+
 eval "$(zoxide init zsh --cmd cd)"
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
