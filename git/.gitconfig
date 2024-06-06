@@ -24,3 +24,4 @@
 	format = ssh
 [core]
 	excludesfile = /Users/benmandrew/.gitignore_global
+	editor = vim

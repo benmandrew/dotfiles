@@ -1,7 +1,5 @@
 #!/bin/sh
 
-brew install 
-
 stow git
 stow zsh
 stow tmux

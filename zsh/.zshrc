@@ -29,6 +29,9 @@ export LIBRARY_PATH="$LIBRARY_PATH:$(brew --prefix)/lib"
 
 export COLORTERM=truecolor
 
+export VISUAL=vim
+export EDITOR="$VISUAL"
+
 alias ls="eza -la"
 alias gst="git st"
 alias gsv="git sv"
