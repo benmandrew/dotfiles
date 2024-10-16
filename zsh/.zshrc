@@ -24,6 +24,14 @@ chruby ruby-3.1.2
 
 export PATH=$HOME/Library/Python/3.10/bin:$PATH
 export PATH=~/bin:$PATH
+export PATH=/usr/local/opt/llvm/bin:$PATH
+export PATH=/opt/homebrew/opt/openjdk/bin:$PATH
+export PATH=~/projects/storm/build/bin:$PATH
+
+export JAVA_DIR=/opt/homebrew/opt/openjdk
+export JAVA_HOME=/opt/homebrew/opt/openjdk/bin/java
+
+export LDFLAGS='-L/usr/local/opt/llvm/lib -Wl,-rpath,/usr/local/opt/llvm/lib'
 
 export LIBRARY_PATH="$LIBRARY_PATH:$(brew --prefix)/lib"
 
@@ -32,7 +40,7 @@ export COLORTERM=truecolor
 export VISUAL=vim
 export EDITOR="$VISUAL"
 
-alias ls="eza -la"
+alias ls="eza -l"
 alias gst="git st"
 alias gsv="git sv"
 alias gbv="git bv"
@@ -54,3 +62,4 @@ setopt EXTENDED_HISTORY
 eval "$(zoxide init zsh --cmd cd)"
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
