@@ -18,22 +18,25 @@ source $ZSH/oh-my-zsh.sh
 #   export EDITOR='mvim'
 # fi
 
-source /opt/homebrew/opt/chruby/share/chruby/chruby.sh
-source /opt/homebrew/opt/chruby/share/chruby/auto.sh
-chruby ruby-3.1.2
+# source /opt/homebrew/opt/chruby/share/chruby/chruby.sh
+# source /opt/homebrew/opt/chruby/share/chruby/auto.sh
+# chruby ruby-3.1.2
 
-export PATH=$HOME/Library/Python/3.10/bin:$PATH
-export PATH=~/bin:$PATH
-export PATH=/usr/local/opt/llvm/bin:$PATH
-export PATH=/opt/homebrew/opt/openjdk/bin:$PATH
-export PATH=~/projects/storm/build/bin:$PATH
+# export PATH=$HOME/Library/Python/3.10/bin:$PATH
+# export PATH=~/bin:$PATH
+# export PATH=/usr/local/opt/llvm/bin:$PATH
+# export PATH=/opt/homebrew/opt/openjdk/bin:$PATH
+# export PATH=~/projects/storm/build/bin:$PATH
 
-export JAVA_DIR=/opt/homebrew/opt/openjdk
-export JAVA_HOME=/opt/homebrew/opt/openjdk/bin/java
+# export JAVA_DIR=/opt/homebrew/opt/openjdk
+# export JAVA_HOME=/opt/homebrew/opt/openjdk/bin/java
 
-export LDFLAGS='-L/usr/local/opt/llvm/lib -Wl,-rpath,/usr/local/opt/llvm/lib'
+# export LDFLAGS='-L/usr/local/opt/llvm/lib -Wl,-rpath,/usr/local/opt/llvm/lib'
 
-export LIBRARY_PATH="$LIBRARY_PATH:$(brew --prefix)/lib"
+# export LIBRARY_PATH="$LIBRARY_PATH:$(brew --prefix)/lib"
+
+export PATH="/usr/local/bin:$PATH"
+export PATH="$HOME/.cargo/bin:$PATH"
 
 export COLORTERM=truecolor
 
@@ -59,7 +62,18 @@ export HISTSIZE=1000000000
 export SAVEHIST=1000000000
 setopt EXTENDED_HISTORY
 
+source /opt/ros/humble/setup.zsh
+
+export PATH="$HOME/.local/bin:$PATH"
 eval "$(zoxide init zsh --cmd cd)"
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
+
+# BEGIN opam configuration
+# This is useful if you're using opam as it adds:
+#   - the correct directories to the PATH
+#   - auto-completion for the opam binary
+# This section can be safely removed at any time if needed.
+[[ ! -r '/home/y19056ba/.opam/opam-init/init.zsh' ]] || source '/home/y19056ba/.opam/opam-init/init.zsh' > /dev/null 2> /dev/null
+# END opam configuration
