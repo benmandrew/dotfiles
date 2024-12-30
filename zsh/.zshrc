@@ -40,6 +40,8 @@ export COLORTERM=truecolor
 export VISUAL=vim
 export EDITOR="$VISUAL"
 
+export PAGER=most
+
 alias ls="eza -l"
 alias gst="git st"
 alias gsv="git sv"
