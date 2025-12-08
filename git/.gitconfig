@@ -1,7 +1,7 @@
 [user]
 	name = benmandrew
 	email = benmandrew@gmail.com
-	signingkey = /Users/benmandrew/.ssh/id_rsa.pub
+	signingkey = /Users/benmandrew/.ssh/id_benmandrew
 [pull]
 	rebase = true
 [alias]
@@ -19,7 +19,7 @@
 [protocol "file"]
 	allow = always
 [commit]
-	gpgsign = false
+	gpgsign = true
 [gpg]
 	format = ssh
 [core]
