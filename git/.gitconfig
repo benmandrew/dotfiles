@@ -1,7 +1,7 @@
 [user]
 	name = benmandrew
 	email = benmandrew@gmail.com
-	signingkey = /Users/benmandrew/.ssh/id_rsa.pub
+	signingkey = /home/y19056ba/.ssh/id_ed25519.pub
 [pull]
 	rebase = true
 [alias]
@@ -19,9 +19,13 @@
 [protocol "file"]
 	allow = always
 [commit]
-	gpgsign = false
+	gpgsign = true
+[core]
+	excludesfile = /home/y19056ba/.gitignore_global
+	editor = nvim
+[tag]
+	gpgsign = true
 [gpg]
 	format = ssh
-[core]
-	excludesfile = /Users/benmandrew/.gitignore_global
-	editor = nvim
+[advice]
+	addIgnoredFile = false
