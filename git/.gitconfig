@@ -20,6 +20,7 @@
 	allow = always
 [commit]
 	gpgsign = true
+  template=/home/y19056ba/.gitmessage
 [core]
 	excludesfile = /home/y19056ba/.gitignore_global
 	editor = nvim
