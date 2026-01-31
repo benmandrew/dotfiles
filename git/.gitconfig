@@ -20,6 +20,7 @@
 	allow = always
 [commit]
 	gpgsign = true
+  template = /Users/benmandrew/.gitmessage
 [gpg]
 	format = ssh
 [core]

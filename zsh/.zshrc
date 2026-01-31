@@ -22,12 +22,18 @@ source /opt/homebrew/opt/chruby/share/chruby/chruby.sh
 source /opt/homebrew/opt/chruby/share/chruby/auto.sh
 chruby ruby-3.1.2
 
+export HOMEBREW_BASE="/opt/homebrew/opt"
+export CC=clang
+export CXX=clang++
+
 export PATH=$HOME/Library/Python/3.10/bin:$PATH
 export PATH=~/bin:$PATH
 export PATH=/usr/local/opt/llvm/bin:$PATH
 export PATH=/opt/homebrew/opt/openjdk/bin:$PATH
 export PATH=~/projects/storm/build/bin:$PATH
 export PATH="$PATH:$(brew --prefix)/opt/llvm/bin"
+export PATH="$PATH:$(go env GOPATH)/bin"
+export PATH="$PATH:$HOMEBREW_BASE/coreutils/libexec/gnubin:/usr/local/bin:$HOMEBREW_BASE/llvm/bin"
 
 export JAVA_DIR=/opt/homebrew/opt/openjdk
 export JAVA_HOME=/opt/homebrew/opt/openjdk/bin/java
