@@ -1,0 +1,16 @@
+{{ if eq .chezmoi.os "darwin" }}
+
+if [[ ! "$PATH" == *$HOMEBREW_BASE/fzf/bin* ]]; then
+  PATH="${PATH:+${PATH}:}$HOMEBREW_BASE/fzf/bin"
+fi
+source "$HOMEBREW_BASE/fzf/shell/completion.zsh"
+source "$HOMEBREW_BASE/fzf/shell/key-bindings.zsh"
+
+{{ else if eq .chezmoi.os "linux" }}
+
+if [[ ! "$PATH" == */.fzf/bin* ]]; then
+  PATH="${PATH:+${PATH}:}$HOME/.fzf/bin"
+fi
+source <(fzf --zsh)
+
+{{ end }}

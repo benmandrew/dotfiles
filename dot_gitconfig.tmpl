@@ -1,0 +1,32 @@
+[user]
+    name = benmandrew
+    email = benmandrew@gmail.com
+    signingkey = {{ .chezmoi.homeDir }}/.ssh/id_benmandrew
+[pull]
+    rebase = true
+[alias]
+    st = status -s --show-stash
+    cm = commit -m
+    rv = remote -v
+    ch = checkout
+    ll = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s - %Cblue%aN%Creset (%Cgreen%cr%Creset)' --abbrev-commit --date=relative
+    d = diff
+    sv = status -vv
+    bv = for-each-ref --sort=-committerdate refs/heads/ --format='%(HEAD) %(color:yellow)%(refname:short)%(color:reset) - %(color:red)%(objectname:short)%(color:reset) - %(contents:subject) - %(color:blue)%(authorname)%(color:reset) (%(color:green)%(committerdate:relative)%(color:reset))'
+    dl = diff HEAD~1 HEAD
+[init]
+    defaultBranch = main
+[protocol "file"]
+    allow = always
+[commit]
+    gpgsign = true
+    template = {{ .chezmoi.homeDir }}/.gitmessage
+[core]
+    excludesfile = {{ .chezmoi.homeDir }}/.gitignore_global
+    editor = nvim
+[tag]
+    gpgsign = true
+[gpg]
+    format = ssh
+[advice]
+    addIgnoredFile = false
