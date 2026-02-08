@@ -30,7 +30,6 @@ export PATH="$PATH:$HOMEBREW_BASE/coreutils/libexec/gnubin:/usr/local/bin:$HOMEB
 export JAVA_DIR="$HOMEBREW_BASE/openjdk"
 export JAVA_HOME="$HOMEBREW_BASE/openjdk/bin/java"
 
-export LDFLAGS='-L/usr/local/opt/llvm/lib -Wl,-rpath,/usr/local/opt/llvm/lib'
 export LIBRARY_PATH="$LIBRARY_PATH:$(brew --prefix)/lib"
 
 {{ else if eq .chezmoi.os "linux" }}
