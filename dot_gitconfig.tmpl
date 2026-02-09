@@ -20,13 +20,15 @@
     allow = always
 [commit]
     gpgsign = true
-    template = {{ .chezmoi.homeDir }}/.gitmessage
+    template = {{ .chezmoi.homeDir }}/.config/git/.gitmessage
 [core]
-    excludesfile = {{ .chezmoi.homeDir }}/.gitignore_global
+    excludesfile = {{ .chezmoi.homeDir }}/.config/git/.gitignore_global
     editor = nvim
 [tag]
     gpgsign = true
 [gpg]
     format = ssh
+[gpg "ssh"]
+    allowedSignersFile = {{ .chezmoi.homeDir }}/.config/git/allowed_signers
 [advice]
     addIgnoredFile = false
