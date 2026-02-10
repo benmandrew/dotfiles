@@ -9,7 +9,7 @@ source $ZSH/oh-my-zsh.sh
 
 zstyle ':omz:plugins:nvm' lazy yes
 
-ssh-add -A 2>/dev/null
+grep -slR "PRIVATE" $HOME/.ssh/ | xargs ssh-add > /dev/null 2>&1
 
 {{ if eq .chezmoi.os "darwin" }}
 
