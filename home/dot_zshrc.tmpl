@@ -86,4 +86,14 @@ eval "$(zoxide init zsh --cmd cd)"
 
 [[ ! -r '$HOME/.opam/opam-init/init.zsh' ]] || source '$HOME/.opam/opam-init/init.zsh' > /dev/null 2> /dev/null
 
-if [ "$TMUX" = "" ]; then tmux; fi
+if [[ -o interactive ]] && [[ -z "$TMUX" ]]; then
+  # Allow scripts to disable tmux
+  if [[ -z "$SSH_TMUX_DISABLE" ]]; then
+    case "$SSH_ORIGINAL_COMMAND" in
+      scp*|rsync*) ;;
+      *)
+        tmux attach -t main || tmux new -s main
+        ;;
+    esac
+  fi
+fi
