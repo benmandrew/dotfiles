@@ -1,7 +1,10 @@
 ## Dependencies
 
 ```bash
-$ sudo apt install zsh tmux bat chezmoi
+$ sudo snap install chezmoi --classic
+$ ssh-keygen -t ed25519 -f "/home/$(whoami)/.ssh/id_benmandrew" -N ""
+
+$ sudo apt install zsh tmux bat
 
 # Rust
 $ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
