@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install stylua
+        uses: taiki-e/install-action@v2
+        with:
+          tool: stylua
+
+      - name: Install shfmt
+        uses: taiki-e/install-action@v2
+        with:
+          tool: shfmt
+
+      - name: Format check
+        run: make fmt-ci
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Lint check
+        run: make lint
