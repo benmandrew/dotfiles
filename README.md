@@ -6,6 +6,12 @@ $ ssh-keygen -t ed25519 -f "/home/$(whoami)/.ssh/id_benmandrew" -N ""
 
 $ sudo apt install zsh tmux bat
 
+# Oh-my-zsh
+$ sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+
+# Starship
+$ curl -sS https://starship.rs/install.sh | sh
+
 # Rust
 $ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 $ cargo install eza
