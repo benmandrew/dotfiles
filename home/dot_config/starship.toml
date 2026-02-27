@@ -221,7 +221,7 @@ symbol = " "
 symbol = "󰏗 "
 
 [python]
-format = ' [${symbol}(${version} )(\($virtualenv\) )]($style)'
+format = ' [${symbol}(${version})( \($virtualenv\))]($style)'
 python_binary = "python3"
 symbol = " "
 
@@ -229,9 +229,12 @@ symbol = " "
 symbol = "󰟔 "
 
 [ruby]
+format =" [$symbol($version )]($style)"
+detect_variables = []
 symbol = " "
 
 [rust]
+format =" [$symbol($version)]($style)"
 symbol = "󱘗 "
 
 [scala]
