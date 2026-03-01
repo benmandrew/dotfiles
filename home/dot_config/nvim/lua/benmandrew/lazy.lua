@@ -29,7 +29,11 @@ require("lazy").setup({
             vim.cmd.colorscheme("catppuccin-mocha")
         end,
     },
-    { "nvim-treesitter/nvim-treesitter", build = ":TSUpdate" },
+    {
+        "nvim-treesitter/nvim-treesitter",
+        lazy = false,
+        build = ":TSUpdate",
+    },
     { "mbbill/undotree" },
     { "tpope/vim-fugitive" },
     {

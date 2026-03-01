@@ -1,4 +1,4 @@
-local global = vim.g
+-- local global = vim.g
 local o = vim.opt
 
 o.number = true -- Print the line number in front of each line

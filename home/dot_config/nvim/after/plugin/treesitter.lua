@@ -1,11 +1,11 @@
-local ok, configs = pcall(require, "nvim-treesitter.configs")
+local ok, _ = pcall(require, "nvim-treesitter.configs")
 if not ok then
     return
 end
 
 require("nvim-treesitter.configs").setup({
     -- A list of parser names, or "all" (the five listed parsers should always be installed)
-    ensure_installed = { "ocaml", "javascript", "python", "rust", "latex", "c", "lua", "vim", "vimdoc", "query" },
+    ensure_installed = { "ocaml", "javascript", "python", "rust", "c", "lua", "vim", "vimdoc", "query" },
 
     -- Install parsers synchronously (only applied to `ensure_installed`)
     sync_install = false,
