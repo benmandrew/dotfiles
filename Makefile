@@ -12,3 +12,5 @@ fmt-ci:
 
 lint:
 	shellcheck --external-sources --shell bash --enable all *.sh
+	@files=$$(find home -name '*.lua'); \
+    if [ -n "$$files" ]; then luacheck $$files --globals vim; else echo "No Lua files to lint."; fi
