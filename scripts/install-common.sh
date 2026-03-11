@@ -64,5 +64,5 @@ install_fzf() {
 }
 
 print_chezmoi_init_hint() {
-    log "chezmoi init --apply git@ssh.git.benmandrew.com:me/dotfiles.git"
+    log "chezmoi init --apply git@github.com:benmandrew/dotfiles.git"
 }
