@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -euo pipefail
-
 log() {
     printf "[install] %s\n" "$*"
 }
@@ -17,32 +15,45 @@ require_cmd() {
     fi
 }
 
-main() {
-    log "Checking prerequisites"
-    require_cmd sudo
-    require_cmd ssh-keygen
-
-    log "Installing base packages"
-    sudo apt install -y git curl build-essential zsh tmux
-
+install_oh_my_zsh() {
     log "Installing Oh My Zsh"
-    curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sh
+    local script_path
+    script_path="$(mktemp)"
+    curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh -o "${script_path}"
+    RUNZSH=no CHSH=no sh "${script_path}"
+    rm -f "${script_path}"
+}
 
+install_rust() {
     log "Installing Rust"
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    local script_path
+    script_path="$(mktemp)"
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o "${script_path}"
+    sh "${script_path}" -s -- -y
+    rm -f "${script_path}"
 
     if [[ -f "${HOME}/.cargo/env" ]]; then
         # shellcheck source=/dev/null
         source "${HOME}/.cargo/env"
     fi
+}
 
+install_eza() {
     require_cmd cargo
     log "Installing eza"
     cargo install eza
+}
 
+install_zoxide() {
     log "Installing zoxide"
-    curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh
+    local script_path
+    script_path="$(mktemp)"
+    curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh -o "${script_path}"
+    sh "${script_path}"
+    rm -f "${script_path}"
+}
 
+install_fzf() {
     log "Installing fzf"
     if [[ ! -d "${HOME}/.fzf" ]]; then
         git clone --depth 1 https://github.com/junegunn/fzf.git "${HOME}/.fzf"
@@ -50,14 +61,8 @@ main() {
         log "fzf already cloned; skipping"
     fi
     "${HOME}/.fzf/install" --bin --no-update-rc --no-bash --no-fish
-
-    log "Installing Neovim"
-    curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
-    sudo rm -rf /opt/nvim-linux-x86_64
-    sudo tar -C /opt -xzf nvim-linux-x86_64.tar.gz
-    rm nvim-linux-x86_64.tar.gz
-
-    log "chezmoi init --apply git@ssh.git.benmandrew.com:me/dotfiles.git"
 }
 
-main "$@"
+print_chezmoi_init_hint() {
+    log "chezmoi init --apply git@ssh.git.benmandrew.com:me/dotfiles.git"
+}
