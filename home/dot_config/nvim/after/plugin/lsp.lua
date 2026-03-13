@@ -1,59 +1,33 @@
-local function warn_missing(name)
-    vim.notify("LSP config skipped: missing " .. name, vim.log.levels.WARN)
-end
-
-local ok_lsp_zero, lsp_zero = pcall(require, "lsp-zero")
-if not ok_lsp_zero then
-    warn_missing("lsp-zero")
-    return
-end
-
-lsp_zero.on_attach(function(_client, bufnr)
-    lsp_zero.default_keymaps({ buffer = bufnr })
-end)
-
--- local original_notify = vim.notify
--- vim.notify = function(msg, ...)
---   if type(msg) == "string" and msg:lower():match("`require%('lspconfig'%)` \"framework\" is deprecated") then
---     return
---   end
---   if type(msg) == "string" and msg:lower():match("require%('lspconfig'%) \"framework\" is deprecated") then
---     return
---   end
---   original_notify(msg, ...)
--- end
-local lspconfig = require("lspconfig")
-
-lspconfig.bashls.setup({})
-lspconfig.rust_analyzer.setup({})
-lspconfig.ocamllsp.setup({})
-lspconfig.lua_ls.setup({
-    on_init = function(client)
-        local path = client.workspace_folders[1].name
-        if vim.loop.fs_stat(path .. "/.luarc.json") or vim.loop.fs_stat(path .. "/.luarc.jsonc") then
-            return
-        end
-        client.config.settings.Lua = vim.tbl_deep_extend("force", client.config.settings.Lua, {
-            runtime = {
-                version = "LuaJIT",
-            },
-            diagnostics = {
-                globals = { "love", "require" },
-            },
-            workspace = {
-                checkThirdParty = false,
-                library = {
-                    vim.env.VIMRUNTIME,
-                },
-            },
-        })
+vim.api.nvim_create_autocmd("LspAttach", {
+    callback = function(args)
+        local opts = { buffer = args.buf }
+        vim.keymap.set("n", "K", vim.lsp.buf.hover, opts)
+        vim.keymap.set("n", "gd", vim.lsp.buf.definition, opts)
+        vim.keymap.set("n", "gD", vim.lsp.buf.declaration, opts)
+        vim.keymap.set("n", "gi", vim.lsp.buf.implementation, opts)
+        vim.keymap.set("n", "go", vim.lsp.buf.type_definition, opts)
+        vim.keymap.set("n", "gr", vim.lsp.buf.references, opts)
+        vim.keymap.set("n", "gs", vim.lsp.buf.signature_help, opts)
+        vim.keymap.set("n", "<F2>", vim.lsp.buf.rename, opts)
+        vim.keymap.set("n", "<F3>", function()
+            vim.lsp.buf.format({ async = true })
+        end, opts)
+        vim.keymap.set("n", "<F4>", vim.lsp.buf.code_action, opts)
+        vim.keymap.set("n", "gl", vim.diagnostic.open_float, opts)
+        vim.keymap.set("n", "[d", vim.diagnostic.goto_prev, opts)
+        vim.keymap.set("n", "]d", vim.diagnostic.goto_next, opts)
     end,
-    settings = {
-        Lua = {
-            workspace = {
-                userThirdParty = { os.getenv("HOME") .. ".local/share/LuaAddons/love2d/library" },
-                checkThirdParty = "Apply",
-            },
-        },
-    },
+})
+
+vim.lsp.config("*", {
+    capabilities = require("cmp_nvim_lsp").default_capabilities(),
+})
+
+require("lspconfig")
+
+vim.lsp.enable({
+    "bashls",
+    "rust_analyzer",
+    "ocamllsp",
+    "lua_ls",
 })
