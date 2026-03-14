@@ -63,6 +63,15 @@ install_fzf() {
     "${HOME}/.fzf/install" --bin --no-update-rc --no-bash --no-fish
 }
 
+install_starship() {
+    log "Installing Starship"
+    local script_path
+    script_path="$(mktemp)"
+    curl -sS https://starship.rs/install.sh -o "${script_path}"
+    sh "${script_path}" -y
+    rm -f "${script_path}"
+}
+
 print_chezmoi_init_hint() {
     log "chezmoi init --apply git@github.com:benmandrew/dotfiles.git"
 }

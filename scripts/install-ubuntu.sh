@@ -19,6 +19,7 @@ main() {
     install_eza
     install_zoxide
     install_fzf
+    install_starship
 
     log "Installing Neovim"
     curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz

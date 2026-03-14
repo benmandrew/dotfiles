@@ -81,6 +81,7 @@ main() {
     install_eza
     install_zoxide
     install_fzf
+    install_starship
 
     log "Installing Neovim"
     brew install neovim
