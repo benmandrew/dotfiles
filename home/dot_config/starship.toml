@@ -123,7 +123,7 @@ symbol = " "
 symbol = " "
 
 [hostname]
-format ="@[$hostname]($style)"
+format ="@[$hostname]($style) "
 ssh_symbol = " "
 
 [java]
@@ -160,6 +160,7 @@ symbol = " "
 
 [os]
 disabled = false
+format =" [$symbol]($style)"
 
 [os.symbols]
 Alpaquita = " "
