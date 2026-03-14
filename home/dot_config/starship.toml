@@ -4,7 +4,7 @@
 # Inserts a blank line between shell prompts
 add_newline = true
 
-format = "$all$fill$time$line_break$character"
+format = "$all$fill$os$time$line_break$character"
 
 [directory]
 format = '[\[$path\]]($style)'
