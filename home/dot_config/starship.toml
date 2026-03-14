@@ -123,6 +123,7 @@ symbol = " "
 symbol = " "
 
 [hostname]
+format ="@[$hostname]($style)"
 ssh_symbol = " "
 
 [java]
@@ -156,6 +157,9 @@ symbol = " "
 [ocaml]
 format = ' [$symbol($version )(\($switch_indicator$switch_name\))]($style)'
 symbol = " "
+
+[os]
+disabled = false
 
 [os.symbols]
 Alpaquita = " "
@@ -245,6 +249,9 @@ symbol = " "
 
 [swift]
 symbol = " "
+
+[username]
+format = "[$user]($style)"
 
 [xmake]
 symbol = " "
