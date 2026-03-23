@@ -3,6 +3,12 @@ unbind C-b
 set-option -g prefix C-a
 bind-key C-a send-prefix
 
+# allow clipboard to be set by programs inside tmux
+set -g set-clipboard on
+
+# Configure the inner tmux to set the clipboard when the outside terminal is also tmux
+set -as terminal-overrides ',screen*:Ms=\\E]52;%p1%s;%p2%s\\007'
+
 # reload config file
 bind r source-file ~/.tmux.conf
 
