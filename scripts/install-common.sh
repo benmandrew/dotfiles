@@ -15,7 +15,18 @@ require_cmd() {
     fi
 }
 
+load_cargo_env() {
+    if [[ -f "${HOME}/.cargo/env" ]]; then
+        # shellcheck source=/dev/null
+        source "${HOME}/.cargo/env"
+    fi
+}
+
 install_oh_my_zsh() {
+    if [[ -d "${HOME}/.oh-my-zsh" ]]; then
+        log "Oh My Zsh already installed; skipping"
+        return
+    fi
     log "Installing Oh My Zsh"
     local script_path
     script_path="$(mktemp)"
@@ -25,6 +36,11 @@ install_oh_my_zsh() {
 }
 
 install_rust() {
+    load_cargo_env
+    if command -v cargo >/dev/null 2>&1 && command -v rustup >/dev/null 2>&1; then
+        log "Rust already installed; skipping"
+        return
+    fi
     log "Installing Rust"
     local script_path
     script_path="$(mktemp)"
@@ -32,19 +48,25 @@ install_rust() {
     sh "${script_path}" -s -- -y
     rm -f "${script_path}"
 
-    if [[ -f "${HOME}/.cargo/env" ]]; then
-        # shellcheck source=/dev/null
-        source "${HOME}/.cargo/env"
-    fi
+    load_cargo_env
 }
 
 install_eza() {
+    if command -v eza >/dev/null 2>&1; then
+        log "eza already installed; skipping"
+        return
+    fi
+    load_cargo_env
     require_cmd cargo
     log "Installing eza"
     cargo install eza
 }
 
 install_zoxide() {
+    if command -v zoxide >/dev/null 2>&1; then
+        log "zoxide already installed; skipping"
+        return
+    fi
     log "Installing zoxide"
     local script_path
     script_path="$(mktemp)"
@@ -54,6 +76,10 @@ install_zoxide() {
 }
 
 install_fzf() {
+    if command -v fzf >/dev/null 2>&1; then
+        log "fzf already installed; skipping"
+        return
+    fi
     log "Installing fzf"
     if [[ ! -d "${HOME}/.fzf" ]]; then
         git clone --depth 1 https://github.com/junegunn/fzf.git "${HOME}/.fzf"
@@ -64,6 +90,10 @@ install_fzf() {
 }
 
 install_starship() {
+    if command -v starship >/dev/null 2>&1; then
+        log "Starship already installed; skipping"
+        return
+    fi
     log "Installing Starship"
     local script_path
     script_path="$(mktemp)"
