@@ -102,6 +102,26 @@ install_starship() {
     rm -f "${script_path}"
 }
 
+install_tmux_plugins() {
+    require_cmd git
+    local tpm_dir="${HOME}/.tmux/plugins/tpm"
+    local catppuccin_dir="${HOME}/.config/tmux/plugins/catppuccin"
+    if [[ -d "${tpm_dir}" ]]; then
+        log "tmux plugin manager (tpm) already installed; skipping"
+    else
+        log "Installing tmux plugin manager (tpm)"
+        mkdir -p "${HOME}/.tmux/plugins"
+        git clone https://github.com/tmux-plugins/tpm "${tpm_dir}"
+    fi
+    if [[ -d "${catppuccin_dir}" ]]; then
+        log "tmux catppuccin theme already installed; skipping"
+    else
+        log "Installing tmux catppuccin theme"
+        mkdir -p "${HOME}/.config/tmux/plugins"
+        git clone https://github.com/catppuccin/tmux.git "${catppuccin_dir}"
+    fi
+}
+
 print_chezmoi_init_hint() {
     log "chezmoi init --apply git@github.com:benmandrew/dotfiles.git"
 }

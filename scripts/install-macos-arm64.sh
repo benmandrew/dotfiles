@@ -99,6 +99,7 @@ main() {
     install_zoxide
     install_fzf
     install_starship
+    install_tmux_plugins
 
     install_neovim_if_missing
 
