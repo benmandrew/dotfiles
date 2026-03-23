@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Re-run this script whenever the tmux config template changes.
+# tmux-conf-hash: {{ include "dot_tmux.conf.tmpl" | sha256sum }}
+# zshrc-conf-hash: {{ include "dot_zshrc.tmpl" | sha256sum }}
+
+if ! command -v tmux >/dev/null 2>&1; then
+    exit 0
+fi
+
+if [[ ! -f "${HOME}/.tmux.conf" ]]; then
+    exit 0
+fi
+
+if tmux ls >/dev/null 2>&1; then
+    tmux source-file "${HOME}/.tmux.conf"
+
+    if [[ -f "${HOME}/.zshrc" ]]; then
+        while read -r pane_id pane_command; do
+            if [[ "${pane_command}" == "zsh" ]]; then
+                tmux send-keys -t "${pane_id}" 'source ~/.zshrc' C-m
+            fi
+        done < <(tmux list-panes -a -F '#{pane_id} #{pane_current_command}')
+    fi
+fi
