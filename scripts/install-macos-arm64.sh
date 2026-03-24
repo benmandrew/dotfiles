@@ -14,7 +14,7 @@ install_brew_formulae_if_missing() {
             missing_formulae+=("${formula}")
         fi
     done
-    if (( ${#missing_formulae[@]} == 0 )); then
+    if ((${#missing_formulae[@]} == 0)); then
         log "Homebrew formulae already installed; skipping"
         return
     fi

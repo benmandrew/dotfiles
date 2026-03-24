@@ -14,7 +14,7 @@ install_apt_packages_if_missing() {
             missing_packages+=("${package}")
         fi
     done
-    if (( ${#missing_packages[@]} == 0 )); then
+    if ((${#missing_packages[@]} == 0)); then
         log "Base packages already installed; skipping"
         return
     fi
