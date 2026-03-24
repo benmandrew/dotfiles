@@ -45,7 +45,7 @@ install_rust() {
     local script_path
     script_path="$(mktemp)"
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o "${script_path}"
-    sh "${script_path}" -s -- -y
+    sh "${script_path}" -y
     rm -f "${script_path}"
 
     load_cargo_env
