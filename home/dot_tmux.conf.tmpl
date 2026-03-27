@@ -6,7 +6,8 @@ bind-key C-a send-prefix
 # allow clipboard to be set by programs inside tmux
 set -g set-clipboard on
 
-# Configure the inner tmux to set the clipboard when the outside terminal is also tmux
+# Configure nested tmux clipboard (OSC52) when outer terminal is tmux/screen
+set -as terminal-overrides ',tmux*:Ms=\\E]52;%p1%s;%p2%s\\007'
 set -as terminal-overrides ',screen*:Ms=\\E]52;%p1%s;%p2%s\\007'
 
 # reload config file
@@ -65,8 +66,8 @@ setw -g mode-keys vi
 {{ if eq .chezmoi.os "linux" }}
 
 unbind -T copy-mode-vi Enter
-bind-key -T copy-mode-vi Enter send-keys -X copy-pipe-and-cancel "xclip -selection c"
-bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "xclip -in -selection clipboard"
+bind-key -T copy-mode-vi Enter send-keys -X copy-selection-and-cancel
+bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-selection-and-cancel
 
 {{ end }}
 
