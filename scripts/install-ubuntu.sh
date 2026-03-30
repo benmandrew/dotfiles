@@ -47,6 +47,7 @@ main() {
     install_oh_my_zsh
     install_rust
     install_eza
+    install_fd
     install_zoxide
     install_fzf
     install_starship

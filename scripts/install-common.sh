@@ -62,6 +62,17 @@ install_eza() {
     cargo install eza
 }
 
+install_fd() {
+    if command -v fd >/dev/null 2>&1; then
+        log "fd already installed; skipping"
+        return
+    fi
+    load_cargo_env
+    require_cmd cargo
+    log "Installing fd"
+    cargo install fd-find
+}
+
 install_zoxide() {
     if command -v zoxide >/dev/null 2>&1; then
         log "zoxide already installed; skipping"

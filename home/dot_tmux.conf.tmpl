@@ -3,6 +3,9 @@ unbind C-b
 set-option -g prefix C-a
 bind-key C-a send-prefix
 
+set-option -a terminal-features 'xterm-256color:RGB'
+set-option -g focus-events on
+
 # allow clipboard to be set by programs inside tmux
 set -g set-clipboard on
 
