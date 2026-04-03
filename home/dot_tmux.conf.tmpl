@@ -7,11 +7,8 @@ set-option -a terminal-features 'xterm-256color:RGB'
 set-option -g focus-events on
 
 # allow clipboard to be set by programs inside tmux
-set -g set-clipboard on
-
-# Configure nested tmux clipboard (OSC52) when outer terminal is tmux/screen
-set -as terminal-overrides ',tmux*:Ms=\\E]52;%p1%s;%p2%s\\007'
-set -as terminal-overrides ',screen*:Ms=\\E]52;%p1%s;%p2%s\\007'
+set -s set-clipboard external
+set -g allow-passthrough on
 
 # reload config file
 bind r source-file ~/.tmux.conf
@@ -66,13 +63,17 @@ bind -T copy-mode-emacs C-WheelDownPane send-keys -X halfpage-down
 setw -g mode-keys vi
 
 # Clipboard integration (OS-specific)
-{{ if eq .chezmoi.os "linux" }}
+bind-key -T copy-mode-vi v send-keys -X begin-selection
 
-unbind -T copy-mode-vi Enter
-set -g @copy_pipe_command 'if command -v wl-copy >/dev/null 2>&1; then wl-copy; elif command -v xclip >/dev/null 2>&1; then xclip -in -selection clipboard; else tmux load-buffer -w - 2>/dev/null || tmux load-buffer -; fi'
-bind-key -T copy-mode-vi Enter send-keys -X copy-pipe-and-cancel "#{@copy_pipe_command}"
-bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "#{@copy_pipe_command}"
-
+{{ if eq .chezmoi.os "darwin" }}
+bind-key -T copy-mode-vi y send-keys -X copy-pipe-and-cancel 'pbcopy'
+bind-key -T copy-mode-vi Enter send-keys -X copy-pipe-and-cancel 'pbcopy'
+bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel 'pbcopy'
+{{ else if eq .chezmoi.os "linux" }}
+set -g @copy_command 'if command -v wl-copy >/dev/null 2>&1; then wl-copy; elif command -v xclip >/dev/null 2>&1; then xclip -selection clipboard; else tmux load-buffer -w - 2>/dev/null || tmux load-buffer -; fi'
+bind-key -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "#{@copy_command}"
+bind-key -T copy-mode-vi Enter send-keys -X copy-pipe-and-cancel "#{@copy_command}"
+bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "#{@copy_command}"
 {{ end }}
 
 # Plugins
