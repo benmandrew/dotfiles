@@ -1,8 +1,8 @@
 ## Dependencies
 
 ```bash
-./scripts/install-macos-arm64.sh
-./scripts/install-ubuntu.sh
+$ ./scripts/install-macos-arm64.sh
+$ ./scripts/install-ubuntu.sh
 ```
 
 
