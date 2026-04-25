@@ -22,6 +22,24 @@ install_apt_packages_if_missing() {
     sudo apt install -y "${missing_packages[@]}"
 }
 
+install_node() {
+    if command -v node >/dev/null 2>&1; then
+        local node_major
+        node_major="$(node --version | cut -d. -f1 | tr -d 'v')"
+        if ((node_major >= 20)); then
+            log "Node.js ${node_major} already installed; skipping"
+            return
+        fi
+    fi
+    log "Installing Node.js LTS"
+    local setup_path
+    setup_path="$(mktemp)"
+    curl -fsSL https://deb.nodesource.com/setup_lts.x -o "${setup_path}"
+    sudo -E bash "${setup_path}"
+    rm -f "${setup_path}"
+    sudo apt install -y nodejs
+}
+
 install_neovim_if_missing() {
     local nvim_path="/opt/nvim-linux-x86_64/bin/nvim"
     if [[ -x "${nvim_path}" ]] || command -v nvim >/dev/null 2>&1; then
@@ -50,6 +68,13 @@ main() {
     install_fd
     install_zoxide
     install_fzf
+    install_claude_code
+    install_rtk
+    install_node
+    install_uv
+    install_token_savior
+    install_token_optimizer_mcp
+    install_ccusage
     install_starship
     install_tmux_plugins
 

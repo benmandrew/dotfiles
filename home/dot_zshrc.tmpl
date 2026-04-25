@@ -27,6 +27,7 @@ chruby ruby-3.1.2
 
 export PATH="$PATH:$HOME/Library/Python/3.10/bin"
 export PATH="$PATH:$HOME/bin"
+export PATH="$PATH:$HOME/.local/bin"
 export PATH="$PATH:$HOMEBREW_BASE/openjdk/bin"
 export PATH="$PATH:$(brew --prefix)/opt/llvm/bin"
 export PATH="$PATH:$(go env GOPATH)/bin"
@@ -83,6 +84,9 @@ export HISTFILE="$HOME/.zsh_history"
 export HISTSIZE=1000000000
 export SAVEHIST=1000000000
 setopt EXTENDED_HISTORY
+
+# Claude
+export MAX_THINKING_TOKENS=8000
 
 eval "$(zoxide init zsh --cmd cd)"
 

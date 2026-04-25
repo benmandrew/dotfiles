@@ -1,0 +1,20 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "rtk hook claude"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "echo \"ctx $(jq -r '.context_window.remaining_percentage // 100' < $CLAUDE_STATUS_INPUT)%\""
+  },
+  "theme": "dark"
+}
