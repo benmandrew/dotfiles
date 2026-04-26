@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "rtk hook claude"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "input=$(cat); pct=$(echo \"$input\" | jq -r '.context_window.remaining_percentage // empty'); [ -n \"$pct\" ] && printf 'ctx %.0f%%' \"$pct\" || echo 'ctx -'"
+  },
+  "effortLevel": "high",
+  "theme": "dark",
+  "enabledPlugins": {
+    "rust-analyzer-lsp@claude-plugins-official": true
+  }
+}

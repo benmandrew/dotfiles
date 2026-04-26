@@ -1,0 +1,4 @@
+name: researcher
+description: Research a codebase or topic without bloating the main context
+model: haiku
+tools: [Read, Grep, Glob, WebFetch]

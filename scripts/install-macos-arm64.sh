@@ -91,7 +91,7 @@ main() {
 
     require_cmd brew
 
-    install_brew_formulae_if_missing git zsh tmux
+    install_brew_formulae_if_missing git zsh tmux node
 
     install_oh_my_zsh
     install_rust
@@ -99,6 +99,12 @@ main() {
     install_fd
     install_zoxide
     install_fzf
+    install_claude_code
+    install_rtk
+    install_uv
+    install_token_savior
+    install_token_optimizer_mcp
+    install_ccusage
     install_starship
     install_tmux_plugins
 

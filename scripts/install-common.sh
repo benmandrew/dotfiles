@@ -113,6 +113,88 @@ install_starship() {
     rm -f "${script_path}"
 }
 
+install_claude_code() {
+    if command -v claude >/dev/null 2>&1; then
+        log "Claude Code already installed; skipping"
+        return
+    fi
+    log "Installing Claude Code"
+    local script_path
+    script_path="$(mktemp)"
+    curl -fsSL https://claude.ai/install.sh -o "${script_path}"
+    bash "${script_path}"
+    rm -f "${script_path}"
+}
+
+install_rtk() {
+    if command -v rtk >/dev/null 2>&1; then
+        log "rtk already installed; skipping"
+        return
+    fi
+    log "Installing rtk"
+    local script_path
+    script_path="$(mktemp)"
+    curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh -o "${script_path}"
+    sh "${script_path}"
+    rm -f "${script_path}"
+}
+
+install_uv() {
+    if command -v uv >/dev/null 2>&1; then
+        log "uv already installed; skipping"
+        return
+    fi
+    log "Installing uv"
+    local script_path
+    script_path="$(mktemp)"
+    curl -LsSf https://astral.sh/uv/install.sh -o "${script_path}"
+    sh "${script_path}"
+    rm -f "${script_path}"
+    export PATH="${HOME}/.local/bin:${PATH}"
+}
+
+install_token_savior() {
+    require_cmd uvx
+    local mcp_list
+    mcp_list="$(claude mcp list 2>/dev/null)" || true
+    if echo "${mcp_list}" | grep -q "token-savior"; then
+        log "token-savior MCP server already registered; skipping"
+        return
+    fi
+    log "Registering token-savior MCP server"
+    claude mcp add -s user token-savior -- uvx --from "token-savior-recall[mcp]" token-savior
+}
+
+install_token_optimizer_mcp() {
+    require_cmd npx
+    local mcp_list
+    mcp_list="$(claude mcp list 2>/dev/null)" || true
+    if echo "${mcp_list}" | grep -q "token-optimizer-mcp"; then
+        log "token-optimizer-mcp MCP server already registered; skipping"
+        return
+    fi
+    log "Registering token-optimizer-mcp MCP server"
+    claude mcp add -s user token-optimizer-mcp -- npx -y @ooples/token-optimizer-mcp
+}
+
+install_ccusage() {
+    require_cmd npm
+    if ! command -v ccusage >/dev/null 2>&1; then
+        log "Installing ccusage"
+        npm install -g ccusage
+    else
+        log "ccusage already installed; skipping"
+    fi
+    local mcp_list
+    mcp_list="$(claude mcp list 2>/dev/null)" || true
+    if echo "${mcp_list}" | grep -q "ccusage"; then
+        log "ccusage MCP server already registered; skipping"
+        return
+    fi
+    log "Registering ccusage MCP server"
+    claude mcp add -s user ccusage -- npx @ccusage/mcp@latest
+}
+
 install_tmux_plugins() {
     require_cmd git
     local tpm_dir="${HOME}/.tmux/plugins/tpm"
@@ -134,5 +216,5 @@ install_tmux_plugins() {
 }
 
 print_chezmoi_init_hint() {
-    log "chezmoi init --apply git@github.com:benmandrew/dotfiles.git"
+    log "You can initialize chezmoi with: chezmoi init --apply git@github.com:benmandrew/dotfiles.git"
 }
