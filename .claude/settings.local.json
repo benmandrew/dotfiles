@@ -9,15 +9,15 @@
       "Bash(rtk ls *)",
       "Bash(rtk read *)",
       "Bash(claude mcp *)",
-      "Bash(python3 -c \"import json; d=json.load\\(open\\('/Users/benmandrew/.claude.json'\\)\\); print\\(json.dumps\\(d.get\\('oauthAccount', {}\\), indent=2\\)\\)\")",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:ccusage.com)",
       "Bash(npm --version)",
-      "Bash(rtk npx *)",
       "Bash(rtk pip *)",
-      "Bash(rtk make *)"
+      "Bash(rtk make *)",
+      "Bash(ccusage --version)",
+      "Bash(ccusage)"
     ]
   }
 }

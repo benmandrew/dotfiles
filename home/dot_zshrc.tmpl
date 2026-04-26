@@ -29,14 +29,14 @@ export PATH="$PATH:$HOME/Library/Python/3.10/bin"
 export PATH="$PATH:$HOME/bin"
 export PATH="$PATH:$HOME/.local/bin"
 export PATH="$PATH:$HOMEBREW_BASE/openjdk/bin"
-export PATH="$PATH:$(brew --prefix)/opt/llvm/bin"
-export PATH="$PATH:$(go env GOPATH)/bin"
+export PATH="$PATH:$HOMEBREW_BASE/llvm/bin"
+export PATH="$PATH:${GOPATH:-$HOME/go}/bin"
 export PATH="$PATH:$HOMEBREW_BASE/coreutils/libexec/gnubin:/usr/local/bin:$HOMEBREW_BASE/llvm/bin"
 
 export JAVA_DIR="$HOMEBREW_BASE/openjdk"
 export JAVA_HOME="$HOMEBREW_BASE/openjdk/bin/java"
 
-export LIBRARY_PATH="$LIBRARY_PATH:$(brew --prefix)/lib"
+export LIBRARY_PATH="$LIBRARY_PATH:${HOMEBREW_BASE%/opt}/lib"
 
 {{ else if eq .chezmoi.os "linux" }}
 
@@ -87,12 +87,13 @@ setopt EXTENDED_HISTORY
 
 # Claude
 export MAX_THINKING_TOKENS=8000
+export WORKSPACE_ROOTS="$HOME/projects"
 
 eval "$(zoxide init zsh --cmd cd)"
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
-[[ ! -r '$HOME/.opam/opam-init/init.zsh' ]] || source '$HOME/.opam/opam-init/init.zsh' > /dev/null 2> /dev/null
+[[ ! -r "$HOME/.opam/opam-init/init.zsh" ]] || source "$HOME/.opam/opam-init/init.zsh" > /dev/null 2>&1
 
 # git_dirty() {
 #   git status --porcelain 2>/dev/null | grep -q . && echo "%{$fg[red]%}*%{$reset_color%}"
