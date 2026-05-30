@@ -42,9 +42,9 @@
       "WebFetch(domain:gmktec-k9)",
       "WebFetch(domain:api.openai.com)",
       "WebFetch(domain:api.anthropic.com)",
-      "WebSearch(**)",
+      "WebSearch",
 
-      "TodoRead()",
+      "TodoRead",
       "TodoWrite(**)",
       "Task(**)",
 
@@ -357,7 +357,6 @@
       "Bash(fdisk*)",
       "Bash(parted*)",
 
-      "Bash(:(){ :|:& };:*)",
       "Bash(*fork*bomb*)",
 
       "Bash(> /dev/sda*)",
