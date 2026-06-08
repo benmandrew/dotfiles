@@ -57,8 +57,8 @@ check_cmd uvx
 check_cmd ccusage
 check_cmd starship
 
-check_dir "tpm"           "${HOME}/.tmux/plugins/tpm"
-check_dir "catppuccin"    "${HOME}/.config/tmux/plugins/catppuccin"
+check_dir "tpm" "${HOME}/.tmux/plugins/tpm"
+check_dir "catppuccin" "${HOME}/.config/tmux/plugins/catppuccin"
 
 check_cmd nvim
 
