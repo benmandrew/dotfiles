@@ -215,6 +215,35 @@ install_tmux_plugins() {
     fi
 }
 
+install_git_mcp() {
+    require_cmd npx
+    local mcp_list
+    mcp_list="$(claude mcp list 2>/dev/null)" || true
+    if echo "${mcp_list}" | grep -q "git-mcp"; then
+        log "git-mcp MCP server already registered; skipping"
+        return
+    fi
+    log "Registering git-mcp MCP server"
+    claude mcp add -s user git-mcp -- npx mcp-remote https://gitmcp.io/docs
+}
+
+install_claude_context() {
+    require_cmd npx
+    local mcp_list
+    mcp_list="$(claude mcp list 2>/dev/null)" || true
+    if echo "${mcp_list}" | grep -q "claude-context"; then
+        log "claude-context MCP server already registered; skipping"
+        return
+    fi
+    log "Registering claude-context MCP server"
+    # Reads OPENAI_API_KEY, MILVUS_ADDRESS, MILVUS_TOKEN from environment if set
+    claude mcp add -s user claude-context \
+        -e "OPENAI_API_KEY=${OPENAI_API_KEY:-}" \
+        -e "MILVUS_ADDRESS=${MILVUS_ADDRESS:-}" \
+        -e "MILVUS_TOKEN=${MILVUS_TOKEN:-}" \
+        -- npx @zilliz/claude-context-mcp@latest
+}
+
 print_chezmoi_init_hint() {
     log "You can initialize chezmoi with: chezmoi init --apply git@github.com:benmandrew/dotfiles.git"
 }
