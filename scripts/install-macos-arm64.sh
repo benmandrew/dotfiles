@@ -106,7 +106,6 @@ main() {
     install_token_optimizer_mcp
     install_ccusage
     install_git_mcp
-    install_claude_context
     install_starship
     install_tmux_plugins
 
