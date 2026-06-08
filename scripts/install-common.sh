@@ -162,7 +162,7 @@ install_token_savior() {
         return
     fi
     log "Registering token-savior MCP server"
-    claude mcp add -s user token-savior -- uvx --from "token-savior-recall[mcp]" token-savior
+    claude mcp add -s user token-savior -- uvx --python 3.11 --from "token-savior-recall[mcp]" token-savior
 }
 
 install_token_optimizer_mcp() {
