@@ -267,7 +267,6 @@ install_git_mcp() {
     claude mcp add -s user git-mcp -- npx mcp-remote https://gitmcp.io/docs
 }
 
-
 print_chezmoi_init_hint() {
     log "You can initialize chezmoi with: chezmoi init --apply git@github.com:benmandrew/dotfiles.git"
 }
