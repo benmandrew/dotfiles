@@ -40,5 +40,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Cache installed tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo
+            ~/.rustup
+            ~/.oh-my-zsh
+            ~/.fzf
+            ~/.local
+            ~/.tmux
+            ~/.config/tmux/plugins
+            /opt/nvim-linux-x86_64
+          key: install-${{ runner.os }}-${{ hashFiles('scripts/install-common.sh', 'scripts/install-ubuntu.sh') }}
+
       - name: Run install script
         run: bash scripts/install-ubuntu.sh
