@@ -215,6 +215,46 @@ install_tmux_plugins() {
     fi
 }
 
+install_mcp_manim() {
+    require_cmd docker
+    local mcp_list
+    mcp_list="$(claude mcp list 2>/dev/null)" || true
+    if echo "${mcp_list}" | grep -q "mcp-manim"; then
+        log "mcp-manim MCP server already registered; skipping"
+        return
+    fi
+    local gist_dir="${HOME}/.local/share/mcp-servers/manim"
+    if [[ ! -d "${gist_dir}" ]]; then
+        log "Cloning manim MCP gist"
+        mkdir -p "${HOME}/.local/share/mcp-servers"
+        git clone https://gist.github.com/AndrewAltimit/c437c9fbc9a72271969127fcbf935561 "${gist_dir}"
+    fi
+    log "Building manim MCP Docker image"
+    docker compose -f "${gist_dir}/docker-compose.yml" build
+    log "Registering mcp-manim MCP server"
+    claude mcp add -s user mcp-manim -- docker run -i --rm manim-manim-mcp python3 /app/mcp_manim_tool.py --mode stdio
+}
+
+install_mcp_latex() {
+    require_cmd docker
+    local mcp_list
+    mcp_list="$(claude mcp list 2>/dev/null)" || true
+    if echo "${mcp_list}" | grep -q "mcp-latex"; then
+        log "mcp-latex MCP server already registered; skipping"
+        return
+    fi
+    local gist_dir="${HOME}/.local/share/mcp-servers/latex"
+    if [[ ! -d "${gist_dir}" ]]; then
+        log "Cloning latex MCP gist"
+        mkdir -p "${HOME}/.local/share/mcp-servers"
+        git clone https://gist.github.com/AndrewAltimit/99324d135251d8e80e0f130da8184d07 "${gist_dir}"
+    fi
+    log "Building latex MCP Docker image"
+    docker compose -f "${gist_dir}/docker-compose.yml" build
+    log "Registering mcp-latex MCP server"
+    claude mcp add -s user mcp-latex -- docker run -i --rm latex-mcp-latex-server python3 /workspace/mcp_latex_tool.py
+}
+
 install_git_mcp() {
     require_cmd npx
     local mcp_list

@@ -75,6 +75,8 @@ main() {
     install_token_savior
     install_token_optimizer_mcp
     install_ccusage
+    install_mcp_manim
+    install_mcp_latex
     install_git_mcp
     install_starship
     install_tmux_plugins
