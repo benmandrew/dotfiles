@@ -149,6 +149,10 @@
       "Bash(php *)",
       "Bash(composer *)",
       "Bash(make *)",
+      "Bash(cmake *)",
+      "Bash(ctest *)",
+      "Bash(cpack *)",
+      "Bash(ccmake *)",
       "Bash(jest *)",
 
       "Bash(nvm *)",
