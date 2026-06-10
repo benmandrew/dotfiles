@@ -29,6 +29,12 @@ Self-triggered compaction gives control over the summary; auto-compaction does n
 
 Keep plans in a `PLAN.md` or `TODO.md` that gets updated as work progresses. The plan lives on disk, not in context, so a fresh session just reads the file and picks up where it left off.
 
+## Batching commits
+
+Group related changes into a single commit — a bug fix and its test, a refactor and the call-site update, a feature and the docs that describe it. Splitting tightly coupled changes across commits creates a history where individual commits don't build or make sense in isolation.
+
+Unrelated changes belong in separate commits even if they were made in the same session.
+
 ## Subagents for isolation
 
 Use subagents (via the Agent tool) for research, exploration, and tasks that would otherwise flood the main context with noise. Subagents start cold — they do not see the main context — so long tool output and intermediate reasoning stays out of your conversation entirely.
