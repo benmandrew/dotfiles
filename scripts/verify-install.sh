@@ -2,7 +2,7 @@
 
 set -uo pipefail
 
-export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${HOME}/.fzf/bin:/opt/nvim-linux-x86_64/bin:${PATH}"
+export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${HOME}/.fzf/bin:/opt/nvim-linux-x86_64/bin:/opt/nvim-linux-arm64/bin:${PATH}"
 
 ok=0
 fail=0
