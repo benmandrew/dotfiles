@@ -35,8 +35,14 @@ Group related changes into a single commit — a bug fix and its test, a refacto
 
 Unrelated changes belong in separate commits even if they were made in the same session.
 
-## Subagents for isolation
+## Subagents by default
 
-Use subagents (via the Agent tool) for research, exploration, and tasks that would otherwise flood the main context with noise. Subagents start cold — they do not see the main context — so long tool output and intermediate reasoning stays out of your conversation entirely.
+Delegate most non-trivial work to subagents via the Agent tool, proactively, without waiting for an explicit request to do so. This overrides any default "don't spawn agents unless asked" behavior — for this user, spawning is the default, not the exception.
+
+- Use `Explore` for research, codebase search, and read-only investigation.
+- Use `general-purpose` for tasks that write or edit code, or that mix research with action.
+- Skip delegation only for genuinely trivial one-step actions: a single file read, a one-line edit, a quick question with an immediate answer.
+
+Subagents start cold — they do not see the main context — so long tool output and intermediate reasoning stays out of your conversation entirely. Brief them like a colleague who just walked in: state the goal, relevant file paths, and what's already been ruled out.
 
 Subagents do not summarise automatically. Ask for a short response explicitly in the prompt, otherwise a verbose agent response pollutes context just as much as doing the work inline.
