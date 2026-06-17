@@ -215,11 +215,11 @@ install_tmux_from_source() {
     local tarball="tmux-${build_version}.tar.gz"
     local build_dir
     build_dir="$(mktemp -d)"
+    trap 'rm -rf "${build_dir}"' RETURN
     curl -fsSL "https://github.com/tmux/tmux/releases/download/${build_version}/${tarball}" \
         -o "${build_dir}/${tarball}"
     tar -C "${build_dir}" -xzf "${build_dir}/${tarball}"
     (cd "${build_dir}/tmux-${build_version}" && ./configure && make -j"$(nproc)" && sudo make install)
-    rm -rf "${build_dir}"
 }
 
 install_tmux_plugins() {
