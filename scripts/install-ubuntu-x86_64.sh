@@ -60,7 +60,8 @@ main() {
     require_cmd dpkg
     require_cmd apt
 
-    install_apt_packages_if_missing git curl build-essential zsh tmux entr
+    install_apt_packages_if_missing git curl build-essential zsh entr libevent-dev libncurses-dev pkg-config
+    install_tmux_from_source
 
     install_oh_my_zsh
     install_rust

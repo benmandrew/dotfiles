@@ -195,6 +195,33 @@ install_ccusage() {
     claude mcp add -s user ccusage -- npx @ccusage/mcp@latest
 }
 
+install_tmux_from_source() {
+    local required_major=3 required_minor=3
+    if command -v tmux >/dev/null 2>&1; then
+        local current_version
+        current_version="$(tmux -V | awk '{print $2}' | sed 's/[a-zA-Z]*$//')"
+        local current_major current_minor
+        current_major="$(echo "${current_version}" | cut -d. -f1)"
+        current_minor="$(echo "${current_version}" | cut -d. -f2)"
+        if ((current_major > required_major)) || ((current_major == required_major && current_minor >= required_minor)); then
+            log "tmux ${current_version} already satisfies >= ${required_major}.${required_minor}; skipping"
+            return
+        fi
+        log "tmux ${current_version} < ${required_major}.${required_minor}; building from source"
+    else
+        log "Installing tmux from source"
+    fi
+    local build_version="3.6b"
+    local tarball="tmux-${build_version}.tar.gz"
+    local build_dir
+    build_dir="$(mktemp -d)"
+    curl -fsSL "https://github.com/tmux/tmux/releases/download/${build_version}/${tarball}" \
+        -o "${build_dir}/${tarball}"
+    tar -C "${build_dir}" -xzf "${build_dir}/${tarball}"
+    (cd "${build_dir}/tmux-${build_version}" && ./configure && make -j"$(nproc)" && sudo make install)
+    rm -rf "${build_dir}"
+}
+
 install_tmux_plugins() {
     require_cmd git
     local tpm_dir="${HOME}/.tmux/plugins/tpm"
