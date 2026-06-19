@@ -1,11 +1,15 @@
 #!/bin/bash
 
 log() {
-    printf "[install] %s\n" "$*"
+    if [[ "$*" == *"skipping"* ]]; then
+        printf "\033[1;33m[install]\033[0m %s\n" "$*"
+    else
+        printf "\033[1;32m[install]\033[0m %s\n" "$*"
+    fi
 }
 
 err() {
-    printf "[install] ERROR: %s\n" "$*" >&2
+    printf "\033[1;31m[install]\033[0m ERROR: %s\n" "$*" >&2
 }
 
 require_cmd() {
