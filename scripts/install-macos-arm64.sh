@@ -95,6 +95,7 @@ main() {
 
     install_oh_my_zsh
     install_rust
+    install_rust_analyzer
     install_eza
     install_fd
     install_zoxide
@@ -102,6 +103,8 @@ main() {
     install_claude_code
     install_rtk
     install_uv
+    install_clangd
+    install_pyright
     install_token_savior
     install_token_optimizer_mcp
     install_ccusage

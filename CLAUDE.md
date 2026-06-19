@@ -120,6 +120,9 @@ Shared functions called by both platform scripts, in order:
 |---|---|
 | `install_oh_my_zsh` | Oh My Zsh to `~/.oh-my-zsh` |
 | `install_rust` | Rust toolchain via rustup |
+| `install_rust_analyzer` | `rust-analyzer` via `rustup component add` |
+| `install_clangd` | `clangd` via apt (Linux) or `brew install llvm` (macOS) |
+| `install_pyright` | `pyright` via `npm install -g` |
 | `install_eza` | `eza` via `cargo install` |
 | `install_fd` | `fd` via `cargo install fd-find` |
 | `install_zoxide` | `zoxide` via install script |
@@ -142,7 +145,7 @@ MCP servers are registered at user scope (`-s user`) and are idempotent (checked
 
 Checks that all expected commands and directories exist after installation. Run after an install script to confirm nothing is missing. Exits non-zero if any check fails.
 
-Checks: `git curl zsh tmux entr rustup cargo eza fd zoxide fzf claude rtk node npm uv uvx ccusage starship nvim`, plus dirs `~/.oh-my-zsh`, `~/.tmux/plugins/tpm`, `~/.config/tmux/plugins/catppuccin`.
+Checks: `git curl zsh tmux entr rustup cargo rust-analyzer clangd pyright eza fd zoxide fzf claude rtk node npm uv uvx ccusage starship nvim`, plus dirs `~/.oh-my-zsh`, `~/.tmux/plugins/tpm`, `~/.config/tmux/plugins/catppuccin`.
 
 ## Key Areas
 

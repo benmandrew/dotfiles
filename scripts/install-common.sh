@@ -51,6 +51,40 @@ install_rust() {
     load_cargo_env
 }
 
+install_rust_analyzer() {
+    load_cargo_env
+    if command -v rust-analyzer >/dev/null 2>&1; then
+        log "rust-analyzer already installed; skipping"
+        return
+    fi
+    require_cmd rustup
+    log "Installing rust-analyzer"
+    rustup component add rust-analyzer
+}
+
+install_clangd() {
+    if command -v clangd >/dev/null 2>&1; then
+        log "clangd already installed; skipping"
+        return
+    fi
+    log "Installing clangd"
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        brew install llvm
+    else
+        sudo apt install -y clangd
+    fi
+}
+
+install_pyright() {
+    if command -v pyright >/dev/null 2>&1; then
+        log "pyright already installed; skipping"
+        return
+    fi
+    require_cmd npm
+    log "Installing pyright"
+    npm install -g pyright
+}
+
 install_eza() {
     if command -v eza >/dev/null 2>&1; then
         log "eza already installed; skipping"

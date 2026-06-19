@@ -40,6 +40,9 @@ check_dir "oh-my-zsh" "${HOME}/.oh-my-zsh"
 
 check_cmd rustup
 check_cmd cargo
+check_cmd rust-analyzer
+check_cmd clangd
+check_cmd pyright
 check_cmd eza
 check_cmd fd
 check_cmd zoxide
