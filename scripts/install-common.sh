@@ -147,7 +147,7 @@ install_pyright() {
     fi
     require_cmd npm
     log "Installing pyright"
-    npm install -g pyright
+    sudo npm install -g pyright
 }
 
 install_eza() {
@@ -280,7 +280,7 @@ install_ccusage() {
     require_cmd npm
     if ! command -v ccusage >/dev/null 2>&1; then
         log "Installing ccusage"
-        npm install -g ccusage
+        sudo npm install -g ccusage
     else
         log "ccusage already installed; skipping"
     fi
