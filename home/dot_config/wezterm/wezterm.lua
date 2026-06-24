@@ -12,11 +12,11 @@ config.color_scheme = "Hacktober"
 
 -- Tab bar: Hacktober palette
 local hacktober = {
-    bg       = "#141414",
-    surface  = "#191918",
-    hover    = "#464444",
-    text     = "#c9c9c9",
-    orange   = "#c75a22",
+    bg = "#141414",
+    surface = "#191918",
+    hover = "#464444",
+    text = "#c9c9c9",
+    orange = "#c75a22",
 }
 config.colors = {
     tab_bar = {
