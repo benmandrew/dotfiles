@@ -58,6 +58,8 @@ jobs:
           key: install-${{ runner.os }}-${{ hashFiles('scripts/install-common.sh', 'scripts/install-ubuntu-x86_64.sh') }}
 
       - name: Run install script
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash scripts/install-ubuntu-x86_64.sh
 
       - name: Verify installed tools

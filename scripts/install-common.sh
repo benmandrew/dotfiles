@@ -19,6 +19,16 @@ require_cmd() {
     fi
 }
 
+# Wrapper around curl for GitHub API calls; adds auth header when GITHUB_TOKEN is set
+# to avoid unauthenticated rate limits (60 req/hr) on shared CI runner IPs.
+github_api_curl() {
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" "$@"
+    else
+        curl -fsSL "$@"
+    fi
+}
+
 version_gte() {
     local current="$1" required="$2"
     local cur_major cur_minor cur_patch req_major req_minor req_patch
@@ -177,12 +187,10 @@ install_zoxide() {
         log "zoxide already installed; skipping"
         return
     fi
+    load_cargo_env
+    require_cmd cargo
     log "Installing zoxide"
-    local script_path
-    script_path="$(mktemp)"
-    curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh -o "${script_path}"
-    sh "${script_path}"
-    rm -f "${script_path}"
+    cargo install zoxide
 }
 
 install_fzf() {
@@ -375,7 +383,7 @@ install_wezterm() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    curl -fsSL https://api.github.com/repos/wez/wezterm/releases/latest \
+    github_api_curl https://api.github.com/repos/wez/wezterm/releases/latest \
         -o "${tmp_dir}/release.json"
     local tag tag_line
     tag_line="$(grep -m1 '"tag_name"' "${tmp_dir}/release.json" || true)"
@@ -462,7 +470,7 @@ install_lua_ls() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    curl -fsSL https://api.github.com/repos/LuaLS/lua-language-server/releases/latest \
+    github_api_curl https://api.github.com/repos/LuaLS/lua-language-server/releases/latest \
         -o "${tmp_dir}/release.json"
     local tag tag_line
     tag_line="$(grep -m1 '"tag_name"' "${tmp_dir}/release.json" || true)"
