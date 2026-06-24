@@ -92,6 +92,7 @@ main() {
     require_cmd brew
 
     install_brew_formulae_if_missing git zsh tmux node entr
+    install_cmake
 
     install_oh_my_zsh
     install_rust

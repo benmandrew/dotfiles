@@ -19,6 +19,24 @@ require_cmd() {
     fi
 }
 
+version_gte() {
+    local current="$1" required="$2"
+    local cur_major cur_minor cur_patch req_major req_minor req_patch
+    IFS=. read -r cur_major cur_minor cur_patch <<<"${current}"
+    IFS=. read -r req_major req_minor req_patch <<<"${required}"
+    cur_major="${cur_major:-0}"
+    cur_minor="${cur_minor:-0}"
+    cur_patch="${cur_patch:-0}"
+    req_major="${req_major:-0}"
+    req_minor="${req_minor:-0}"
+    req_patch="${req_patch:-0}"
+    if ((cur_major > req_major)); then return 0; fi
+    if ((cur_major < req_major)); then return 1; fi
+    if ((cur_minor > req_minor)); then return 0; fi
+    if ((cur_minor < req_minor)); then return 1; fi
+    ((cur_patch >= req_patch))
+}
+
 load_cargo_env() {
     if [[ -f "${HOME}/.cargo/env" ]]; then
         # shellcheck source=/dev/null
@@ -79,6 +97,47 @@ install_clangd() {
     else
         sudo apt install -y clangd
     fi
+}
+
+install_cmake() {
+    local required_version="4.3.2"
+    if command -v cmake >/dev/null 2>&1; then
+        local cmake_output current_version
+        cmake_output="$(cmake --version)"
+        current_version="$(awk 'NR==1{print $3}' <<<"${cmake_output}")"
+        if version_gte "${current_version}" "${required_version}"; then
+            log "cmake ${current_version} already satisfies >= ${required_version}; skipping"
+            return
+        fi
+        log "cmake ${current_version} < ${required_version}; installing from GitHub"
+    else
+        log "Installing cmake ${required_version}"
+    fi
+    local os_name
+    os_name="$(uname -s)"
+    if [[ "${os_name}" == "Darwin" ]]; then
+        if brew list --formula cmake >/dev/null 2>&1; then
+            brew upgrade cmake
+        else
+            brew install cmake
+        fi
+        return
+    fi
+    local os_arch cmake_arch
+    os_arch="$(uname -m)"
+    if [[ "${os_arch}" == "aarch64" ]]; then
+        cmake_arch="linux-aarch64"
+    else
+        cmake_arch="linux-x86_64"
+    fi
+    local installer="cmake-${required_version}-${cmake_arch}.sh"
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "${tmp_dir}"' RETURN
+    curl -fsSL "https://github.com/Kitware/CMake/releases/download/v${required_version}/${installer}" \
+        -o "${tmp_dir}/${installer}"
+    chmod +x "${tmp_dir}/${installer}"
+    sudo sh "${tmp_dir}/${installer}" --prefix=/usr/local --skip-license
 }
 
 install_pyright() {
