@@ -10,6 +10,41 @@ config.harfbuzz_features = { "calt=0", "clig=0", "liga=0" }
 -- Colors
 config.color_scheme = "Hacktober"
 
+-- Tab bar: Hacktober palette
+local hacktober = {
+    bg       = "#141414",
+    surface  = "#191918",
+    hover    = "#464444",
+    text     = "#c9c9c9",
+    orange   = "#c75a22",
+}
+config.colors = {
+    tab_bar = {
+        background = hacktober.bg,
+        active_tab = {
+            bg_color = hacktober.orange,
+            fg_color = hacktober.bg,
+            intensity = "Bold",
+        },
+        inactive_tab = {
+            bg_color = hacktober.surface,
+            fg_color = hacktober.text,
+        },
+        inactive_tab_hover = {
+            bg_color = hacktober.hover,
+            fg_color = hacktober.text,
+        },
+        new_tab = {
+            bg_color = hacktober.bg,
+            fg_color = hacktober.text,
+        },
+        new_tab_hover = {
+            bg_color = hacktober.surface,
+            fg_color = hacktober.text,
+        },
+    },
+}
+
 -- Window
 config.window_padding = {
     left = 8,
@@ -22,7 +57,7 @@ config.window_decorations = "RESIZE"
 -- Tab bar
 config.enable_tab_bar = true
 config.use_fancy_tab_bar = false
-config.tab_bar_at_bottom = true
+config.tab_bar_at_bottom = false
 config.hide_tab_bar_if_only_one_tab = true
 
 -- Behaviour
