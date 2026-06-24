@@ -133,7 +133,7 @@ install_cmake() {
     local installer="cmake-${required_version}-${cmake_arch}.sh"
     local tmp_dir
     tmp_dir="$(mktemp -d)"
-    trap 'rm -rf "${tmp_dir}"' RETURN
+    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
     curl -fsSL "https://github.com/Kitware/CMake/releases/download/v${required_version}/${installer}" \
         -o "${tmp_dir}/${installer}"
     chmod +x "${tmp_dir}/${installer}"
@@ -317,7 +317,7 @@ install_tmux_from_source() {
     local tarball="tmux-${build_version}.tar.gz"
     local build_dir
     build_dir="$(mktemp -d)"
-    trap 'rm -rf "${build_dir}"' RETURN
+    trap 'rm -rf "${build_dir}"; trap - RETURN' RETURN
     curl -fsSL "https://github.com/tmux/tmux/releases/download/${build_version}/${tarball}" \
         -o "${build_dir}/${tarball}"
     tar -C "${build_dir}" -xzf "${build_dir}/${tarball}"
@@ -368,7 +368,7 @@ install_wezterm() {
     ubuntu_version="$(grep -m1 '^VERSION_ID=' /etc/os-release | cut -d= -f2 | tr -d '"')"
     local tmp_dir
     tmp_dir="$(mktemp -d)"
-    trap 'rm -rf "${tmp_dir}"' RETURN
+    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
     curl -fsSL https://api.github.com/repos/wez/wezterm/releases/latest \
         -o "${tmp_dir}/release.json"
     local tag
