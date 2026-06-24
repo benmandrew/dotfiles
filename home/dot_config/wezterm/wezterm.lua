@@ -6,7 +6,7 @@ config.font = wezterm.font("JetBrains Mono")
 config.font_size = 13.0
 
 -- Colors
-config.color_scheme = "Catppuccin Mocha"
+config.color_scheme = "Hacktober"
 
 -- Window
 config.window_padding = {
