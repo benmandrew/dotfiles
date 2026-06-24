@@ -124,6 +124,7 @@ Shared functions called by both platform scripts, in order:
 | `install_clangd` | `clangd` via apt (Linux) or `brew install llvm` (macOS) |
 | `install_cmake` | cmake >= 4.3.2 — prebuilt binary from GitHub releases (Linux x86_64/ARM64), or `brew install/upgrade cmake` (macOS) |
 | `install_pyright` | `pyright` via `npm install -g` |
+| `install_lua_ls` | `lua-language-server` via `brew` (macOS) or GitHub releases binary (Linux) |
 | `install_eza` | `eza` via `cargo install` |
 | `install_fd` | `fd` via `cargo install fd-find` |
 | `install_zoxide` | `zoxide` via install script |

@@ -77,6 +77,7 @@ main() {
     install_uv
     install_clangd
     install_pyright
+    install_lua_ls
     install_token_savior
     install_token_optimizer_mcp
     install_ccusage

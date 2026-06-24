@@ -436,6 +436,43 @@ install_git_mcp() {
     claude mcp add -s user git-mcp -- npx mcp-remote https://gitmcp.io/docs
 }
 
+install_lua_ls() {
+    if command -v lua-language-server >/dev/null 2>&1; then
+        log "lua-language-server already installed; skipping"
+        return
+    fi
+    log "Installing lua-language-server"
+    local os_name
+    os_name="$(uname -s)"
+    if [[ "${os_name}" == "Darwin" ]]; then
+        brew install lua-language-server
+        return
+    fi
+    local os_arch lua_arch
+    os_arch="$(uname -m)"
+    if [[ "${os_arch}" == "aarch64" ]]; then
+        lua_arch="linux-arm64"
+    else
+        lua_arch="linux-x64"
+    fi
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
+    curl -fsSL https://api.github.com/repos/LuaLS/lua-language-server/releases/latest \
+        -o "${tmp_dir}/release.json"
+    local tag tag_line
+    tag_line="$(grep -m1 '"tag_name"' "${tmp_dir}/release.json" || true)"
+    tag="${tag_line#*\"tag_name\": \"}"
+    tag="${tag%%\"*}"
+    local archive="lua-language-server-${tag}-${lua_arch}.tar.gz"
+    local install_dir="${HOME}/.local/opt/lua-language-server"
+    mkdir -p "${install_dir}"
+    curl -fsSL "https://github.com/LuaLS/lua-language-server/releases/download/${tag}/${archive}" \
+        -o "${tmp_dir}/${archive}"
+    tar -xzf "${tmp_dir}/${archive}" -C "${install_dir}"
+    ln -sf "${install_dir}/bin/lua-language-server" "${HOME}/.local/bin/lua-language-server"
+}
+
 print_chezmoi_init_hint() {
     log "You can initialize chezmoi with: chezmoi init --apply git@github.com:benmandrew/dotfiles.git"
 }

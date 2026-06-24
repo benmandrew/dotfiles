@@ -44,6 +44,7 @@ check_cmd rust-analyzer
 check_cmd clangd
 check_cmd cmake
 check_cmd pyright
+check_cmd lua-language-server
 check_cmd eza
 check_cmd fd
 check_cmd zoxide
