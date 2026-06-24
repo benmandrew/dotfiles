@@ -368,6 +368,10 @@ install_wezterm() {
     version_id_line="$(grep -m1 '^VERSION_ID=' /etc/os-release || true)"
     ubuntu_version="${version_id_line#VERSION_ID=}"
     ubuntu_version="${ubuntu_version//\"/}"
+    # WezTerm only publishes 20.04 and 22.04 packages; 22.04 works on newer Ubuntu
+    if [[ "${ubuntu_version}" != "20.04" && "${ubuntu_version}" != "22.04" ]]; then
+        ubuntu_version="22.04"
+    fi
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
