@@ -72,7 +72,9 @@ install_clangd() {
         return
     fi
     log "Installing clangd"
-    if [[ "$(uname -s)" == "Darwin" ]]; then
+    local os_name
+    os_name="$(uname -s)"
+    if [[ "${os_name}" == "Darwin" ]]; then
         brew install llvm
     else
         sudo apt install -y clangd
@@ -237,7 +239,10 @@ install_tmux_from_source() {
     local required_major=3 required_minor=3
     if command -v tmux >/dev/null 2>&1; then
         local current_version
-        current_version="$(tmux -V | awk '{print $2}' | sed 's/[a-zA-Z]*$//')"
+        local tmux_v_output tmux_v_word
+        tmux_v_output="$(tmux -V)"
+        tmux_v_word="$(awk '{print $2}' <<<"${tmux_v_output}")"
+        current_version="${tmux_v_word%%[[:alpha:]]*}"
         local current_major current_minor
         current_major="$(echo "${current_version}" | cut -d. -f1)"
         current_minor="$(echo "${current_version}" | cut -d. -f2)"
@@ -257,7 +262,9 @@ install_tmux_from_source() {
     curl -fsSL "https://github.com/tmux/tmux/releases/download/${build_version}/${tarball}" \
         -o "${build_dir}/${tarball}"
     tar -C "${build_dir}" -xzf "${build_dir}/${tarball}"
-    (cd "${build_dir}/tmux-${build_version}" && ./configure && make -j"$(nproc)" && sudo make install)
+    local cpu_count
+    cpu_count="$(nproc)"
+    (cd "${build_dir}/tmux-${build_version}" && ./configure && make -j"${cpu_count}" && sudo make install)
 }
 
 install_tmux_plugins() {
