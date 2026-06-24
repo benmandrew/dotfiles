@@ -6,7 +6,7 @@ export rvm_prompt=0
 
 ZSH_THEME="eastwood"
 
-plugins=(git tmux nvm ssh-agent)
+plugins=(git nvm ssh-agent)
 
 zstyle ':omz:update' mode auto
 source $ZSH/oh-my-zsh.sh
@@ -106,8 +106,8 @@ eval "$(zoxide init zsh --cmd cd)"
 
 eval "$(starship init zsh)"
 
-if [[ -o interactive ]] && [[ -z "$TMUX" ]]; then
-  # Allow scripts to disable tmux
+if [[ -o interactive ]] && [[ -z "$TMUX" ]] && [[ -n "$SSH_CONNECTION" ]]; then
+  # Allow scripts to disable tmux on remote machines
   if [[ -z "$SSH_TMUX_DISABLE" ]]; then
     case "$SSH_ORIGINAL_COMMAND" in
       scp*|rsync*) ;;
