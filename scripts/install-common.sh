@@ -366,12 +366,13 @@ install_wezterm() {
     fi
     local ubuntu_version
     ubuntu_version="$(grep -m1 '^VERSION_ID=' /etc/os-release | cut -d= -f2 | tr -d '"')"
-    local tag
-    tag="$(curl -fsSL https://api.github.com/repos/wez/wezterm/releases/latest \
-        | grep -m1 '"tag_name"' | cut -d'"' -f4)"
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"' RETURN
+    curl -fsSL https://api.github.com/repos/wez/wezterm/releases/latest \
+        -o "${tmp_dir}/release.json"
+    local tag
+    tag="$(grep -m1 '"tag_name"' "${tmp_dir}/release.json" | cut -d'"' -f4)"
     local deb="wezterm-${tag}.Ubuntu${ubuntu_version}.deb"
     curl -fsSL "https://github.com/wez/wezterm/releases/download/${tag}/${deb}" \
         -o "${tmp_dir}/${deb}"
