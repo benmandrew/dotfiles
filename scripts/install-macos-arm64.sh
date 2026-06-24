@@ -114,6 +114,7 @@ main() {
     install_git_mcp
     install_starship
     install_tmux_plugins
+    install_wezterm
 
     install_neovim_if_missing
 

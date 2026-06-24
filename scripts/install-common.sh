@@ -346,6 +346,39 @@ install_tmux_plugins() {
     fi
 }
 
+install_wezterm() {
+    if command -v wezterm >/dev/null 2>&1; then
+        log "WezTerm already installed; skipping"
+        return
+    fi
+    log "Installing WezTerm"
+    local os_name
+    os_name="$(uname -s)"
+    if [[ "${os_name}" == "Darwin" ]]; then
+        brew install --cask wezterm
+        return
+    fi
+    local os_arch
+    os_arch="$(uname -m)"
+    if [[ "${os_arch}" != "x86_64" ]]; then
+        log "WezTerm: no official binary for ${os_arch}; skipping"
+        return
+    fi
+    local ubuntu_version
+    ubuntu_version="$(grep -m1 '^VERSION_ID=' /etc/os-release | cut -d= -f2 | tr -d '"')"
+    local tag
+    tag="$(curl -fsSL https://api.github.com/repos/wez/wezterm/releases/latest \
+        | grep -m1 '"tag_name"' | cut -d'"' -f4)"
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "${tmp_dir}"' RETURN
+    local deb="wezterm-${tag}.Ubuntu${ubuntu_version}.deb"
+    curl -fsSL "https://github.com/wez/wezterm/releases/download/${tag}/${deb}" \
+        -o "${tmp_dir}/${deb}"
+    sudo dpkg -i "${tmp_dir}/${deb}"
+    sudo apt-get install -f -y
+}
+
 install_mcp_manim() {
     require_cmd docker
     local mcp_list
