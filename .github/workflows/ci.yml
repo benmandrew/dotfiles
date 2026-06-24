@@ -53,6 +53,8 @@ jobs:
             ~/.tmux
             ~/.config/tmux/plugins
             /opt/nvim-linux-x86_64
+            /usr/local/bin
+            /usr/local/lib/node_modules
           key: install-${{ runner.os }}-${{ hashFiles('scripts/install-common.sh', 'scripts/install-ubuntu-x86_64.sh') }}
 
       - name: Run install script
