@@ -364,15 +364,19 @@ install_wezterm() {
         log "WezTerm: no official binary for ${os_arch}; skipping"
         return
     fi
-    local ubuntu_version
-    ubuntu_version="$(grep -m1 '^VERSION_ID=' /etc/os-release | cut -d= -f2 | tr -d '"')"
+    local ubuntu_version version_id_line
+    version_id_line="$(grep -m1 '^VERSION_ID=' /etc/os-release || true)"
+    ubuntu_version="${version_id_line#VERSION_ID=}"
+    ubuntu_version="${ubuntu_version//\"/}"
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
     curl -fsSL https://api.github.com/repos/wez/wezterm/releases/latest \
         -o "${tmp_dir}/release.json"
-    local tag
-    tag="$(grep -m1 '"tag_name"' "${tmp_dir}/release.json" | cut -d'"' -f4)"
+    local tag tag_line
+    tag_line="$(grep -m1 '"tag_name"' "${tmp_dir}/release.json" || true)"
+    tag="${tag_line#*\"tag_name\": \"}"
+    tag="${tag%%\"*}"
     local deb="wezterm-${tag}.Ubuntu${ubuntu_version}.deb"
     curl -fsSL "https://github.com/wez/wezterm/releases/download/${tag}/${deb}" \
         -o "${tmp_dir}/${deb}"
