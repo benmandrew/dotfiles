@@ -85,8 +85,8 @@ config.keys = {
     { key = "x", mods = "LEADER", action = act.CloseCurrentPane({ confirm = true }) },
     -- Copy mode (vi keys work inside)
     { key = "[", mods = "LEADER", action = act.ActivateCopyMode },
-    -- Send literal C-a to the terminal (e.g. for remote tmux)
-    { key = "a", mods = "LEADER", action = act.SendKey({ key = "a", mods = "CTRL" }) },
+    -- Send literal C-a to the terminal (e.g. for remote tmux): double-tap C-a
+    { key = "a", mods = "LEADER|CTRL", action = act.SendKey({ key = "a", mods = "CTRL" }) },
 }
 
 return config
