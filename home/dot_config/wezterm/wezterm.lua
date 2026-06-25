@@ -19,6 +19,8 @@ local hacktober = {
     orange = "#c75a22",
 }
 config.colors = {
+    selection_fg = "none",
+    selection_bg = "#3d5278",
     tab_bar = {
         background = hacktober.bg,
         active_tab = {
