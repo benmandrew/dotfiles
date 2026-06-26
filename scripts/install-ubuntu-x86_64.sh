@@ -7,6 +7,12 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/install-common.sh"
 
 install_apt_packages_if_missing() {
+    if [[ -n "${UPGRADE:-}" ]]; then
+        log "Upgrading base packages: $*"
+        sudo apt update
+        sudo apt install -y "$@"
+        return
+    fi
     local missing_packages=()
     local package
     for package in "$@"; do
@@ -27,11 +33,19 @@ install_node() {
         local node_major
         node_major="$(node --version | cut -d. -f1 | tr -d 'v')"
         if ((node_major >= 20)); then
-            log "Node.js ${node_major} already installed; skipping"
+            if [[ -z "${UPGRADE:-}" ]]; then
+                log "Node.js ${node_major} already installed; skipping"
+                return
+            fi
+            log "Upgrading Node.js LTS"
+            sudo apt update
+            sudo apt install -y nodejs
             return
         fi
+        log "Node.js ${node_major} < 20; upgrading to LTS"
+    else
+        log "Installing Node.js LTS"
     fi
-    log "Installing Node.js LTS"
     local setup_path
     setup_path="$(mktemp)"
     curl -fsSL https://deb.nodesource.com/setup_lts.x -o "${setup_path}"
@@ -43,17 +57,25 @@ install_node() {
 install_neovim_if_missing() {
     local nvim_path="/opt/nvim-linux-x86_64/bin/nvim"
     if [[ -x "${nvim_path}" ]] || command -v nvim >/dev/null 2>&1; then
-        log "Neovim already installed; skipping"
-        return
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "Neovim already installed; skipping"
+            return
+        fi
+        log "Upgrading Neovim"
+    else
+        log "Installing Neovim"
     fi
-    log "Installing Neovim"
-    curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
+    curl -fsSL https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz \
+        -o "${tmp_dir}/nvim-linux-x86_64.tar.gz"
     sudo rm -rf /opt/nvim-linux-x86_64
-    sudo tar -C /opt -xzf nvim-linux-x86_64.tar.gz
-    rm nvim-linux-x86_64.tar.gz
+    sudo tar -C /opt -xzf "${tmp_dir}/nvim-linux-x86_64.tar.gz"
 }
 
 main() {
+    parse_args "$@"
     log "Checking prerequisites"
     require_cmd sudo
     require_cmd ssh-keygen

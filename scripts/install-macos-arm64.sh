@@ -7,6 +7,17 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/install-common.sh"
 
 install_brew_formulae_if_missing() {
+    if [[ -n "${UPGRADE:-}" ]]; then
+        log "Upgrading Homebrew formulae: $*"
+        brew update
+        brew upgrade "$@" || true
+        for formula in "$@"; do
+            if ! brew list --formula "${formula}" >/dev/null 2>&1; then
+                brew install "${formula}"
+            fi
+        done
+        return
+    fi
     local missing_formulae=()
     local formula
     for formula in "$@"; do
@@ -25,10 +36,16 @@ install_brew_formulae_if_missing() {
 
 install_neovim_if_missing() {
     if brew list --formula neovim >/dev/null 2>&1; then
-        log "Neovim already installed; skipping"
+        if [[ -n "${UPGRADE:-}" ]]; then
+            log "Upgrading Neovim"
+            brew upgrade neovim
+        else
+            log "Neovim already installed; skipping"
+        fi
         return
     fi
-    install_brew_formulae_if_missing neovim
+    log "Installing Neovim"
+    brew install neovim
 }
 
 wait_for_clt() {
@@ -70,6 +87,7 @@ install_homebrew() {
 }
 
 main() {
+    parse_args "$@"
     local os_name arch_name
     os_name="$(uname -s)"
     arch_name="$(uname -m)"

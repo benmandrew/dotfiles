@@ -1,8 +1,12 @@
 #!/bin/bash
 
+UPGRADE=""
+
 log() {
     if [[ "$*" == *"skipping"* ]]; then
         printf "\033[1;33m[install]\033[0m %s\n" "$*"
+    elif [[ "$*" == *"pgrading"* ]]; then
+        printf "\033[1;36m[install]\033[0m %s\n" "$*"
     else
         printf "\033[1;32m[install]\033[0m %s\n" "$*"
     fi
@@ -19,6 +23,18 @@ require_cmd() {
     fi
 }
 
+parse_args() {
+    for arg in "$@"; do
+        case "${arg}" in
+            --upgrade) UPGRADE=true ;;
+            *)
+                err "Unknown argument: ${arg}. Usage: $0 [--upgrade]"
+                exit 1
+                ;;
+        esac
+    done
+}
+
 # Wrapper around curl for GitHub API calls; adds auth header when GITHUB_TOKEN is set
 # to avoid unauthenticated rate limits (60 req/hr) on shared CI runner IPs.
 github_api_curl() {
@@ -27,6 +43,19 @@ github_api_curl() {
     else
         curl -fsSL "$@"
     fi
+}
+
+github_latest_tag() {
+    local repo="$1"
+    local tmp
+    tmp="$(mktemp)"
+    trap 'rm -f "${tmp}"; trap - RETURN' RETURN
+    github_api_curl "https://api.github.com/repos/${repo}/releases/latest" -o "${tmp}"
+    local tag_line tag
+    tag_line="$(grep -m1 '"tag_name"' "${tmp}" || true)"
+    tag="${tag_line#*\"tag_name\": \"}"
+    tag="${tag%%\"*}"
+    echo "${tag}"
 }
 
 version_gte() {
@@ -56,7 +85,12 @@ load_cargo_env() {
 
 install_oh_my_zsh() {
     if [[ -d "${HOME}/.oh-my-zsh" ]]; then
-        log "Oh My Zsh already installed; skipping"
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "Oh My Zsh already installed; skipping"
+            return
+        fi
+        log "Upgrading Oh My Zsh"
+        "${HOME}/.oh-my-zsh/tools/upgrade.sh"
         return
     fi
     log "Installing Oh My Zsh"
@@ -70,7 +104,12 @@ install_oh_my_zsh() {
 install_rust() {
     load_cargo_env
     if command -v cargo >/dev/null 2>&1 && command -v rustup >/dev/null 2>&1; then
-        log "Rust already installed; skipping"
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "Rust already installed; skipping"
+            return
+        fi
+        log "Upgrading Rust"
+        rustup update
         return
     fi
     log "Installing Rust"
@@ -86,17 +125,32 @@ install_rust() {
 install_rust_analyzer() {
     load_cargo_env
     if command -v rust-analyzer >/dev/null 2>&1; then
-        log "rust-analyzer already installed; skipping"
-        return
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "rust-analyzer already installed; skipping"
+            return
+        fi
+        log "Upgrading rust-analyzer"
+    else
+        log "Installing rust-analyzer"
     fi
     require_cmd rustup
-    log "Installing rust-analyzer"
     rustup component add rust-analyzer
 }
 
 install_clangd() {
     if command -v clangd >/dev/null 2>&1; then
-        log "clangd already installed; skipping"
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "clangd already installed; skipping"
+            return
+        fi
+        log "Upgrading clangd"
+        local os_name
+        os_name="$(uname -s)"
+        if [[ "${os_name}" == "Darwin" ]]; then
+            brew upgrade llvm
+        else
+            sudo apt install -y clangd
+        fi
         return
     fi
     log "Installing clangd"
@@ -111,21 +165,24 @@ install_clangd() {
 
 install_cmake() {
     local required_version="4.3.2"
-    if command -v cmake >/dev/null 2>&1; then
-        local cmake_output current_version
-        cmake_output="$(cmake --version)"
-        current_version="$(awk 'NR==1{print $3}' <<<"${cmake_output}")"
-        if version_gte "${current_version}" "${required_version}"; then
-            log "cmake ${current_version} already satisfies >= ${required_version}; skipping"
-            return
-        fi
-        log "cmake ${current_version} < ${required_version}; installing from GitHub"
-    else
-        log "Installing cmake ${required_version}"
-    fi
     local os_name
     os_name="$(uname -s)"
+
     if [[ "${os_name}" == "Darwin" ]]; then
+        if [[ -z "${UPGRADE:-}" ]] && command -v cmake >/dev/null 2>&1; then
+            local cmake_output current_version
+            cmake_output="$(cmake --version)"
+            current_version="$(awk 'NR==1{print $3}' <<<"${cmake_output}")"
+            if version_gte "${current_version}" "${required_version}"; then
+                log "cmake ${current_version} already satisfies >= ${required_version}; skipping"
+                return
+            fi
+            log "cmake ${current_version} < ${required_version}; upgrading"
+        elif [[ -n "${UPGRADE:-}" ]]; then
+            log "Upgrading cmake"
+        else
+            log "Installing cmake"
+        fi
         if brew list --formula cmake >/dev/null 2>&1; then
             brew upgrade cmake
         else
@@ -133,6 +190,30 @@ install_cmake() {
         fi
         return
     fi
+
+    # Linux: binary download
+    local install_version
+    if [[ -n "${UPGRADE:-}" ]]; then
+        local latest_tag
+        latest_tag="$(github_latest_tag Kitware/CMake)"
+        install_version="${latest_tag#v}"
+        log "Upgrading cmake to ${install_version}"
+    else
+        install_version="${required_version}"
+        if command -v cmake >/dev/null 2>&1; then
+            local cmake_output current_version
+            cmake_output="$(cmake --version)"
+            current_version="$(awk 'NR==1{print $3}' <<<"${cmake_output}")"
+            if version_gte "${current_version}" "${required_version}"; then
+                log "cmake ${current_version} already satisfies >= ${required_version}; skipping"
+                return
+            fi
+            log "cmake ${current_version} < ${required_version}; installing ${install_version}"
+        else
+            log "Installing cmake ${install_version}"
+        fi
+    fi
+
     local os_arch cmake_arch
     os_arch="$(uname -m)"
     if [[ "${os_arch}" == "aarch64" ]]; then
@@ -140,11 +221,11 @@ install_cmake() {
     else
         cmake_arch="linux-x86_64"
     fi
-    local installer="cmake-${required_version}-${cmake_arch}.sh"
+    local installer="cmake-${install_version}-${cmake_arch}.sh"
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    curl -fsSL "https://github.com/Kitware/CMake/releases/download/v${required_version}/${installer}" \
+    curl -fsSL "https://github.com/Kitware/CMake/releases/download/v${install_version}/${installer}" \
         -o "${tmp_dir}/${installer}"
     chmod +x "${tmp_dir}/${installer}"
     sudo sh "${tmp_dir}/${installer}" --prefix=/usr/local --skip-license
@@ -152,50 +233,77 @@ install_cmake() {
 
 install_pyright() {
     if command -v pyright >/dev/null 2>&1; then
-        log "pyright already installed; skipping"
-        return
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "pyright already installed; skipping"
+            return
+        fi
+        log "Upgrading pyright"
+    else
+        log "Installing pyright"
     fi
     require_cmd npm
-    log "Installing pyright"
     sudo npm install -g pyright
 }
 
 install_eza() {
     if command -v eza >/dev/null 2>&1; then
-        log "eza already installed; skipping"
-        return
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "eza already installed; skipping"
+            return
+        fi
+        log "Upgrading eza"
+    else
+        log "Installing eza"
     fi
     load_cargo_env
     require_cmd cargo
-    log "Installing eza"
     cargo install eza
 }
 
 install_fd() {
     if command -v fd >/dev/null 2>&1; then
-        log "fd already installed; skipping"
-        return
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "fd already installed; skipping"
+            return
+        fi
+        log "Upgrading fd"
+    else
+        log "Installing fd"
     fi
     load_cargo_env
     require_cmd cargo
-    log "Installing fd"
     cargo install fd-find
 }
 
 install_bat() {
     if command -v bat >/dev/null 2>&1; then
-        log "bat already installed; skipping"
-        return
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "bat already installed; skipping"
+            return
+        fi
+        log "Upgrading bat"
+    else
+        log "Installing bat"
     fi
     load_cargo_env
     require_cmd cargo
-    log "Installing bat"
     cargo install bat
 }
 
 install_gh() {
     if command -v gh >/dev/null 2>&1; then
-        log "GitHub CLI already installed; skipping"
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "GitHub CLI already installed; skipping"
+            return
+        fi
+        log "Upgrading GitHub CLI"
+        local os_name
+        os_name="$(uname -s)"
+        if [[ "${os_name}" == "Darwin" ]]; then
+            brew upgrade gh
+        else
+            sudo apt install -y gh
+        fi
         return
     fi
     log "Installing GitHub CLI"
@@ -206,29 +314,41 @@ install_gh() {
         return
     fi
     sudo mkdir -p -m 755 /etc/apt/keyrings
-    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-        | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg |
+        sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
     sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-        | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" |
+        sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
     sudo apt update
     sudo apt install -y gh
 }
 
 install_zoxide() {
     if command -v zoxide >/dev/null 2>&1; then
-        log "zoxide already installed; skipping"
-        return
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "zoxide already installed; skipping"
+            return
+        fi
+        log "Upgrading zoxide"
+    else
+        log "Installing zoxide"
     fi
     load_cargo_env
     require_cmd cargo
-    log "Installing zoxide"
     cargo install zoxide
 }
 
 install_fzf() {
     if command -v fzf >/dev/null 2>&1; then
-        log "fzf already installed; skipping"
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "fzf already installed; skipping"
+            return
+        fi
+        log "Upgrading fzf"
+        if [[ -d "${HOME}/.fzf" ]]; then
+            git -C "${HOME}/.fzf" pull
+            "${HOME}/.fzf/install" --bin --no-update-rc --no-bash --no-fish
+        fi
         return
     fi
     log "Installing fzf"
@@ -242,10 +362,14 @@ install_fzf() {
 
 install_starship() {
     if command -v starship >/dev/null 2>&1; then
-        log "Starship already installed; skipping"
-        return
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "Starship already installed; skipping"
+            return
+        fi
+        log "Upgrading Starship"
+    else
+        log "Installing Starship"
     fi
-    log "Installing Starship"
     local script_path
     script_path="$(mktemp)"
     curl -sS https://starship.rs/install.sh -o "${script_path}"
@@ -255,7 +379,12 @@ install_starship() {
 
 install_claude_code() {
     if command -v claude >/dev/null 2>&1; then
-        log "Claude Code already installed; skipping"
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "Claude Code already installed; skipping"
+            return
+        fi
+        log "Upgrading Claude Code"
+        npm install -g @anthropic-ai/claude-code
         return
     fi
     log "Installing Claude Code"
@@ -268,10 +397,14 @@ install_claude_code() {
 
 install_rtk() {
     if command -v rtk >/dev/null 2>&1; then
-        log "rtk already installed; skipping"
-        return
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "rtk already installed; skipping"
+            return
+        fi
+        log "Upgrading rtk"
+    else
+        log "Installing rtk"
     fi
-    log "Installing rtk"
     local script_path
     script_path="$(mktemp)"
     curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh -o "${script_path}"
@@ -281,7 +414,12 @@ install_rtk() {
 
 install_uv() {
     if command -v uv >/dev/null 2>&1; then
-        log "uv already installed; skipping"
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "uv already installed; skipping"
+            return
+        fi
+        log "Upgrading uv"
+        uv self update
         return
     fi
     log "Installing uv"
@@ -319,11 +457,16 @@ install_token_optimizer_mcp() {
 
 install_ccusage() {
     require_cmd npm
-    if ! command -v ccusage >/dev/null 2>&1; then
+    if command -v ccusage >/dev/null 2>&1; then
+        if [[ -n "${UPGRADE:-}" ]]; then
+            log "Upgrading ccusage"
+            sudo npm install -g ccusage
+        else
+            log "ccusage already installed; skipping"
+        fi
+    else
         log "Installing ccusage"
         sudo npm install -g ccusage
-    else
-        log "ccusage already installed; skipping"
     fi
     local mcp_list
     mcp_list="$(claude mcp list 2>/dev/null)" || true
@@ -337,24 +480,36 @@ install_ccusage() {
 
 install_tmux_from_source() {
     local required_major=3 required_minor=3
-    if command -v tmux >/dev/null 2>&1; then
-        local current_version
-        local tmux_v_output tmux_v_word
-        tmux_v_output="$(tmux -V)"
-        tmux_v_word="$(awk '{print $2}' <<<"${tmux_v_output}")"
-        current_version="${tmux_v_word%%[[:alpha:]]*}"
-        local current_major current_minor
-        current_major="$(echo "${current_version}" | cut -d. -f1)"
-        current_minor="$(echo "${current_version}" | cut -d. -f2)"
-        if ((current_major > required_major)) || ((current_major == required_major && current_minor >= required_minor)); then
-            log "tmux ${current_version} already satisfies >= ${required_major}.${required_minor}; skipping"
-            return
+    local build_version
+
+    if [[ -n "${UPGRADE:-}" ]]; then
+        build_version="$(github_latest_tag tmux/tmux)"
+        if command -v tmux >/dev/null 2>&1; then
+            log "Upgrading tmux to ${build_version}"
+        else
+            log "Installing tmux ${build_version}"
         fi
-        log "tmux ${current_version} < ${required_major}.${required_minor}; building from source"
     else
-        log "Installing tmux from source"
+        build_version="3.6b"
+        if command -v tmux >/dev/null 2>&1; then
+            local current_version
+            local tmux_v_output tmux_v_word
+            tmux_v_output="$(tmux -V)"
+            tmux_v_word="$(awk '{print $2}' <<<"${tmux_v_output}")"
+            current_version="${tmux_v_word%%[[:alpha:]]*}"
+            local current_major current_minor
+            current_major="$(echo "${current_version}" | cut -d. -f1)"
+            current_minor="$(echo "${current_version}" | cut -d. -f2)"
+            if ((current_major > required_major)) || ((current_major == required_major && current_minor >= required_minor)); then
+                log "tmux ${current_version} already satisfies >= ${required_major}.${required_minor}; skipping"
+                return
+            fi
+            log "tmux ${current_version} < ${required_major}.${required_minor}; building from source"
+        else
+            log "Installing tmux from source"
+        fi
     fi
-    local build_version="3.6b"
+
     local tarball="tmux-${build_version}.tar.gz"
     local build_dir
     build_dir="$(mktemp -d)"
@@ -372,14 +527,24 @@ install_tmux_plugins() {
     local tpm_dir="${HOME}/.tmux/plugins/tpm"
     local catppuccin_dir="${HOME}/.config/tmux/plugins/catppuccin"
     if [[ -d "${tpm_dir}" ]]; then
-        log "tmux plugin manager (tpm) already installed; skipping"
+        if [[ -n "${UPGRADE:-}" ]]; then
+            log "Upgrading tmux plugin manager (tpm)"
+            git -C "${tpm_dir}" pull
+        else
+            log "tmux plugin manager (tpm) already installed; skipping"
+        fi
     else
         log "Installing tmux plugin manager (tpm)"
         mkdir -p "${HOME}/.tmux/plugins"
         git clone https://github.com/tmux-plugins/tpm "${tpm_dir}"
     fi
     if [[ -d "${catppuccin_dir}" ]]; then
-        log "tmux catppuccin theme already installed; skipping"
+        if [[ -n "${UPGRADE:-}" ]]; then
+            log "Upgrading tmux catppuccin theme"
+            git -C "${catppuccin_dir}" pull
+        else
+            log "tmux catppuccin theme already installed; skipping"
+        fi
     else
         log "Installing tmux catppuccin theme"
         mkdir -p "${HOME}/.config/tmux/plugins"
@@ -388,17 +553,29 @@ install_tmux_plugins() {
 }
 
 install_wezterm() {
-    if command -v wezterm >/dev/null 2>&1; then
-        log "WezTerm already installed; skipping"
-        return
-    fi
-    log "Installing WezTerm"
     local os_name
     os_name="$(uname -s)"
-    if [[ "${os_name}" == "Darwin" ]]; then
-        brew install --cask wezterm
-        return
+
+    if command -v wezterm >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "WezTerm already installed; skipping"
+            return
+        fi
+        log "Upgrading WezTerm"
+        if [[ "${os_name}" == "Darwin" ]]; then
+            brew upgrade --cask wezterm
+            return
+        fi
+        # Linux: fall through to re-download latest
+    else
+        log "Installing WezTerm"
+        if [[ "${os_name}" == "Darwin" ]]; then
+            brew install --cask wezterm
+            return
+        fi
     fi
+
+    # Linux binary download (install or upgrade via latest GitHub release)
     local os_arch
     os_arch="$(uname -m)"
     if [[ "${os_arch}" != "x86_64" ]]; then
@@ -431,13 +608,21 @@ install_wezterm() {
 
 install_mcp_manim() {
     require_cmd docker
+    local gist_dir="${HOME}/.local/share/mcp-servers/manim"
     local mcp_list
     mcp_list="$(claude mcp list 2>/dev/null)" || true
     if echo "${mcp_list}" | grep -q "mcp-manim"; then
+        if [[ -n "${UPGRADE:-}" ]]; then
+            log "Upgrading mcp-manim"
+            if [[ -d "${gist_dir}" ]]; then
+                git -C "${gist_dir}" pull
+            fi
+            docker compose -f "${gist_dir}/docker-compose.yml" build --pull
+            return
+        fi
         log "mcp-manim MCP server already registered; skipping"
         return
     fi
-    local gist_dir="${HOME}/.local/share/mcp-servers/manim"
     if [[ ! -d "${gist_dir}" ]]; then
         log "Cloning manim MCP gist"
         mkdir -p "${HOME}/.local/share/mcp-servers"
@@ -451,13 +636,21 @@ install_mcp_manim() {
 
 install_mcp_latex() {
     require_cmd docker
+    local gist_dir="${HOME}/.local/share/mcp-servers/latex"
     local mcp_list
     mcp_list="$(claude mcp list 2>/dev/null)" || true
     if echo "${mcp_list}" | grep -q "mcp-latex"; then
+        if [[ -n "${UPGRADE:-}" ]]; then
+            log "Upgrading mcp-latex"
+            if [[ -d "${gist_dir}" ]]; then
+                git -C "${gist_dir}" pull
+            fi
+            docker compose -f "${gist_dir}/docker-compose.yml" build --pull
+            return
+        fi
         log "mcp-latex MCP server already registered; skipping"
         return
     fi
-    local gist_dir="${HOME}/.local/share/mcp-servers/latex"
     if [[ ! -d "${gist_dir}" ]]; then
         log "Cloning latex MCP gist"
         mkdir -p "${HOME}/.local/share/mcp-servers"
@@ -482,17 +675,29 @@ install_git_mcp() {
 }
 
 install_lua_ls() {
-    if command -v lua-language-server >/dev/null 2>&1; then
-        log "lua-language-server already installed; skipping"
-        return
-    fi
-    log "Installing lua-language-server"
     local os_name
     os_name="$(uname -s)"
-    if [[ "${os_name}" == "Darwin" ]]; then
-        brew install lua-language-server
-        return
+
+    if command -v lua-language-server >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "lua-language-server already installed; skipping"
+            return
+        fi
+        log "Upgrading lua-language-server"
+        if [[ "${os_name}" == "Darwin" ]]; then
+            brew upgrade lua-language-server
+            return
+        fi
+        # Linux: fall through to re-download latest
+    else
+        log "Installing lua-language-server"
+        if [[ "${os_name}" == "Darwin" ]]; then
+            brew install lua-language-server
+            return
+        fi
     fi
+
+    # Linux binary download (install or upgrade via latest GitHub release)
     local os_arch lua_arch
     os_arch="$(uname -m)"
     if [[ "${os_arch}" == "aarch64" ]]; then
