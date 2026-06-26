@@ -182,6 +182,18 @@ install_fd() {
     cargo install fd-find
 }
 
+install_bat() {
+    if command -v bat >/dev/null 2>&1; then
+        log "bat already installed; skipping"
+        return
+    fi
+    load_cargo_env
+    require_cmd cargo
+    log "Installing bat"
+    cargo install bat
+}
+
+
 install_zoxide() {
     if command -v zoxide >/dev/null 2>&1; then
         log "zoxide already installed; skipping"

@@ -69,6 +69,7 @@ main() {
     install_rust_analyzer
     install_eza
     install_fd
+    install_bat
     install_zoxide
     install_fzf
     install_claude_code

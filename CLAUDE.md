@@ -127,6 +127,7 @@ Shared functions called by both platform scripts, in order:
 | `install_lua_ls` | `lua-language-server` via `brew` (macOS) or GitHub releases binary (Linux) |
 | `install_eza` | `eza` via `cargo install` |
 | `install_fd` | `fd` via `cargo install fd-find` |
+| `install_bat` | `bat` via `cargo install` |
 | `install_zoxide` | `zoxide` via install script |
 | `install_fzf` | fzf cloned to `~/.fzf`, binary-only install |
 | `install_claude_code` | Claude Code CLI |

@@ -47,6 +47,7 @@ check_cmd pyright
 check_cmd lua-language-server
 check_cmd eza
 check_cmd fd
+check_cmd bat
 check_cmd zoxide
 check_cmd fzf
 
