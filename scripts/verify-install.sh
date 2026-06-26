@@ -10,10 +10,10 @@ fail=0
 check_cmd() {
     local name="$1"
     if command -v "${name}" >/dev/null 2>&1; then
-        printf "[ok]   %s\n" "${name}"
+        printf "\033[1;32m[ok]\033[0m   %s\n" "${name}"
         ((ok++)) || true
     else
-        printf "[FAIL] %s\n" "${name}" >&2
+        printf "\033[1;31m[FAIL]\033[0m %s\n" "${name}" >&2
         ((fail++)) || true
     fi
 }
@@ -22,10 +22,10 @@ check_dir() {
     local name="$1"
     local path="$2"
     if [[ -d "${path}" ]]; then
-        printf "[ok]   %s\n" "${name}"
+        printf "\033[1;32m[ok]\033[0m   %s\n" "${name}"
         ((ok++)) || true
     else
-        printf "[FAIL] %s (%s)\n" "${name}" "${path}" >&2
+        printf "\033[1;31m[FAIL]\033[0m %s (%s)\n" "${name}" "${path}" >&2
         ((fail++)) || true
     fi
 }
