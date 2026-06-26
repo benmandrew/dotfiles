@@ -128,6 +128,7 @@ Shared functions called by both platform scripts, in order:
 | `install_eza` | `eza` via `cargo install` |
 | `install_fd` | `fd` via `cargo install fd-find` |
 | `install_bat` | `bat` via `cargo install` |
+| `install_gh` | GitHub CLI — `brew install gh` (macOS) or official apt repo (Linux) |
 | `install_zoxide` | `zoxide` via install script |
 | `install_fzf` | fzf cloned to `~/.fzf`, binary-only install |
 | `install_claude_code` | Claude Code CLI |

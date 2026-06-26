@@ -50,6 +50,7 @@ check_cmd fd
 check_cmd bat
 check_cmd zoxide
 check_cmd fzf
+check_cmd gh
 
 check_cmd claude
 check_cmd rtk
