@@ -35,6 +35,17 @@ parse_args() {
     done
 }
 
+npm_install_g() {
+    local npm_prefix
+    npm_prefix="$(npm prefix -g 2>/dev/null)"
+    if [[ -w "${npm_prefix}" ]]; then
+        npm install -g "$@"
+    else
+        sudo npm install -g "$@"
+    fi
+}
+
+
 # Wrapper around curl for GitHub API calls; adds auth header when GITHUB_TOKEN is set
 # to avoid unauthenticated rate limits (60 req/hr) on shared CI runner IPs.
 github_api_curl() {
@@ -242,7 +253,7 @@ install_pyright() {
         log "Installing pyright"
     fi
     require_cmd npm
-    sudo npm install -g pyright
+    npm_install_g pyright
 }
 
 install_eza() {
@@ -460,13 +471,13 @@ install_ccusage() {
     if command -v ccusage >/dev/null 2>&1; then
         if [[ -n "${UPGRADE:-}" ]]; then
             log "Upgrading ccusage"
-            sudo npm install -g ccusage
+            npm_install_g ccusage
         else
             log "ccusage already installed; skipping"
         fi
     else
         log "Installing ccusage"
-        sudo npm install -g ccusage
+        npm_install_g ccusage
     fi
     local mcp_list
     mcp_list="$(claude mcp list 2>/dev/null)" || true
@@ -529,7 +540,8 @@ install_tmux_plugins() {
     if [[ -d "${tpm_dir}" ]]; then
         if [[ -n "${UPGRADE:-}" ]]; then
             log "Upgrading tmux plugin manager (tpm)"
-            git -C "${tpm_dir}" pull
+            git -C "${tpm_dir}" fetch origin
+            git -C "${tpm_dir}" reset --hard origin/master
         else
             log "tmux plugin manager (tpm) already installed; skipping"
         fi
@@ -541,7 +553,8 @@ install_tmux_plugins() {
     if [[ -d "${catppuccin_dir}" ]]; then
         if [[ -n "${UPGRADE:-}" ]]; then
             log "Upgrading tmux catppuccin theme"
-            git -C "${catppuccin_dir}" pull
+            git -C "${catppuccin_dir}" fetch origin
+            git -C "${catppuccin_dir}" reset --hard origin/main
         else
             log "tmux catppuccin theme already installed; skipping"
         fi
@@ -617,7 +630,7 @@ install_mcp_manim() {
             if [[ -d "${gist_dir}" ]]; then
                 git -C "${gist_dir}" pull
             fi
-            docker compose -f "${gist_dir}/docker-compose.yml" build --pull
+            docker compose -f "${gist_dir}/docker-compose.yml" build
             return
         fi
         log "mcp-manim MCP server already registered; skipping"
@@ -645,7 +658,7 @@ install_mcp_latex() {
             if [[ -d "${gist_dir}" ]]; then
                 git -C "${gist_dir}" pull
             fi
-            docker compose -f "${gist_dir}/docker-compose.yml" build --pull
+            docker compose -f "${gist_dir}/docker-compose.yml" build
             return
         fi
         log "mcp-latex MCP server already registered; skipping"

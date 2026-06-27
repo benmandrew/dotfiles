@@ -82,7 +82,7 @@ GitHub Actions (`.github/workflows/ci.yml`):
 
 ## Install Scripts
 
-All scripts are idempotent — each step checks whether the tool is already present and skips if so.
+All scripts are idempotent — each step checks whether the tool is already present and skips if so. Pass `--upgrade` to upgrade already-installed tools to their latest versions instead of skipping them.
 
 ### `scripts/install-ubuntu-x86_64.sh`
 

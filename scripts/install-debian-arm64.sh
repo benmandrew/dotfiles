@@ -81,7 +81,6 @@ main() {
     require_cmd ssh-keygen
     require_cmd dpkg
     require_cmd apt
-
     install_apt_packages_if_missing git curl build-essential zsh entr libevent-dev libncurses-dev pkg-config
     install_tmux_from_source
     install_cmake
