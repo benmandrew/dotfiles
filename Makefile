@@ -1,4 +1,4 @@
-.PHONY: fmt fmt-ci lint lint-sh lint-lua lint-actions lint-zsh deps
+.PHONY: fmt fmt-ci lint lint-sh lint-lua lint-actions lint-zsh lint-toml deps
 
 BOLD_BLUE := \033[1;34m
 RESET     := \033[0m
@@ -7,7 +7,7 @@ all: fmt lint
 
 deps:
 	@printf '$(BOLD_BLUE)[installing dev deps]$(RESET)\n'
-	@brew install stylua shfmt shellcheck luarocks actionlint
+	@brew install stylua shfmt shellcheck luarocks actionlint taplo
 	@luarocks install luacheck
 
 fmt:
@@ -20,7 +20,11 @@ fmt-ci:
 	@stylua --check .
 	@shfmt -ln bash -i 4 -ci -d scripts/*.sh
 
-lint: lint-sh lint-lua lint-actions lint-zsh
+lint: lint-sh lint-lua lint-actions lint-zsh lint-toml
+
+lint-toml:
+	@printf '$(BOLD_BLUE)[linting TOML]$(RESET)\n'
+	@find . -name '*.toml' -not -path './.git/*' | RUST_LOG=warn xargs taplo lint
 
 lint-actions:
 	@printf '$(BOLD_BLUE)[linting GitHub Actions]$(RESET)\n'

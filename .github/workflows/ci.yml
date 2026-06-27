@@ -30,6 +30,11 @@ jobs:
         with:
           tool: actionlint
 
+      - name: Install taplo
+        uses: taiki-e/install-action@v2
+        with:
+          tool: taplo
+
       - name: Install linters
         run: |
           sudo apt-get update
