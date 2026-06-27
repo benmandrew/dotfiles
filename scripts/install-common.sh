@@ -616,8 +616,7 @@ install_wezterm() {
     local deb="wezterm-${tag}.Ubuntu${ubuntu_version}.deb"
     curl -fsSL "https://github.com/wez/wezterm/releases/download/${tag}/${deb}" \
         -o "${tmp_dir}/${deb}"
-    sudo dpkg -i "${tmp_dir}/${deb}"
-    sudo apt-get install -f -y
+    sudo apt-get install -y "${tmp_dir}/${deb}"
 }
 
 install_mcp_manim() {
