@@ -6,15 +6,20 @@ ZINIT_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}/zinit/zinit.git"
 source "${ZINIT_HOME}/zinit.zsh"
 
 export NVM_LAZY_LOAD=true
-zinit light lukechilds/zsh-nvm
+zinit wait"0" lucid light-mode for lukechilds/zsh-nvm
 
-autoload -Uz compinit && compinit
+autoload -Uz compinit
+if [[ -n ${ZDOTDIR:-$HOME}/.zcompdump(#qN.mh+24) ]]; then
+  compinit
+else
+  compinit -C
+fi
 
 # SSH agent
 if [ -z "$SSH_AUTH_SOCK" ]; then
   eval "$(ssh-agent -s)" > /dev/null
 fi
-grep -slR "PRIVATE" $HOME/.ssh/ | xargs ssh-add > /dev/null 2>&1
+[[ -o interactive ]] && grep -slR "PRIVATE" $HOME/.ssh/ | xargs ssh-add > /dev/null 2>&1
 
 {{ if eq .chezmoi.os "darwin" }}
 
@@ -22,9 +27,12 @@ export HOMEBREW_BASE="/opt/homebrew/opt"
 export CC=clang
 export CXX=clang++
 
-source $HOMEBREW_BASE/chruby/share/chruby/chruby.sh
-source $HOMEBREW_BASE/chruby/share/chruby/auto.sh
-chruby ruby-3.1.2
+chruby() {
+  unfunction chruby
+  source $HOMEBREW_BASE/chruby/share/chruby/chruby.sh
+  source $HOMEBREW_BASE/chruby/share/chruby/auto.sh
+  chruby "$@"
+}
 
 export PATH="$PATH:$HOME/Library/Python/3.10/bin"
 export PATH="$PATH:$HOME/bin"
@@ -32,7 +40,7 @@ export PATH="$PATH:$HOME/.local/bin"
 export PATH="$PATH:$HOMEBREW_BASE/openjdk/bin"
 export PATH="$PATH:$HOMEBREW_BASE/llvm/bin"
 export PATH="$PATH:${GOPATH:-$HOME/go}/bin"
-export PATH="$PATH:$HOMEBREW_BASE/coreutils/libexec/gnubin:/usr/local/bin:$HOMEBREW_BASE/llvm/bin"
+export PATH="$PATH:$HOMEBREW_BASE/coreutils/libexec/gnubin:/usr/local/bin"
 export PATH="$PATH:/Applications/Docker.app/Contents/Resources/bin"
 
 export JAVA_DIR="$HOMEBREW_BASE/openjdk"
@@ -93,11 +101,27 @@ export MAX_THINKING_TOKENS=8000
 export WORKSPACE_ROOTS="$HOME/projects"
 export CLAUDE_CODE_MAX_OUTPUT_TOKENS=64000
 
-eval "$(zoxide init zsh --cmd cd)"
+# Cache eval output keyed by binary mtime — regenerates only when the binary changes
+_cache_eval() {
+  local cmd="$1" cache="$HOME/.cache/zsh/${1}.zsh"
+  local bin_path
+  bin_path="$(command -v "$cmd")"
+  if [[ ! -f "$cache" ]] || [[ "$bin_path" -nt "$cache" ]]; then
+    mkdir -p "${cache:h}"
+    eval "$("$@")" >| "$cache"
+  fi
+  source "$cache"
+}
+
+_cache_eval zoxide init zsh --cmd cd
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
-[[ ! -r "$HOME/.opam/opam-init/init.zsh" ]] || source "$HOME/.opam/opam-init/init.zsh" > /dev/null 2>&1
+opam() {
+  unfunction opam
+  [[ -r "$HOME/.opam/opam-init/init.zsh" ]] && source "$HOME/.opam/opam-init/init.zsh" > /dev/null 2>&1
+  opam "$@"
+}
 
 # git_dirty() {
 #   git status --porcelain 2>/dev/null | grep -q . && echo "%{$fg[red]%}*%{$reset_color%}"
@@ -105,7 +129,7 @@ eval "$(zoxide init zsh --cmd cd)"
 
 # PROMPT='$(git_dirty)%{$fg[green]%}[$(git branch --show-current 2>/dev/null)]%{$reset_color%}%{$fg[cyan]%}[%~]%{$reset_color%}%{$fg_bold[gray]%}\$%{$reset_color%} '
 
-eval "$(starship init zsh)"
+_cache_eval starship init zsh
 
 if [[ -o interactive ]] && [[ -z "$TMUX" ]] && [[ -n "$SSH_CONNECTION" ]]; then
   # Allow scripts to disable tmux on remote machines
