@@ -1,12 +1,14 @@
 export VIRTUAL_ENV_DISABLE_PROMPT=1
 
-# Zinit
-ZINIT_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}/zinit/zinit.git"
-[ ! -d "${ZINIT_HOME}/.git" ] && git clone https://github.com/zdharma-continuum/zinit.git "${ZINIT_HOME}"
-source "${ZINIT_HOME}/zinit.zsh"
-
+# zsh-nvm — lazy-loads nvm on first use without zinit overhead
 export NVM_LAZY_LOAD=true
-zinit wait"0" lucid light-mode for lukechilds/zsh-nvm
+_zsh_nvm_plugin="${HOME}/.local/share/zsh-nvm/zsh-nvm.plugin.zsh"
+if [[ ! -f "$_zsh_nvm_plugin" ]]; then
+  # Fallback: zinit install location for existing setups
+  _zsh_nvm_plugin="${HOME}/.local/share/zinit/zinit.git/plugins/lukechilds---zsh-nvm/zsh-nvm.plugin.zsh"
+fi
+[[ -f "$_zsh_nvm_plugin" ]] && source "$_zsh_nvm_plugin"
+unset _zsh_nvm_plugin
 
 autoload -Uz compinit
 if [[ -z "$(find "${ZDOTDIR:-$HOME}/.zcompdump" -mmin -1440 2>/dev/null)" ]]; then
