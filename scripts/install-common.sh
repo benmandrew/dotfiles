@@ -240,6 +240,22 @@ install_cmake() {
     sudo sh "${tmp_dir}/${installer}" --prefix=/usr/local --skip-license
 }
 
+install_cargo_tool() {
+    local cmd="$1" crate="${2:-$1}"
+    if command -v "${cmd}" >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "${cmd} already installed; skipping"
+            return
+        fi
+        log "Upgrading ${cmd}"
+    else
+        log "Installing ${cmd}"
+    fi
+    load_cargo_env
+    require_cmd cargo
+    cargo install "${crate}"
+}
+
 install_pyright() {
     if command -v pyright >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then
@@ -254,50 +270,9 @@ install_pyright() {
     npm_install_g pyright
 }
 
-install_eza() {
-    if command -v eza >/dev/null 2>&1; then
-        if [[ -z "${UPGRADE:-}" ]]; then
-            log "eza already installed; skipping"
-            return
-        fi
-        log "Upgrading eza"
-    else
-        log "Installing eza"
-    fi
-    load_cargo_env
-    require_cmd cargo
-    cargo install eza
-}
-
-install_fd() {
-    if command -v fd >/dev/null 2>&1; then
-        if [[ -z "${UPGRADE:-}" ]]; then
-            log "fd already installed; skipping"
-            return
-        fi
-        log "Upgrading fd"
-    else
-        log "Installing fd"
-    fi
-    load_cargo_env
-    require_cmd cargo
-    cargo install fd-find
-}
-
-install_bat() {
-    if command -v bat >/dev/null 2>&1; then
-        if [[ -z "${UPGRADE:-}" ]]; then
-            log "bat already installed; skipping"
-            return
-        fi
-        log "Upgrading bat"
-    else
-        log "Installing bat"
-    fi
-    load_cargo_env
-    require_cmd cargo
-    cargo install bat
-}
+install_eza() { install_cargo_tool eza; }
+install_fd() { install_cargo_tool fd fd-find; }
+install_bat() { install_cargo_tool bat; }
 
 install_gh() {
     if command -v gh >/dev/null 2>&1; then
@@ -335,20 +310,7 @@ install_gh() {
     sudo apt install -y gh
 }
 
-install_zoxide() {
-    if command -v zoxide >/dev/null 2>&1; then
-        if [[ -z "${UPGRADE:-}" ]]; then
-            log "zoxide already installed; skipping"
-            return
-        fi
-        log "Upgrading zoxide"
-    else
-        log "Installing zoxide"
-    fi
-    load_cargo_env
-    require_cmd cargo
-    cargo install zoxide
-}
+install_zoxide() { install_cargo_tool zoxide; }
 
 install_fzf() {
     if command -v fzf >/dev/null 2>&1; then
