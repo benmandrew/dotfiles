@@ -75,12 +75,12 @@ jobs:
             /opt/nvim-linux-x86_64
             /usr/local/bin
             /usr/local/lib/node_modules
-          key: install-${{ runner.os }}-${{ hashFiles('scripts/install-common.sh', 'scripts/install-ubuntu-x86_64.sh') }}
+          key: install-${{ runner.os }}-${{ hashFiles('scripts/install-common.sh', 'scripts/install-linux.sh') }}
 
       - name: Run install script
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash scripts/install-ubuntu-x86_64.sh
+        run: bash scripts/install-linux.sh
 
       - name: Verify installed tools
         run: bash scripts/verify-install.sh

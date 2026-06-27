@@ -55,7 +55,15 @@ install_node() {
 }
 
 install_neovim_if_missing() {
-    local nvim_path="/opt/nvim-linux-x86_64/bin/nvim"
+    local os_arch nvim_arch
+    os_arch="$(uname -m)"
+    if [[ "${os_arch}" == "aarch64" ]]; then
+        nvim_arch="arm64"
+    else
+        nvim_arch="${os_arch}"
+    fi
+    local nvim_dir="nvim-linux-${nvim_arch}"
+    local nvim_path="/opt/${nvim_dir}/bin/nvim"
     if [[ -x "${nvim_path}" ]] || command -v nvim >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then
             log "Neovim already installed; skipping"
@@ -68,10 +76,10 @@ install_neovim_if_missing() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    curl -fsSL https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz \
-        -o "${tmp_dir}/nvim-linux-x86_64.tar.gz"
-    sudo rm -rf /opt/nvim-linux-x86_64
-    sudo tar -C /opt -xzf "${tmp_dir}/nvim-linux-x86_64.tar.gz"
+    curl -fsSL "https://github.com/neovim/neovim/releases/latest/download/${nvim_dir}.tar.gz" \
+        -o "${tmp_dir}/${nvim_dir}.tar.gz"
+    sudo rm -rf "/opt/${nvim_dir}"
+    sudo tar -C /opt -xzf "${tmp_dir}/${nvim_dir}.tar.gz"
 }
 
 main() {

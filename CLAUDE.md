@@ -1,6 +1,6 @@
 # Chezmoi Dotfiles
 
-Personal dotfiles managed with [chezmoi](https://chezmoi.io) for cross-platform (macOS ARM64, Ubuntu, Debian ARM64) portability.
+Personal dotfiles managed with [chezmoi](https://chezmoi.io) for cross-platform (macOS ARM64, Linux x86_64/ARM64) portability.
 
 ## Structure
 
@@ -18,9 +18,9 @@ chezmoi/
 │       ├── nvim/
 │       └── starship.toml
 ├── scripts/
-│   ├── install-ubuntu-x86_64.sh
+│   ├── install.sh           # Dispatcher: detects OS/arch, calls platform script
+│   ├── install-linux.sh     # Linux (x86_64 + ARM64)
 │   ├── install-macos-arm64.sh
-│   ├── install-debian-arm64.sh
 │   ├── install-common.sh    # Shared install logic for all platforms
 │   └── verify-install.sh
 └── Makefile
@@ -78,29 +78,21 @@ chezmoi diff
 
 GitHub Actions (`.github/workflows/ci.yml`):
 1. **lint** — runs `make fmt-ci` then `make lint`
-2. **install** (after lint) — runs `scripts/install-ubuntu-x86_64.sh` then `scripts/verify-install.sh`
+2. **install** (after lint) — runs `scripts/install-linux.sh` then `scripts/verify-install.sh`
 
 ## Install Scripts
 
 All scripts are idempotent — each step checks whether the tool is already present and skips if so. Pass `--upgrade` to upgrade already-installed tools to their latest versions instead of skipping them.
 
-### `scripts/install-ubuntu-x86_64.sh`
+### `scripts/install-linux.sh`
 
-Requires: `sudo`, `apt`, `dpkg`, `ssh-keygen`.
+Requires: `sudo`, `apt`, `dpkg`, `ssh-keygen`. Supports x86_64 and aarch64 — arch is detected at runtime.
 
-1. `apt install` — `git curl build-essential zsh tmux entr`
-2. Node.js LTS via NodeSource setup script (skipped if `node ≥ 20` present)
-3. Neovim — downloads official Linux x86_64 binary to `/opt/nvim-linux-x86_64/`
-4. All common tools (see below)
-
-### `scripts/install-debian-arm64.sh`
-
-Requires: `sudo`, `apt`, `dpkg`, `ssh-keygen`.
-
-1. `apt install` — `git curl build-essential zsh tmux entr`
-2. Node.js LTS via NodeSource setup script (skipped if `node ≥ 20` present)
-3. Neovim — downloads official Linux ARM64 binary to `/opt/nvim-linux-arm64/`
-4. All common tools (see below)
+1. `apt install` — `git curl build-essential zsh entr` plus tmux build deps
+2. tmux built from source
+3. Node.js LTS via NodeSource setup script (skipped if `node ≥ 20` present)
+4. Neovim — downloads official Linux binary to `/opt/nvim-linux-<arch>/`
+5. All common tools (see below)
 
 ### `scripts/install-macos-arm64.sh`
 
