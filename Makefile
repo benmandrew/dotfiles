@@ -1,4 +1,4 @@
-.PHONY: fmt fmt-ci lint lint-sh lint-lua lint-actions deps
+.PHONY: fmt fmt-ci lint lint-sh lint-lua lint-actions lint-zsh deps
 
 BOLD_BLUE := \033[1;34m
 RESET     := \033[0m
@@ -20,11 +20,18 @@ fmt-ci:
 	@stylua --check .
 	@shfmt -ln bash -i 4 -ci -d scripts/*.sh
 
-lint: lint-sh lint-lua lint-actions
+lint: lint-sh lint-lua lint-actions lint-zsh
 
 lint-actions:
 	@printf '$(BOLD_BLUE)[linting GitHub Actions]$(RESET)\n'
 	@actionlint
+
+lint-zsh:
+	@printf '$(BOLD_BLUE)[linting zsh templates]$(RESET)\n'
+	@for f in home/dot_zshrc.tmpl home/dot_fzf.zsh.tmpl home/*.sh.tmpl; do \
+		[ -f "$$f" ] || continue; \
+		sed 's/{{[^{}]*}}//g' "$$f" | shellcheck --shell=bash --severity=error -; \
+	done
 
 lint-sh:
 	@printf '$(BOLD_BLUE)[linting shell]$(RESET)\n'
