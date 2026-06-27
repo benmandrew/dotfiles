@@ -19,7 +19,8 @@ case "${OS}-${ARCH}" in
                 SCRIPT="${SCRIPT_DIR}/install-ubuntu-x86_64.sh"
                 ;;
             debian)
-                SCRIPT="${SCRIPT_DIR}/install-debian-arm64.sh"
+                echo "error: Debian on x86_64 is not supported" >&2
+                exit 1
                 ;;
             *)
                 echo "error: unsupported Linux distro '${DISTRO}' on x86_64" >&2
