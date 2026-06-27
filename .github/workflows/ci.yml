@@ -35,6 +35,11 @@ jobs:
         with:
           tool: taplo
 
+      - name: Install typos
+        uses: taiki-e/install-action@v2
+        with:
+          tool: typos
+
       - name: Install linters
         run: |
           sudo apt-get update
