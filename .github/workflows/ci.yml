@@ -42,7 +42,7 @@ jobs:
 
       - name: Install checkmake
         run: |
-          go install github.com/mrtazz/checkmake/cmd/checkmake@latest
+          go install github.com/checkmake/checkmake/cmd/checkmake@latest
           echo "$HOME/go/bin" >> "$GITHUB_PATH"
 
       - name: Install linters
