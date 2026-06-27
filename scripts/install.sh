@@ -12,6 +12,7 @@ case "${OS}-${ARCH}" in
         SCRIPT="${SCRIPT_DIR}/install-macos-arm64.sh"
         ;;
     Linux-x86_64)
+        # shellcheck disable=SC1091,SC2154
         DISTRO="$(. /etc/os-release && echo "${ID}")"
         case "${DISTRO}" in
             ubuntu)

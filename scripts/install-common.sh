@@ -45,7 +45,6 @@ npm_install_g() {
     fi
 }
 
-
 # Wrapper around curl for GitHub API calls; adds auth header when GITHUB_TOKEN is set
 # to avoid unauthenticated rate limits (60 req/hr) on shared CI runner IPs.
 github_api_curl() {
@@ -325,10 +324,13 @@ install_gh() {
         return
     fi
     sudo mkdir -p -m 755 /etc/apt/keyrings
-    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg |
-        sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
+    local keyring
+    keyring="$(curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg)"
+    echo "${keyring}" | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
     sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" |
+    local arch
+    arch="$(dpkg --print-architecture)"
+    echo "deb [arch=${arch} signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" |
         sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
     sudo apt update
     sudo apt install -y gh
