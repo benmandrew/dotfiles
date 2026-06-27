@@ -101,14 +101,14 @@ export MAX_THINKING_TOKENS=8000
 export WORKSPACE_ROOTS="$HOME/projects"
 export CLAUDE_CODE_MAX_OUTPUT_TOKENS=64000
 
-# Cache eval output keyed by binary mtime — regenerates only when the binary changes
+# Cache init-script output keyed by binary mtime — regenerates only when the binary changes
 _cache_eval() {
   local cmd="$1" cache="$HOME/.cache/zsh/${1}.zsh"
   local bin_path
   bin_path="$(command -v "$cmd")"
-  if [[ ! -f "$cache" ]] || [[ "$bin_path" -nt "$cache" ]]; then
+  if [[ ! -f "$cache" ]] || [[ -n "$bin_path" && "$bin_path" -nt "$cache" ]]; then
     mkdir -p "${cache:h}"
-    eval "$("$@")" >| "$cache"
+    "$@" >| "$cache"
   fi
   source "$cache"
 }
