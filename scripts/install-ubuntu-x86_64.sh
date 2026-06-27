@@ -94,6 +94,8 @@ main() {
     install_zoxide
     install_fzf
     install_gh
+    install_tailscale
+    install_mullvad
     install_claude_code
     install_rtk
     install_node

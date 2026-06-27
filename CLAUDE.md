@@ -129,6 +129,8 @@ Shared functions called by both platform scripts, in order:
 | `install_fd` | `fd` via `cargo install fd-find` |
 | `install_bat` | `bat` via `cargo install` |
 | `install_gh` | GitHub CLI — `brew install gh` (macOS) or official apt repo (Linux) |
+| `install_tailscale` | Tailscale — `brew install --cask tailscale` (macOS) or official install script (Linux) |
+| `install_mullvad` | Mullvad VPN — `brew install --cask mullvadvpn` (macOS) or official apt repo (Linux) |
 | `install_zoxide` | `zoxide` via install script |
 | `install_fzf` | fzf cloned to `~/.fzf`, binary-only install |
 | `install_claude_code` | Claude Code CLI |
