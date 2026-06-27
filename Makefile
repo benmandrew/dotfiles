@@ -1,9 +1,14 @@
-.PHONY: fmt fmt-ci lint lint-sh lint-lua
+.PHONY: fmt fmt-ci lint lint-sh lint-lua lint-actions deps
 
 BOLD_BLUE := \033[1;34m
 RESET     := \033[0m
 
 all: fmt lint
+
+deps:
+	@printf '$(BOLD_BLUE)[installing dev deps]$(RESET)\n'
+	@brew install stylua shfmt shellcheck luarocks actionlint
+	@luarocks install luacheck
 
 fmt:
 	@printf '$(BOLD_BLUE)[formatting]$(RESET)\n'
@@ -15,7 +20,11 @@ fmt-ci:
 	@stylua --check .
 	@shfmt -ln bash -i 4 -ci -d scripts/*.sh
 
-lint: lint-sh lint-lua
+lint: lint-sh lint-lua lint-actions
+
+lint-actions:
+	@printf '$(BOLD_BLUE)[linting GitHub Actions]$(RESET)\n'
+	@actionlint
 
 lint-sh:
 	@printf '$(BOLD_BLUE)[linting shell]$(RESET)\n'

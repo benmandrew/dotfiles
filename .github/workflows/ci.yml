@@ -25,6 +25,11 @@ jobs:
       - name: Format check
         run: make fmt-ci
 
+      - name: Install actionlint
+        uses: taiki-e/install-action@v2
+        with:
+          tool: actionlint
+
       - name: Install linters
         run: |
           sudo apt-get update

@@ -9,5 +9,5 @@ $ ./scripts/install-ubuntu-x86_64.sh
 ## Dev dependencies
 
 ```bash
-$ cargo install styleua
+$ make deps
 ```
