@@ -17,11 +17,12 @@ else
   compinit -C
 fi
 
-# SSH agent
+# SSH agent — only start a new agent and load keys when no agent is running.
+# In subsequent shells the inherited SSH_AUTH_SOCK skips this block entirely.
 if [ -z "$SSH_AUTH_SOCK" ]; then
   eval "$(ssh-agent -s)" > /dev/null
+  [[ -o interactive ]] && grep -slR "PRIVATE" $HOME/.ssh/ | xargs ssh-add > /dev/null 2>&1
 fi
-[[ -o interactive ]] && grep -slR "PRIVATE" $HOME/.ssh/ | xargs ssh-add > /dev/null 2>&1
 
 {{ if eq .chezmoi.os "darwin" }}
 
