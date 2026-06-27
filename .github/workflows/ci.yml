@@ -26,9 +26,9 @@ jobs:
         run: make fmt-ci
 
       - name: Install actionlint
-        uses: taiki-e/install-action@v2
-        with:
-          tool: actionlint
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@latest
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
 
       - name: Install taplo
         uses: taiki-e/install-action@v2
@@ -67,7 +67,7 @@ jobs:
           path: |
             ~/.cargo
             ~/.rustup
-            ~/.oh-my-zsh
+            ~/.local/share/zinit
             ~/.fzf
             ~/.local
             ~/.tmux
