@@ -93,22 +93,21 @@ load_cargo_env() {
     fi
 }
 
-install_oh_my_zsh() {
-    if [[ -d "${HOME}/.oh-my-zsh" ]]; then
+install_zinit() {
+    local zinit_home="${XDG_DATA_HOME:-${HOME}/.local/share}/zinit/zinit.git"
+    if [[ -d "${zinit_home}/.git" ]]; then
         if [[ -z "${UPGRADE:-}" ]]; then
-            log "Oh My Zsh already installed; skipping"
+            log "zinit already installed; skipping"
             return
         fi
-        log "Upgrading Oh My Zsh"
-        "${HOME}/.oh-my-zsh/tools/upgrade.sh"
+        log "Upgrading zinit"
+        git -C "${zinit_home}" fetch origin
+        git -C "${zinit_home}" reset --hard origin/main
         return
     fi
-    log "Installing Oh My Zsh"
-    local script_path
-    script_path="$(mktemp)"
-    curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh -o "${script_path}"
-    RUNZSH=no CHSH=no sh "${script_path}"
-    rm -f "${script_path}"
+    log "Installing zinit"
+    mkdir -p "$(dirname "${zinit_home}")"
+    git clone https://github.com/zdharma-continuum/zinit.git "${zinit_home}"
 }
 
 install_rust() {

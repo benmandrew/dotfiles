@@ -36,7 +36,7 @@ check_cmd zsh
 check_cmd tmux
 check_cmd entr
 
-check_dir "oh-my-zsh" "${HOME}/.oh-my-zsh"
+check_dir "zinit" "${HOME}/.local/share/zinit/zinit.git"
 
 check_cmd rustup
 check_cmd cargo

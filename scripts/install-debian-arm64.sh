@@ -85,7 +85,7 @@ main() {
     install_tmux_from_source
     install_cmake
 
-    install_oh_my_zsh
+    install_zinit
     install_rust
     install_rust_analyzer
     install_eza

@@ -118,7 +118,7 @@ Shared functions called by both platform scripts, in order:
 
 | Function | What it installs |
 |---|---|
-| `install_oh_my_zsh` | Oh My Zsh to `~/.oh-my-zsh` |
+| `install_zinit` | zinit plugin manager to `~/.local/share/zinit/zinit.git` |
 | `install_rust` | Rust toolchain via rustup |
 | `install_rust_analyzer` | `rust-analyzer` via `rustup component add` |
 | `install_clangd` | `clangd` via apt (Linux) or `brew install llvm` (macOS) |
@@ -150,12 +150,12 @@ MCP servers are registered at user scope (`-s user`) and are idempotent (checked
 
 Checks that all expected commands and directories exist after installation. Run after an install script to confirm nothing is missing. Exits non-zero if any check fails.
 
-Checks: `git curl zsh tmux entr rustup cargo rust-analyzer clangd cmake pyright eza fd zoxide fzf claude rtk node npm uv uvx ccusage starship nvim`, plus dirs `~/.oh-my-zsh`, `~/.tmux/plugins/tpm`, `~/.config/tmux/plugins/catppuccin`.
+Checks: `git curl zsh tmux entr rustup cargo rust-analyzer clangd cmake pyright eza fd zoxide fzf claude rtk node npm uv uvx ccusage starship nvim`, plus dirs `~/.local/share/zinit/zinit.git`, `~/.tmux/plugins/tpm`, `~/.config/tmux/plugins/catppuccin`.
 
 ## Key Areas
 
 - **Neovim config** — `home/dot_config/nvim/` — Lua, uses Lazy.nvim; LSP for bash, rust, ocaml, lua
 - **Claude Code config** — `home/dot_claude/` — settings, MCP docs (RTK.md, TOKEN_TOOLS.md)
-- **Shell** — `home/dot_zshrc.tmpl` — Oh My Zsh, zoxide, fzf, starship, auto-attach tmux
+- **Shell** — `home/dot_zshrc.tmpl` — zinit, zoxide, fzf, starship, auto-attach tmux
 - **Tmux** — `home/dot_tmux.conf.tmpl` — prefix C-a, catppuccin-mocha theme, OS-specific clipboard
 - **Git** — `home/dot_gitconfig.tmpl` and `home/dot_config/git/` — SSH signing, aliases
