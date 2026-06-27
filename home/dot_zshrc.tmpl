@@ -14,7 +14,7 @@ autoload -Uz compinit
 if [[ -z "$(find "${ZDOTDIR:-$HOME}/.zcompdump" -mmin -1440 2>/dev/null)" ]]; then
   compinit
   # Compile dump in background; subsequent startups source the faster .zwc
-  { zcompile "${ZDOTDIR:-$HOME}/.zcompdump" } &!
+  { zcompile "${ZDOTDIR:-$HOME}/.zcompdump"; } & disown
 else
   compinit -C
 fi
@@ -123,7 +123,7 @@ _cache_eval() {
   if [[ ! -f "$cache" ]] || [[ -n "$bin_path" && "$bin_path" -nt "$cache" ]]; then
     mkdir -p "${cache:h}"
     "$@" >| "$cache"
-    { zcompile "$cache" } &!
+    { zcompile "$cache"; } & disown
   fi
   source "$cache"
 }
