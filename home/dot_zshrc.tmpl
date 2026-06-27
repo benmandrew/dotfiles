@@ -9,7 +9,7 @@ export NVM_LAZY_LOAD=true
 zinit wait"0" lucid light-mode for lukechilds/zsh-nvm
 
 autoload -Uz compinit
-if [[ -n ${ZDOTDIR:-$HOME}/.zcompdump(#qN.mh+24) ]]; then
+if [[ -z "$(find "${ZDOTDIR:-$HOME}/.zcompdump" -mmin -1440 2>/dev/null)" ]]; then
   compinit
 else
   compinit -C
