@@ -52,7 +52,16 @@ check_cmd zoxide
 check_cmd fzf
 check_cmd gh
 check_cmd tailscale
-check_cmd mullvad
+
+headless_linux=false
+os_name="$(uname -s)"
+if [[ "${os_name}" == "Linux" ]] && [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
+    headless_linux=true
+fi
+
+if [[ "${headless_linux}" == false ]]; then
+    check_cmd mullvad
+fi
 
 check_cmd claude
 check_cmd rtk
@@ -65,7 +74,10 @@ check_cmd uvx
 
 check_cmd ccusage
 check_cmd starship
-check_cmd wezterm
+
+if [[ "${headless_linux}" == false ]]; then
+    check_cmd wezterm
+fi
 
 check_dir "tpm" "${HOME}/.tmux/plugins/tpm"
 check_dir "catppuccin" "${HOME}/.config/tmux/plugins/catppuccin"
