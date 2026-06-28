@@ -1,6 +1,15 @@
 #!/bin/bash
 
 UPGRADE=""
+_MCP_LIST_LOADED=false
+MCP_LIST=""
+
+get_mcp_list() {
+    if [[ "${_MCP_LIST_LOADED}" != "true" ]]; then
+        MCP_LIST="$(claude mcp list 2>/dev/null)" || true
+        _MCP_LIST_LOADED=true
+    fi
+}
 
 log() {
     if [[ "$*" == *"skipping"* ]]; then
@@ -409,9 +418,8 @@ install_uv() {
 
 install_token_savior() {
     require_cmd uvx
-    local mcp_list
-    mcp_list="$(claude mcp list 2>/dev/null)" || true
-    if echo "${mcp_list}" | grep -q "token-savior"; then
+    get_mcp_list
+    if echo "${MCP_LIST}" | grep -q "token-savior"; then
         log "token-savior MCP server already registered; skipping"
         return
     fi
@@ -421,9 +429,8 @@ install_token_savior() {
 
 install_token_optimizer_mcp() {
     require_cmd npx
-    local mcp_list
-    mcp_list="$(claude mcp list 2>/dev/null)" || true
-    if echo "${mcp_list}" | grep -q "token-optimizer-mcp"; then
+    get_mcp_list
+    if echo "${MCP_LIST}" | grep -q "token-optimizer-mcp"; then
         log "token-optimizer-mcp MCP server already registered; skipping"
         return
     fi
@@ -444,9 +451,8 @@ install_ccusage() {
         log "Installing ccusage"
         npm_install_g ccusage
     fi
-    local mcp_list
-    mcp_list="$(claude mcp list 2>/dev/null)" || true
-    if echo "${mcp_list}" | grep -q "ccusage"; then
+    get_mcp_list
+    if echo "${MCP_LIST}" | grep -q "ccusage"; then
         log "ccusage MCP server already registered; skipping"
         return
     fi
@@ -591,9 +597,8 @@ install_wezterm() {
 install_mcp_manim() {
     require_cmd docker
     local gist_dir="${HOME}/.local/share/mcp-servers/manim"
-    local mcp_list
-    mcp_list="$(claude mcp list 2>/dev/null)" || true
-    if echo "${mcp_list}" | grep -q "mcp-manim"; then
+    get_mcp_list
+    if echo "${MCP_LIST}" | grep -q "mcp-manim"; then
         if [[ -n "${UPGRADE:-}" ]]; then
             log "Upgrading mcp-manim"
             if [[ -d "${gist_dir}" ]]; then
@@ -619,9 +624,8 @@ install_mcp_manim() {
 install_mcp_latex() {
     require_cmd docker
     local gist_dir="${HOME}/.local/share/mcp-servers/latex"
-    local mcp_list
-    mcp_list="$(claude mcp list 2>/dev/null)" || true
-    if echo "${mcp_list}" | grep -q "mcp-latex"; then
+    get_mcp_list
+    if echo "${MCP_LIST}" | grep -q "mcp-latex"; then
         if [[ -n "${UPGRADE:-}" ]]; then
             log "Upgrading mcp-latex"
             if [[ -d "${gist_dir}" ]]; then
@@ -730,9 +734,8 @@ install_mullvad() {
 
 install_git_mcp() {
     require_cmd npx
-    local mcp_list
-    mcp_list="$(claude mcp list 2>/dev/null)" || true
-    if echo "${mcp_list}" | grep -q "git-mcp"; then
+    get_mcp_list
+    if echo "${MCP_LIST}" | grep -q "git-mcp"; then
         log "git-mcp MCP server already registered; skipping"
         return
     fi
