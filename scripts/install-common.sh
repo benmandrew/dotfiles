@@ -6,7 +6,16 @@ MCP_LIST=""
 
 get_mcp_list() {
     if [[ "${_MCP_LIST_LOADED}" != "true" ]]; then
-        MCP_LIST="$(claude mcp list 2>/dev/null)" || true
+        local claude_json="${HOME}/.claude.json"
+        if [[ -f "${claude_json}" ]] && command -v python3 >/dev/null 2>&1; then
+            MCP_LIST="$(python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+print('\n'.join(d.get('mcpServers', {}).keys()))
+" "${claude_json}" 2>/dev/null)" || true
+        else
+            MCP_LIST="$(claude mcp list 2>/dev/null)" || true
+        fi
         _MCP_LIST_LOADED=true
     fi
 }
