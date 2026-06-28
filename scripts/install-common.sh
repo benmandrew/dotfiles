@@ -298,9 +298,11 @@ install_gh() {
         return
     fi
     sudo mkdir -p -m 755 /etc/apt/keyrings
-    local keyring
-    keyring="$(curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg)"
-    echo "${keyring}" | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
+    local tmp
+    tmp="$(mktemp)"
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o "${tmp}"
+    sudo install -m 644 "${tmp}" /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    rm -f "${tmp}"
     sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
     local arch
     arch="$(dpkg --print-architecture)"
