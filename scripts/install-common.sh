@@ -534,6 +534,11 @@ install_wezterm() {
     local os_name
     os_name="$(uname -s)"
 
+    if [[ "${os_name}" == "Linux" ]] && [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
+        log "WezTerm: no display session detected; skipping on headless Linux"
+        return
+    fi
+
     if command -v wezterm >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then
             log "WezTerm already installed; skipping"
@@ -677,6 +682,11 @@ install_tailscale() {
 install_mullvad() {
     local os_name
     os_name="$(uname -s)"
+
+    if [[ "${os_name}" == "Linux" ]] && [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
+        log "Mullvad: no display session detected; skipping on headless Linux"
+        return
+    fi
 
     if [[ "${os_name}" == "Darwin" ]]; then
         if brew list --cask mullvadvpn >/dev/null 2>&1; then
