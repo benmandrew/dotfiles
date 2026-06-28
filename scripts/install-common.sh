@@ -543,19 +543,6 @@ install_tmux_plugins() {
         mkdir -p "${HOME}/.config/tmux/plugins"
         git clone https://github.com/catppuccin/tmux.git "${catppuccin_dir}"
     fi
-    local cpu_dir="${HOME}/.tmux/plugins/tmux-cpu"
-    if [[ -d "${cpu_dir}" ]]; then
-        if [[ -n "${UPGRADE:-}" ]]; then
-            log "Upgrading tmux-cpu plugin"
-            git -C "${cpu_dir}" fetch origin
-            git -C "${cpu_dir}" reset --hard origin/master
-        else
-            log "tmux-cpu plugin already installed; skipping"
-        fi
-    else
-        log "Installing tmux-cpu plugin"
-        git clone https://github.com/tmux-plugins/tmux-cpu "${cpu_dir}"
-    fi
 }
 
 install_wezterm() {

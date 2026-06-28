@@ -135,7 +135,7 @@ Shared functions called by both platform scripts, in order:
 | `install_mcp_latex` | MCP server — clones gist, builds Docker image, registers |
 | `install_git_mcp` | MCP server — registers `npx mcp-remote` pointing to gitmcp.io |
 | `install_starship` | Starship prompt via install script |
-| `install_tmux_plugins` | tpm to `~/.tmux/plugins/tpm`; catppuccin theme to `~/.config/tmux/plugins/catppuccin`; tmux-cpu to `~/.tmux/plugins/tmux-cpu` |
+| `install_tmux_plugins` | tpm to `~/.tmux/plugins/tpm`; catppuccin theme to `~/.config/tmux/plugins/catppuccin` |
 | `install_wezterm` | WezTerm — `brew install --cask` (macOS), `.deb` from GitHub releases (Linux x86_64); skipped on ARM64 |
 
 MCP servers are registered at user scope (`-s user`) and are idempotent (checked via `claude mcp list`). `mcp-manim` and `mcp-latex` require Docker.
