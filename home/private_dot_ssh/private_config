@@ -1,0 +1,24 @@
+Host emel
+	HostName emel
+	Port 2222
+	User dev
+
+Host mac-mon-*
+	User tarides
+	AddKeysToAgent yes
+	UseKeychain yes
+	IdentityFile ~/.ssh/id_benmandrew
+
+Host github_backup
+	HostName github.com
+	AddKeysToAgent yes
+	UseKeyChain yes
+	IdentityFile ~/.ssh/id_mirrorworld71_backup
+
+Host github.com
+	HostName github.com
+	User git
+	AddKeysToAgent yes
+	UseKeychain yes
+	IdentityFile ~/.ssh/id_benmandrew
+	IdentitiesOnly yes
