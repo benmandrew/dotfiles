@@ -153,7 +153,7 @@ if [[ -o interactive ]] && [[ -z "$TMUX" ]] && [[ -n "$SSH_CONNECTION" ]]; then
     case "$SSH_ORIGINAL_COMMAND" in
       scp*|rsync*) ;;
       *)
-        tmux attach -t main || tmux new -s main
+        tmux new-session -A -s main
         ;;
     esac
   fi
