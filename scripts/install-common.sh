@@ -801,6 +801,62 @@ install_lua_ls() {
     ln -sf "${install_dir}/bin/lua-language-server" "${HOME}/.local/bin/lua-language-server"
 }
 
+_opam_sandboxing_works() {
+    bwrap --bind / / --dev-bind /dev /dev --proc /proc true 2>/dev/null
+}
+
+install_opam() {
+    local os_name
+    os_name="$(uname -s)"
+
+    if command -v opam >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "opam already installed; skipping"
+        else
+            log "Upgrading opam"
+            if [[ "${os_name}" == "Darwin" ]]; then
+                brew upgrade opam
+            fi
+            # Linux: fall through to re-download latest
+        fi
+    else
+        log "Installing opam"
+        if [[ "${os_name}" == "Darwin" ]]; then
+            brew install opam
+        else
+            # Linux: download latest binary from GitHub releases
+            local os_arch opam_arch
+            os_arch="$(uname -m)"
+            if [[ "${os_arch}" == "aarch64" ]]; then
+                opam_arch="arm64"
+            else
+                opam_arch="x86_64"
+            fi
+            local tag version binary install_dir
+            tag="$(github_latest_tag ocaml/opam)"
+            version="${tag#v}"
+            binary="opam-${version}-${opam_arch}-linux"
+            install_dir="${HOME}/.local/bin"
+            mkdir -p "${install_dir}"
+            curl -fsSL "https://github.com/ocaml/opam/releases/download/${tag}/${binary}" \
+                -o "${install_dir}/opam"
+            chmod +x "${install_dir}/opam"
+        fi
+    fi
+
+    # Initialise opam root (idempotent: skip if ~/.opam already exists)
+    if [[ -d "${HOME}/.opam" ]]; then
+        log "opam already initialised; skipping opam init"
+        return
+    fi
+    local init_flags=(--bare --yes --no-setup)
+    if ! _opam_sandboxing_works; then
+        log "bwrap sandboxing unavailable (container/VM); initialising opam with --disable-sandboxing"
+        init_flags+=(--disable-sandboxing)
+    fi
+    opam init "${init_flags[@]}"
+}
+
 print_chezmoi_init_hint() {
     log "You can initialize chezmoi with: chezmoi init --apply git@github.com:benmandrew/dotfiles.git"
 }

@@ -89,7 +89,7 @@ main() {
     require_cmd ssh-keygen
     require_cmd dpkg
     require_cmd apt
-    install_apt_packages_if_missing git curl build-essential zsh entr libevent-dev libncurses-dev pkg-config
+    install_apt_packages_if_missing git curl build-essential zsh entr libevent-dev libncurses-dev pkg-config bubblewrap
     install_tmux_from_source
     install_cmake
 
@@ -111,6 +111,7 @@ main() {
     install_clangd
     install_pyright
     install_lua_ls
+    install_opam
     install_token_savior
     install_token_optimizer_mcp
     install_ccusage
