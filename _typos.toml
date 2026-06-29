@@ -1,0 +1,3 @@
+[default.extend-words]
+# catppuccin theme variable prefix
+thm = "thm"
