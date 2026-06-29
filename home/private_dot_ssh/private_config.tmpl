@@ -6,19 +6,25 @@ Host emel
 Host mac-mon-*
 	User tarides
 	AddKeysToAgent yes
+{{ if eq .chezmoi.os "darwin" -}}
 	UseKeychain yes
+{{ end -}}
 	IdentityFile ~/.ssh/id_benmandrew
 
 Host github_backup
 	HostName github.com
 	AddKeysToAgent yes
-	UseKeyChain yes
+{{ if eq .chezmoi.os "darwin" -}}
+	UseKeychain yes
+{{ end -}}
 	IdentityFile ~/.ssh/id_mirrorworld71_backup
 
 Host github.com
 	HostName github.com
 	User git
 	AddKeysToAgent yes
+{{ if eq .chezmoi.os "darwin" -}}
 	UseKeychain yes
+{{ end -}}
 	IdentityFile ~/.ssh/id_benmandrew
 	IdentitiesOnly yes
