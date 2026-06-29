@@ -104,6 +104,22 @@ version_gte() {
     ((cur_patch >= req_patch))
 }
 
+safe_git() {
+    local dir="$1"
+    shift
+    git -c "safe.directory=${dir}" -C "${dir}" "$@"
+}
+
+ensure_user_owns() {
+    local dir="$1"
+    if [[ -d "${dir}" ]] && [[ ! -O "${dir}" ]]; then
+        local user group
+        user="$(id -un)"
+        group="$(id -gn)"
+        sudo chown -R "${user}:${group}" "${dir}"
+    fi
+}
+
 load_cargo_env() {
     if [[ -f "${HOME}/.cargo/env" ]]; then
         # shellcheck source=/dev/null
@@ -119,8 +135,9 @@ install_zinit() {
             return
         fi
         log "Upgrading zinit"
-        git -C "${zinit_home}" fetch origin
-        git -C "${zinit_home}" reset --hard origin/main
+        ensure_user_owns "${zinit_home}"
+        safe_git "${zinit_home}" fetch origin
+        safe_git "${zinit_home}" reset --hard origin/main
         return
     fi
     log "Installing zinit"
@@ -340,7 +357,8 @@ install_fzf() {
         fi
         log "Upgrading fzf"
         if [[ -d "${HOME}/.fzf" ]]; then
-            git -C "${HOME}/.fzf" pull
+            ensure_user_owns "${HOME}/.fzf"
+            safe_git "${HOME}/.fzf" pull
             "${HOME}/.fzf/install" --bin --no-update-rc --no-bash --no-fish
         fi
         return
@@ -378,7 +396,7 @@ install_claude_code() {
             return
         fi
         log "Upgrading Claude Code"
-        npm install -g @anthropic-ai/claude-code
+        npm_install_g @anthropic-ai/claude-code
         return
     fi
     log "Installing Claude Code"
@@ -520,8 +538,9 @@ install_tmux_plugins() {
     if [[ -d "${tpm_dir}" ]]; then
         if [[ -n "${UPGRADE:-}" ]]; then
             log "Upgrading tmux plugin manager (tpm)"
-            git -C "${tpm_dir}" fetch origin
-            git -C "${tpm_dir}" reset --hard origin/master
+            ensure_user_owns "${tpm_dir}"
+            safe_git "${tpm_dir}" fetch origin
+            safe_git "${tpm_dir}" reset --hard origin/master
         else
             log "tmux plugin manager (tpm) already installed; skipping"
         fi
@@ -533,8 +552,9 @@ install_tmux_plugins() {
     if [[ -d "${catppuccin_dir}" ]]; then
         if [[ -n "${UPGRADE:-}" ]]; then
             log "Upgrading tmux catppuccin theme"
-            git -C "${catppuccin_dir}" fetch origin
-            git -C "${catppuccin_dir}" reset --hard origin/main
+            ensure_user_owns "${catppuccin_dir}"
+            safe_git "${catppuccin_dir}" fetch origin
+            safe_git "${catppuccin_dir}" reset --hard origin/main
         else
             log "tmux catppuccin theme already installed; skipping"
         fi
@@ -611,7 +631,8 @@ install_mcp_manim() {
         if [[ -n "${UPGRADE:-}" ]]; then
             log "Upgrading mcp-manim"
             if [[ -d "${gist_dir}" ]]; then
-                git -C "${gist_dir}" pull
+                ensure_user_owns "${gist_dir}"
+                safe_git "${gist_dir}" pull
             fi
             docker compose -f "${gist_dir}/docker-compose.yml" build
             return
@@ -638,7 +659,8 @@ install_mcp_latex() {
         if [[ -n "${UPGRADE:-}" ]]; then
             log "Upgrading mcp-latex"
             if [[ -d "${gist_dir}" ]]; then
-                git -C "${gist_dir}" pull
+                ensure_user_owns "${gist_dir}"
+                safe_git "${gist_dir}" pull
             fi
             docker compose -f "${gist_dir}/docker-compose.yml" build
             return
