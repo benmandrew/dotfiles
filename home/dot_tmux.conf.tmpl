@@ -33,7 +33,7 @@ set -g @catppuccin_flavor "mocha"
 set -g status-position top
 set -g status-left ''
 set -g status-interval 5
-set -g @catppuccin_cpu_text " #(a=$(awk '/^cpu /{t=0;for(i=2;i<=NF;i++)t+=$i;print $5,t;exit}' /proc/stat); sleep 0.2; b=$(awk '/^cpu /{t=0;for(i=2;i<=NF;i++)t+=$i;print $5,t;exit}' /proc/stat); echo $a $b | awk '{print int(100-($3-$1)*100/($4-$2))}')%%"
+set -g @catppuccin_cpu_text " #(~/.config/tmux/cpu.sh)%%"
 set -g @catppuccin_status_cpu_text_fg "#{E:@thm_fg}"
 set -g @catppuccin_status_cpu_text_bg "#{E:@catppuccin_status_module_text_bg}"
 set -g @catppuccin_ram_text " #(free -h | awk '/^Mem/{print $3\"/\"$2}')"
