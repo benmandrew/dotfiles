@@ -35,6 +35,7 @@ check_cmd curl
 check_cmd zsh
 check_cmd tmux
 check_cmd entr
+check_cmd perf
 
 check_dir "zinit" "${HOME}/.local/share/zinit/zinit.git"
 
