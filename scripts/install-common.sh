@@ -581,14 +581,14 @@ install_wezterm() {
         fi
         log "Upgrading WezTerm"
         if [[ "${os_name}" == "Darwin" ]]; then
-            brew upgrade --cask wezterm
+            brew upgrade --cask wezterm@nightly
             return
         fi
         # Linux: fall through to re-download latest
     else
         log "Installing WezTerm"
         if [[ "${os_name}" == "Darwin" ]]; then
-            brew install --cask wezterm
+            brew install --cask wezterm@nightly
             return
         fi
     fi
