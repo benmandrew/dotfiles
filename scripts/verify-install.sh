@@ -42,6 +42,7 @@ check_cmd rustup
 check_cmd cargo
 check_cmd rust-analyzer
 check_cmd clangd
+check_cmd yacc
 check_cmd cmake
 check_cmd pyright
 check_cmd lua-language-server
