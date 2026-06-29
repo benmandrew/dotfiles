@@ -88,7 +88,7 @@ All scripts are idempotent — each step checks whether the tool is already pres
 
 Requires: `sudo`, `apt`, `dpkg`, `ssh-keygen`. Supports x86_64 and aarch64 — arch is detected at runtime.
 
-1. `apt install` — `git curl build-essential zsh entr linux-perf` plus tmux build deps
+1. `apt install` — `git curl build-essential zsh entr linux-tools-generic` plus tmux build deps
 2. tmux built from source
 3. Node.js LTS via NodeSource setup script (skipped if `node ≥ 20` present)
 4. Neovim — downloads official Linux binary to `/opt/nvim-linux-<arch>/`
