@@ -80,7 +80,7 @@ chezmoi diff
 ## CI
 
 GitHub Actions (`.github/workflows/ci.yml`):
-1. **lint** — runs `make fmt-ci` then `make lint`
+1. **lint** — installs Nix (`cachix/install-nix-action`), then runs `make fmt-ci` and `make lint` inside `nix develop`
 2. **install** (after lint) — runs `scripts/install-linux.sh` then `scripts/verify-install.sh`
 
 ## Install Scripts
