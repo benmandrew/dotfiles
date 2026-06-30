@@ -33,6 +33,8 @@ export HOMEBREW_BASE="/opt/homebrew/opt"
 export CC=clang
 export CXX=clang++
 
+autoload -Uz add-zsh-hook
+
 _chruby_lazy_init() {
   local dir="$PWD"
   while [[ "$dir" != "/" && ! -f "$dir/.ruby-version" ]]; do

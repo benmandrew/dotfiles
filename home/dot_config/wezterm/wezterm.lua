@@ -84,7 +84,7 @@ config.keys = {
     { key = "n", mods = "LEADER", action = act.ActivateTabRelative(1) },
     { key = "p", mods = "LEADER", action = act.ActivateTabRelative(-1) },
     -- Close pane/tab
-    { key = "x", mods = "LEADER", action = act.CloseCurrentPane({ confirm = true }) },
+    { key = "x", mods = "LEADER", action = act.CloseCurrentPane({ confirm = false }) },
     -- Copy mode (vi keys work inside)
     { key = "[", mods = "LEADER", action = act.ActivateCopyMode },
     -- Send literal C-a to the terminal (e.g. for remote tmux): double-tap C-a
