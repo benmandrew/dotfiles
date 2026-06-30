@@ -534,7 +534,6 @@ install_tmux_from_source() {
 install_tmux_plugins() {
     require_cmd git
     local tpm_dir="${HOME}/.tmux/plugins/tpm"
-    local catppuccin_dir="${HOME}/.config/tmux/plugins/catppuccin"
     if [[ -d "${tpm_dir}" ]]; then
         if [[ -n "${UPGRADE:-}" ]]; then
             log "Upgrading tmux plugin manager (tpm)"
@@ -548,20 +547,6 @@ install_tmux_plugins() {
         log "Installing tmux plugin manager (tpm)"
         mkdir -p "${HOME}/.tmux/plugins"
         git clone https://github.com/tmux-plugins/tpm "${tpm_dir}"
-    fi
-    if [[ -d "${catppuccin_dir}" ]]; then
-        if [[ -n "${UPGRADE:-}" ]]; then
-            log "Upgrading tmux catppuccin theme"
-            ensure_user_owns "${catppuccin_dir}"
-            safe_git "${catppuccin_dir}" fetch origin
-            safe_git "${catppuccin_dir}" reset --hard origin/main
-        else
-            log "tmux catppuccin theme already installed; skipping"
-        fi
-    else
-        log "Installing tmux catppuccin theme"
-        mkdir -p "${HOME}/.config/tmux/plugins"
-        git clone https://github.com/catppuccin/tmux.git "${catppuccin_dir}"
     fi
 }
 

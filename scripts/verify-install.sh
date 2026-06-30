@@ -83,7 +83,6 @@ if [[ "${headless_linux}" == false ]]; then
 fi
 
 check_dir "tpm" "${HOME}/.tmux/plugins/tpm"
-check_dir "catppuccin" "${HOME}/.config/tmux/plugins/catppuccin"
 
 check_cmd nvim
 

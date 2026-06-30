@@ -136,7 +136,7 @@ Shared functions called by both platform scripts, in order:
 | `install_mcp_latex` | MCP server — clones gist, builds Docker image, registers |
 | `install_git_mcp` | MCP server — registers `npx mcp-remote` pointing to gitmcp.io |
 | `install_starship` | Starship prompt via install script |
-| `install_tmux_plugins` | tpm to `~/.tmux/plugins/tpm`; catppuccin theme to `~/.config/tmux/plugins/catppuccin` |
+| `install_tmux_plugins` | tpm to `~/.tmux/plugins/tpm` |
 | `install_wezterm` | WezTerm — `brew install --cask` (macOS), `.deb` from GitHub releases (Linux x86_64); skipped on ARM64 |
 
 MCP servers are registered at user scope (`-s user`) and are idempotent (checked via `claude mcp list`). `mcp-manim` and `mcp-latex` require Docker.
@@ -145,12 +145,12 @@ MCP servers are registered at user scope (`-s user`) and are idempotent (checked
 
 Checks that all expected commands and directories exist after installation. Run after an install script to confirm nothing is missing. Exits non-zero if any check fails.
 
-Checks: `git curl zsh tmux entr rustup cargo rust-analyzer clangd cmake pyright lua-language-server opam eza fd zoxide fzf claude rtk node npm uv uvx ccusage starship nvim`, plus dirs `~/.local/share/zinit/zinit.git`, `~/.tmux/plugins/tpm`, `~/.config/tmux/plugins/catppuccin`.
+Checks: `git curl zsh tmux entr rustup cargo rust-analyzer clangd cmake pyright lua-language-server opam eza fd zoxide fzf claude rtk node npm uv uvx ccusage starship nvim`, plus dirs `~/.local/share/zinit/zinit.git`, `~/.tmux/plugins/tpm`.
 
 ## Key Areas
 
 - **Neovim config** — `home/dot_config/nvim/` — Lua, uses Lazy.nvim; LSP for bash, rust, ocaml, lua
 - **Claude Code config** — `home/dot_claude/` — settings, MCP docs (RTK.md, TOKEN_TOOLS.md)
 - **Shell** — `home/dot_zshrc.tmpl` — zinit, zoxide, fzf, starship, auto-attach tmux
-- **Tmux** — `home/dot_tmux.conf.tmpl` — prefix C-a, catppuccin-mocha theme, OS-specific clipboard
+- **Tmux** — `home/dot_tmux.conf.tmpl` — prefix C-a, Hacktober theme (matches WezTerm), OS-specific clipboard
 - **Git** — `home/dot_gitconfig.tmpl` and `home/dot_config/git/` — SSH signing, aliases
