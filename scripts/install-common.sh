@@ -372,6 +372,43 @@ install_fzf() {
     "${HOME}/.fzf/install" --bin --no-update-rc --no-bash --no-fish
 }
 
+enable_nix_flakes() {
+    local nix_conf="${HOME}/.config/nix/nix.conf"
+    if [[ -f "${nix_conf}" ]] && grep -qE '^[[:space:]]*extra-experimental-features.*\bflakes\b|^[[:space:]]*experimental-features.*\bflakes\b' "${nix_conf}"; then
+        return
+    fi
+    log "Enabling Nix flakes"
+    mkdir -p "$(dirname "${nix_conf}")"
+    echo "extra-experimental-features = nix-command flakes" >>"${nix_conf}"
+}
+
+install_nix() {
+    if command -v nix >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "Nix already installed; skipping"
+            enable_nix_flakes
+            return
+        fi
+        log "Upgrading Nix"
+        sudo -i nix upgrade-nix
+        enable_nix_flakes
+        return
+    fi
+    log "Installing Nix"
+    local script_path
+    script_path="$(mktemp)"
+    curl --proto '=https' --tlsv1.2 -L https://nixos.org/nix/install -o "${script_path}"
+    sh "${script_path}" --daemon --yes
+    rm -f "${script_path}"
+
+    # shellcheck disable=SC1091
+    [[ -f /etc/bashrc ]] && source /etc/bashrc
+    # shellcheck disable=SC1091
+    [[ -f "/etc/profile.d/nix.sh" ]] && source /etc/profile.d/nix.sh
+
+    enable_nix_flakes
+}
+
 install_starship() {
     if command -v starship >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then
