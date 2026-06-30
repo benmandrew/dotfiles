@@ -3,8 +3,9 @@ unbind C-b
 set-option -g prefix C-a
 bind-key C-a send-prefix
 
-set-option -a terminal-features 'xterm-256color:RGB'
+set-option -a terminal-features 'xterm-256color:RGB:extkeys'
 set-option -g focus-events on
+set -g extended-keys on
 
 # on: tmux sends OSC 52 to the client terminal on yank (works over SSH)
 set -s set-clipboard on
@@ -14,9 +15,14 @@ bind r source-file ~/.tmux.conf
 
 set -sg escape-time 0
 
-# open new splits in current directory
-bind '"' split-window -v -c "#{pane_current_path}"
-bind % split-window -h -c "#{pane_current_path}"
+# mirror WezTerm split/navigation bindings
+bind v split-window -h -c "#{pane_current_path}"
+bind s split-window -v -c "#{pane_current_path}"
+bind h select-pane -L
+bind j select-pane -D
+bind k select-pane -U
+bind l select-pane -R
+bind x kill-pane
 
 # switch panes using Alt-arrow without prefix
 bind -n M-Left select-pane -L
@@ -29,6 +35,10 @@ set -g mouse on
 set -g default-terminal "tmux-256color"
 
 set -g @catppuccin_flavor "mocha"
+
+# Pane borders: active uses Hacktober orange to match WezTerm focus highlight
+set -g pane-active-border-style fg=#c75a22
+set -g pane-border-style fg=#464444
 
 set -g status-position top
 set -g status-left ''
