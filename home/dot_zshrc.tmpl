@@ -146,6 +146,9 @@ _cache_eval() {
 }
 
 _cache_eval zoxide init zsh --cmd cd
+# Claude Code's per-command shells source a snapshot that omits chpwd_functions,
+# so zoxide's doctor always sees its hook as "missing" and warns on every cd.
+export _ZO_DOCTOR=0
 export DIRENV_LOG_FORMAT=
 _cache_eval direnv hook zsh
 
