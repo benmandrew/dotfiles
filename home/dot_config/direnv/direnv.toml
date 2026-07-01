@@ -1,0 +1,5 @@
+# Empty on purpose: direnv only honors the DIRENV_LOG_FORMAT env var
+# (set in dot_zshrc.tmpl) if this file exists on disk. Setting log_format
+# here directly doesn't work: "" is indistinguishable from unset in TOML,
+# and "-" hits a separate direnv bug (double fmt.Sprintf on a verb-less
+# format string produces "%!(EXTRA ...)" garbage) — see direnv/direnv#1419.
