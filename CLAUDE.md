@@ -80,8 +80,9 @@ chezmoi diff
 ## CI
 
 GitHub Actions (`.github/workflows/ci.yml`):
-1. **lint** — installs Nix (`cachix/install-nix-action`), then runs `make fmt-ci` and `make lint` inside `nix develop`
-2. **install** (after lint) — runs `scripts/install-linux.sh` then `scripts/verify-install.sh`
+1. **changes** — `dorny/paths-filter` detects whether `scripts/install-common.sh`, `scripts/install-linux.sh`, or `scripts/verify-install.sh` changed
+2. **lint** — installs Nix (`cachix/install-nix-action`), then runs `make fmt-ci` and `make lint` inside `nix develop`
+3. **install** (after lint; skipped unless `changes` detected an install script diff) — runs `scripts/install-linux.sh` then `scripts/verify-install.sh`
 
 ## Install Scripts
 
