@@ -61,6 +61,20 @@ config.use_fancy_tab_bar = false
 config.tab_bar_at_bottom = false
 config.hide_tab_bar_if_only_one_tab = true
 
+-- Tab title: focused directory's name, unless manually renamed
+wezterm.on("format-tab-title", function(tab)
+    local title = tab.tab_title
+    if not (title and #title > 0) then
+        local cwd = tab.active_pane.current_working_dir
+        if cwd and cwd.file_path then
+            title = cwd.file_path:gsub("/$", ""):match("([^/]+)$") or cwd.file_path
+        else
+            title = tab.active_pane.title
+        end
+    end
+    return " [" .. title .. "] "
+end)
+
 -- Behaviour
 config.scrollback_lines = 10000
 config.audible_bell = "Disabled"
@@ -82,6 +96,18 @@ config.keys = {
     { key = "c", mods = "LEADER", action = act.SpawnTab("CurrentPaneDomain") },
     { key = "n", mods = "LEADER", action = act.ActivateTabRelative(1) },
     { key = "p", mods = "LEADER", action = act.ActivateTabRelative(-1) },
+    {
+        key = ",",
+        mods = "LEADER",
+        action = act.PromptInputLine({
+            description = "Rename tab",
+            action = wezterm.action_callback(function(window, _pane, line)
+                if line then
+                    window:active_tab():set_title(line)
+                end
+            end),
+        }),
+    },
     -- Close pane/tab
     { key = "x", mods = "LEADER", action = act.CloseCurrentPane({ confirm = false }) },
     -- Copy mode (vi keys work inside)
