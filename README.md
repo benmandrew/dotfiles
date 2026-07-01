@@ -35,4 +35,4 @@ If you installed Nix some other way, flakes are an experimental feature not enab
 experimental-features = nix-command flakes
 ```
 
-With [direnv](https://direnv.net) and [nix-direnv](https://github.com/nix-community/nix-direnv), the shell loads automatically on `cd` via the checked-in `.envrc`.
+[direnv](https://direnv.net) is installed by the same install script (`install_direnv`) and hooked into zsh, so the devShell loads automatically on `cd` via the checked-in `.envrc` — just run `direnv allow` once per machine. [nix-direnv](https://github.com/nix-community/nix-direnv) is also installed (`install_nix_direnv`) to cache the devShell so re-entering a directory is fast instead of re-evaluating the flake each time. On macOS this also installs a modern `bash` via Nix, since nix-direnv requires bash >= 4.4 and macOS ships 3.2.

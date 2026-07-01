@@ -409,6 +409,76 @@ install_nix() {
     enable_nix_flakes
 }
 
+install_direnv() {
+    if command -v direnv >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "direnv already installed; skipping"
+            return
+        fi
+        log "Upgrading direnv"
+    else
+        log "Installing direnv"
+    fi
+    mkdir -p "${HOME}/.local/bin"
+    local script_path
+    script_path="$(mktemp)"
+    curl -fsSL https://direnv.net/install.sh -o "${script_path}"
+    bin_path="${HOME}/.local/bin" bash "${script_path}"
+    rm -f "${script_path}"
+}
+
+_nix_profile_has() {
+    local list
+    list="$(nix profile list 2>/dev/null)"
+    grep -qE "^Flake attribute:[[:space:]]+legacyPackages\.[^.]+\.$1\$" <<<"${list}"
+}
+
+install_modern_bash() {
+    # nix-direnv requires bash >= 4.4; macOS ships bash 3.2 (GPLv2-only) as /bin/bash.
+    local os_name
+    os_name="$(uname -s)"
+    if [[ "${os_name}" != "Darwin" ]]; then
+        return
+    fi
+    require_cmd nix
+    if _nix_profile_has bash; then
+        if [[ -n "${UPGRADE:-}" ]]; then
+            log "Upgrading bash"
+            nix profile upgrade bash
+        else
+            log "Modern bash already installed; skipping"
+        fi
+        return
+    fi
+    log "Installing modern bash (nix-direnv requires >= 4.4)"
+    nix profile install nixpkgs#bash
+}
+
+install_nix_direnv() {
+    require_cmd nix
+    install_modern_bash
+    local direnvrc="${HOME}/.config/direnv/direnvrc"
+    # shellcheck disable=SC2016
+    local source_line='source $HOME/.nix-profile/share/nix-direnv/direnvrc'
+    if _nix_profile_has nix-direnv; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "nix-direnv already installed; skipping"
+        else
+            log "Upgrading nix-direnv"
+            nix profile upgrade nix-direnv
+        fi
+    else
+        log "Installing nix-direnv"
+        nix profile install nixpkgs#nix-direnv
+    fi
+    if [[ -f "${direnvrc}" ]] && grep -qF "nix-direnv/direnvrc" "${direnvrc}"; then
+        return
+    fi
+    log "Wiring nix-direnv into direnvrc"
+    mkdir -p "$(dirname "${direnvrc}")"
+    echo "${source_line}" >>"${direnvrc}"
+}
+
 install_starship() {
     if command -v starship >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then

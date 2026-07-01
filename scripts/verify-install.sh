@@ -46,6 +46,7 @@ check_cmd clangd
 check_cmd yacc
 check_cmd cmake
 check_cmd nix
+check_cmd direnv
 check_cmd pyright
 check_cmd lua-language-server
 check_cmd opam

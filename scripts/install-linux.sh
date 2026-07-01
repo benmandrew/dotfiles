@@ -93,6 +93,8 @@ main() {
     install_tmux_from_source
     install_cmake
     install_nix
+    install_direnv
+    install_nix_direnv
 
     install_zinit
     install_rust
