@@ -55,13 +55,16 @@ symbol = " "
 symbol = " "
 
 [bun]
+format = ' [$symbol($version )]($style)'
 symbol = " "
 
 [c]
+format = ' [$symbol($version(-$name) )]($style)'
 disabled = true
 symbol = " "
 
 [cpp]
+format = ' [$symbol($version(-$name) )]($style)'
 symbol = " "
 
 [cmake]
@@ -69,27 +72,35 @@ format =" [$symbol($version)]($style)"
 symbol = " "
 
 [conda]
+format = ' [$symbol$environment]($style) '
 symbol = " "
 
 [crystal]
+format = ' [$symbol($version )]($style)'
 symbol = " "
 
 [dart]
+format = ' [$symbol($version )]($style)'
 symbol = " "
 
 [deno]
+format = ' [$symbol($version )]($style)'
 symbol = " "
 
 [docker_context]
+format = ' [$symbol$context]($style) '
 symbol = " "
 
 [elixir]
+format = ' [$symbol($version \(OTP $otp_version\) )]($style)'
 symbol = " "
 
 [elm]
+format = ' [$symbol($version )]($style)'
 symbol = " "
 
 [fennel]
+format = ' [$symbol($version )]($style)'
 symbol = " "
 
 [fortran]
@@ -105,18 +116,23 @@ symbol = " "
 tag_symbol = '  '
 
 [golang]
+format = ' [$symbol($version )]($style)'
 symbol = " "
 
 [gradle]
+format = ' [$symbol($version )]($style)'
 symbol = " "
 
 [guix_shell]
+format = ' [$symbol]($style) '
 symbol = " "
 
 [haskell]
+format = ' [$symbol($version )]($style)'
 symbol = " "
 
 [haxe]
+format = ' [$symbol($version )]($style)'
 symbol = " "
 
 [hg_branch]
@@ -127,24 +143,31 @@ format ="@[$hostname]($style) "
 ssh_symbol = " "
 
 [java]
+format = ' [${symbol}(${version} )]($style)'
 symbol = " "
 
 [julia]
+format = ' [$symbol($version )]($style)'
 symbol = " "
 
 [kotlin]
+format = ' [$symbol($version )]($style)'
 symbol = " "
 
 [lua]
+format = ' [$symbol($version )]($style)'
 symbol = " "
 
 [memory_usage]
+format = ' $symbol [${ram}( \| ${swap})]($style) '
 symbol = "󰍛 "
 
 [meson]
+format = ' [$symbol$project]($style) '
 symbol = "󰔷 "
 
 [nim]
+format = ' [$symbol($version )]($style)'
 symbol = "󰆥 "
 
 [nix_shell]
@@ -215,15 +238,18 @@ Windows = "󰍲 "
 Zorin = " "
 
 [perl]
+format = ' [$symbol($version )]($style)'
 symbol = " "
 
 [php]
+format = ' [$symbol($version )]($style)'
 symbol = " "
 
 [pijul_channel]
 symbol = " "
 
 [pixi]
+format = ' [$symbol($version )(\($environment\) )]($style)'
 symbol = "󰏗 "
 
 [python]
@@ -232,6 +258,7 @@ python_binary = "python3"
 symbol = " "
 
 [rlang]
+format = ' [$symbol($version )]($style)'
 symbol = "󰟔 "
 
 [ruby]
@@ -244,19 +271,26 @@ format =" [$symbol($version)]($style)"
 symbol = "󱘗 "
 
 [scala]
+format = ' [${symbol}(${version} )]($style)'
 symbol = " "
 
 [status]
 symbol = " "
 
 [swift]
+format = ' [$symbol($version )]($style)'
 symbol = " "
+
+[typst]
+format = ' [$symbol($version)]($style)'
 
 [username]
 format = "[$user]($style)"
 
 [xmake]
+format = ' [$symbol($version )]($style)'
 symbol = " "
 
 [zig]
+format = ' [$symbol($version )]($style)'
 symbol = " "
