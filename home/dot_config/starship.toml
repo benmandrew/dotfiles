@@ -148,6 +148,7 @@ symbol = "󰔷 "
 symbol = "󰆥 "
 
 [nix_shell]
+format = ' [$symbol$state]($style)'
 symbol = " "
 
 [nodejs]
