@@ -110,6 +110,9 @@ main() {
 
     install_brew_formulae_if_missing git zsh tmux node entr
     install_cmake
+    install_nix
+    install_direnv
+    install_nix_direnv
 
     install_zinit
     install_rust

@@ -2,7 +2,7 @@
 
 set -uo pipefail
 
-export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${HOME}/.fzf/bin:/opt/nvim-linux-x86_64/bin:/opt/nvim-linux-arm64/bin:${PATH}"
+export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${HOME}/.fzf/bin:/opt/nvim-linux-x86_64/bin:/opt/nvim-linux-arm64/bin:/nix/var/nix/profiles/default/bin:${PATH}"
 
 ok=0
 fail=0
@@ -45,6 +45,8 @@ check_cmd rust-analyzer
 check_cmd clangd
 check_cmd yacc
 check_cmd cmake
+check_cmd nix
+check_cmd direnv
 check_cmd pyright
 check_cmd lua-language-server
 check_cmd opam

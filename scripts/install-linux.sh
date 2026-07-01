@@ -92,6 +92,9 @@ main() {
     install_apt_packages_if_missing git curl build-essential zsh entr libevent-dev libncurses-dev pkg-config bubblewrap bison autoconf linux-tools-generic
     install_tmux_from_source
     install_cmake
+    install_nix
+    install_direnv
+    install_nix_direnv
 
     install_zinit
     install_rust
