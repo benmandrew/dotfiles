@@ -128,6 +128,11 @@ bindkey "^[OA" up-line-or-beginning-search
 bindkey "^[[B" down-line-or-beginning-search
 bindkey "^[OB" down-line-or-beginning-search
 
+# Option+Left/Right: WezTerm sends CSI 1;3D / 1;3C, which zsh's emacs
+# keymap doesn't bind by default (only bare ESC-b/ESC-f are bound)
+bindkey "^[[1;3D" backward-word
+bindkey "^[[1;3C" forward-word
+
 # Claude
 export MAX_THINKING_TOKENS=8000
 export WORKSPACE_ROOTS="$HOME/projects"
