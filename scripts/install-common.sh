@@ -715,6 +715,54 @@ install_wezterm() {
     sudo apt-get install -y "${tmp_dir}/${deb}"
 }
 
+install_nerd_font() {
+    local os_name
+    os_name="$(uname -s)"
+
+    if [[ "${os_name}" == "Linux" ]] && [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
+        log "CodeNewRoman Nerd Font: no display session detected; skipping on headless Linux"
+        return
+    fi
+
+    if [[ "${os_name}" == "Darwin" ]]; then
+        if brew list --cask font-code-new-roman-nerd-font >/dev/null 2>&1; then
+            if [[ -z "${UPGRADE:-}" ]]; then
+                log "CodeNewRoman Nerd Font already installed; skipping"
+                return
+            fi
+            log "Upgrading CodeNewRoman Nerd Font"
+            brew upgrade --cask font-code-new-roman-nerd-font
+            return
+        fi
+        log "Installing CodeNewRoman Nerd Font"
+        brew install --cask font-code-new-roman-nerd-font
+        return
+    fi
+
+    # Linux: no cask equivalent; download the patched font from nerd-fonts releases
+    require_cmd unzip
+    local font_dir="${HOME}/.local/share/fonts/CodeNewRomanNerdFont"
+    if [[ -d "${font_dir}" ]]; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "CodeNewRoman Nerd Font already installed; skipping"
+            return
+        fi
+        log "Upgrading CodeNewRoman Nerd Font"
+    else
+        log "Installing CodeNewRoman Nerd Font"
+    fi
+    local tag
+    tag="$(github_latest_tag ryanoasis/nerd-fonts)"
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
+    curl -fsSL "https://github.com/ryanoasis/nerd-fonts/releases/download/${tag}/CodeNewRoman.zip" \
+        -o "${tmp_dir}/CodeNewRoman.zip"
+    mkdir -p "${font_dir}"
+    unzip -oq "${tmp_dir}/CodeNewRoman.zip" -d "${font_dir}"
+    fc-cache -f "${font_dir}" >/dev/null 2>&1 || true
+}
+
 install_mcp_manim() {
     require_cmd docker
     local gist_dir="${HOME}/.local/share/mcp-servers/manim"

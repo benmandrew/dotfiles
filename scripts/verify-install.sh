@@ -82,6 +82,17 @@ check_cmd starship
 
 if [[ "${headless_linux}" == false ]]; then
     check_cmd wezterm
+    if [[ "${os_name}" == "Darwin" ]]; then
+        if brew list --cask font-code-new-roman-nerd-font >/dev/null 2>&1; then
+            printf "\033[1;32m[ok]\033[0m   nerd-font\n"
+            ((ok++)) || true
+        else
+            printf "\033[1;31m[FAIL]\033[0m nerd-font\n" >&2
+            ((fail++)) || true
+        fi
+    else
+        check_dir "nerd-font" "${HOME}/.local/share/fonts/CodeNewRomanNerdFont"
+    fi
 fi
 
 check_dir "tpm" "${HOME}/.tmux/plugins/tpm"

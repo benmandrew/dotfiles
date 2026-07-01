@@ -89,7 +89,7 @@ main() {
     require_cmd ssh-keygen
     require_cmd dpkg
     require_cmd apt
-    install_apt_packages_if_missing git curl build-essential zsh entr libevent-dev libncurses-dev pkg-config bubblewrap bison autoconf linux-tools-generic
+    install_apt_packages_if_missing git curl build-essential zsh entr libevent-dev libncurses-dev pkg-config bubblewrap bison autoconf linux-tools-generic unzip
     install_tmux_from_source
     install_cmake
     install_nix
@@ -124,6 +124,7 @@ main() {
     install_starship
     install_tmux_plugins
     install_wezterm
+    install_nerd_font
 
     install_neovim_if_missing
 
