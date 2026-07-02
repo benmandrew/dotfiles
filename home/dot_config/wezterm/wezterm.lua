@@ -92,6 +92,7 @@ config.keys = {
     { key = "j", mods = "LEADER", action = act.ActivatePaneDirection("Down") },
     { key = "k", mods = "LEADER", action = act.ActivatePaneDirection("Up") },
     { key = "l", mods = "LEADER", action = act.ActivatePaneDirection("Right") },
+    { key = "w", mods = "LEADER", action = act.PaneSelect({ mode = "SwapWithActive" }) },
     -- Tabs
     { key = "c", mods = "LEADER", action = act.SpawnTab("CurrentPaneDomain") },
     { key = "n", mods = "LEADER", action = act.ActivateTabRelative(1) },
