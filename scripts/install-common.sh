@@ -382,8 +382,19 @@ enable_nix_flakes() {
     echo "extra-experimental-features = nix-command flakes" >>"${nix_conf}"
 }
 
+source_nix_profile() {
+    # shellcheck disable=SC1091
+    [[ -f /etc/bashrc ]] && source /etc/bashrc
+    # shellcheck disable=SC1091
+    [[ -f "/etc/profile.d/nix.sh" ]] && source /etc/profile.d/nix.sh
+}
+
 install_nix() {
-    if command -v nix >/dev/null 2>&1; then
+    if command -v nix >/dev/null 2>&1 || [[ -x /nix/var/nix/profiles/default/bin/nix ]]; then
+        # command -v may miss an existing install under non-login shells
+        # (e.g. Ansible's command module), so re-source the profile scripts
+        # to put nix on PATH for the rest of this script's execution.
+        command -v nix >/dev/null 2>&1 || source_nix_profile
         if [[ -z "${UPGRADE:-}" ]]; then
             log "Nix already installed; skipping"
             enable_nix_flakes
@@ -401,10 +412,7 @@ install_nix() {
     sh "${script_path}" --daemon --yes
     rm -f "${script_path}"
 
-    # shellcheck disable=SC1091
-    [[ -f /etc/bashrc ]] && source /etc/bashrc
-    # shellcheck disable=SC1091
-    [[ -f "/etc/profile.d/nix.sh" ]] && source /etc/profile.d/nix.sh
+    source_nix_profile
 
     enable_nix_flakes
 }
