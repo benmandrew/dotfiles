@@ -4,22 +4,6 @@ Host emel
 	User dev
 	IdentityFile ~/.ssh/id_benmandrew
 
-Host mac-mon-*
-	User tarides
-	AddKeysToAgent yes
-{{ if eq .chezmoi.os "darwin" -}}
-	UseKeychain yes
-{{ end -}}
-	IdentityFile ~/.ssh/id_benmandrew
-
-Host github_backup
-	HostName github.com
-	AddKeysToAgent yes
-{{ if eq .chezmoi.os "darwin" -}}
-	UseKeychain yes
-{{ end -}}
-	IdentityFile ~/.ssh/id_mirrorworld71_backup
-
 Host github.com
 	HostName github.com
 	User git
@@ -27,5 +11,9 @@ Host github.com
 {{ if eq .chezmoi.os "darwin" -}}
 	UseKeychain yes
 {{ end -}}
+	IdentityFile ~/.ssh/id_benmandrew
+	IdentitiesOnly yes
+
+Host ssh.git.benmandrew.com
 	IdentityFile ~/.ssh/id_benmandrew
 	IdentitiesOnly yes
