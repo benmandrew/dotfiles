@@ -33,29 +33,6 @@ export HOMEBREW_BASE="/opt/homebrew/opt"
 export CC=clang
 export CXX=clang++
 
-autoload -Uz add-zsh-hook
-
-_chruby_lazy_init() {
-  local dir="$PWD"
-  while [[ "$dir" != "/" && ! -f "$dir/.ruby-version" ]]; do
-    dir="${dir:h}"
-  done
-  [[ ! -f "$dir/.ruby-version" ]] && return
-  add-zsh-hook -d chpwd _chruby_lazy_init
-  source $HOMEBREW_BASE/chruby/share/chruby/chruby.sh
-  source $HOMEBREW_BASE/chruby/share/chruby/auto.sh
-}
-add-zsh-hook chpwd _chruby_lazy_init
-_chruby_lazy_init
-
-chruby() {
-  unfunction chruby
-  add-zsh-hook -d chpwd _chruby_lazy_init
-  source $HOMEBREW_BASE/chruby/share/chruby/chruby.sh
-  source $HOMEBREW_BASE/chruby/share/chruby/auto.sh
-  chruby "$@"
-}
-
 export PATH="$PATH:$HOME/Library/Python/3.10/bin"
 export PATH="$PATH:$HOME/bin"
 export PATH="$PATH:$HOME/.local/bin"
