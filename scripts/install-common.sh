@@ -3,6 +3,21 @@
 UPGRADE=""
 _MCP_LIST_LOADED=false
 MCP_LIST=""
+_INSTALL_FAILED=false
+
+run_step() {
+    if ! "$@"; then
+        err "Step failed: $*"
+        _INSTALL_FAILED=true
+    fi
+}
+
+check_failed() {
+    if [[ "${_INSTALL_FAILED}" == "true" ]]; then
+        err "One or more install steps failed; see errors above"
+        exit 1
+    fi
+}
 
 get_mcp_list() {
     if [[ "${_MCP_LIST_LOADED}" != "true" ]]; then
@@ -241,6 +256,15 @@ install_cmake() {
         local latest_tag
         latest_tag="$(github_latest_tag Kitware/CMake)"
         install_version="${latest_tag#v}"
+        if command -v cmake >/dev/null 2>&1; then
+            local cmake_output current_version
+            cmake_output="$(cmake --version)"
+            current_version="$(awk 'NR==1{print $3}' <<<"${cmake_output}")"
+            if [[ "${current_version}" == "${install_version}" ]]; then
+                log "cmake ${current_version} already at latest; skipping"
+                return
+            fi
+        fi
         log "Upgrading cmake to ${install_version}"
     else
         install_version="${required_version}"
@@ -609,6 +633,15 @@ install_tmux_from_source() {
     if [[ -n "${UPGRADE:-}" ]]; then
         build_version="$(github_latest_tag tmux/tmux)"
         if command -v tmux >/dev/null 2>&1; then
+            local tmux_v_output tmux_v_word current_version
+            tmux_v_output="$(tmux -V)"
+            tmux_v_word="$(awk '{print $2}' <<<"${tmux_v_output}")"
+            current_version="${tmux_v_word%%[[:alpha:]]*}"
+            local latest_bare="${build_version#v}"
+            if [[ "${tmux_v_word}" == "${latest_bare}" ]]; then
+                log "tmux ${tmux_v_word} already at latest; skipping"
+                return
+            fi
             log "Upgrading tmux to ${build_version}"
         else
             log "Installing tmux ${build_version}"
@@ -717,6 +750,14 @@ install_wezterm() {
     tag_line="$(grep -m1 '"tag_name"' "${tmp_dir}/release.json" || true)"
     tag="${tag_line#*\"tag_name\": \"}"
     tag="${tag%%\"*}"
+    if [[ -n "${UPGRADE:-}" ]] && command -v wezterm >/dev/null 2>&1; then
+        local installed_tag
+        installed_tag="$(wezterm --version 2>/dev/null | awk '{print $2}' || true)"
+        if [[ "${installed_tag}" == "${tag}" ]]; then
+            log "WezTerm ${tag} already at latest; skipping"
+            return
+        fi
+    fi
     local deb="wezterm-${tag}.Ubuntu${ubuntu_version}.deb"
     curl -fsSL "https://github.com/wez/wezterm/releases/download/${tag}/${deb}" \
         -o "${tmp_dir}/${deb}"
@@ -750,6 +791,7 @@ install_nerd_font() {
     # Linux: no cask equivalent; download the patched font from nerd-fonts releases
     require_cmd unzip
     local font_dir="${HOME}/.local/share/fonts/CodeNewRomanNerdFont"
+    local version_file="${font_dir}/.version"
     if [[ -d "${font_dir}" ]]; then
         if [[ -z "${UPGRADE:-}" ]]; then
             log "CodeNewRoman Nerd Font already installed; skipping"
@@ -761,6 +803,14 @@ install_nerd_font() {
     fi
     local tag
     tag="$(github_latest_tag ryanoasis/nerd-fonts)"
+    if [[ -n "${UPGRADE:-}" ]] && [[ -f "${version_file}" ]]; then
+        local installed_tag
+        installed_tag="$(cat "${version_file}")"
+        if [[ "${installed_tag}" == "${tag}" ]]; then
+            log "CodeNewRoman Nerd Font ${tag} already at latest; skipping"
+            return
+        fi
+    fi
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
@@ -768,6 +818,7 @@ install_nerd_font() {
         -o "${tmp_dir}/CodeNewRoman.zip"
     mkdir -p "${font_dir}"
     unzip -oq "${tmp_dir}/CodeNewRoman.zip" -d "${font_dir}"
+    echo "${tag}" >"${version_file}"
     fc-cache -f "${font_dir}" >/dev/null 2>&1 || true
 }
 
@@ -962,6 +1013,14 @@ install_lua_ls() {
     tag_line="$(grep -m1 '"tag_name"' "${tmp_dir}/release.json" || true)"
     tag="${tag_line#*\"tag_name\": \"}"
     tag="${tag%%\"*}"
+    if [[ -n "${UPGRADE:-}" ]] && command -v lua-language-server >/dev/null 2>&1; then
+        local current_version
+        current_version="$(lua-language-server --version 2>/dev/null || true)"
+        if [[ "${current_version}" == "${tag}" ]]; then
+            log "lua-language-server ${tag} already at latest; skipping"
+            return
+        fi
+    fi
     local archive="lua-language-server-${tag}-${lua_arch}.tar.gz"
     local install_dir="${HOME}/.local/opt/lua-language-server"
     mkdir -p "${install_dir}"
@@ -979,6 +1038,34 @@ install_opam() {
     local os_name
     os_name="$(uname -s)"
 
+    _install_opam_linux_binary() {
+        local os_arch opam_arch
+        os_arch="$(uname -m)"
+        if [[ "${os_arch}" == "aarch64" ]]; then
+            opam_arch="arm64"
+        else
+            opam_arch="x86_64"
+        fi
+        local tag version
+        tag="$(github_latest_tag ocaml/opam)"
+        version="${tag#v}"
+        if [[ -n "${UPGRADE:-}" ]] && command -v opam >/dev/null 2>&1; then
+            local current_version
+            current_version="$(opam --version 2>/dev/null || true)"
+            if [[ "${current_version}" == "${version}" ]]; then
+                log "opam ${version} already at latest; skipping"
+                return
+            fi
+        fi
+        local binary install_dir
+        binary="opam-${version}-${opam_arch}-linux"
+        install_dir="${HOME}/.local/bin"
+        mkdir -p "${install_dir}"
+        curl -fsSL "https://github.com/ocaml/opam/releases/download/${tag}/${binary}" \
+            -o "${install_dir}/opam"
+        chmod +x "${install_dir}/opam"
+    }
+
     if command -v opam >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then
             log "opam already installed; skipping"
@@ -986,33 +1073,19 @@ install_opam() {
             log "Upgrading opam"
             if [[ "${os_name}" == "Darwin" ]]; then
                 brew upgrade opam
+            else
+                _install_opam_linux_binary
             fi
-            # Linux: fall through to re-download latest
         fi
     else
         log "Installing opam"
         if [[ "${os_name}" == "Darwin" ]]; then
             brew install opam
         else
-            # Linux: download latest binary from GitHub releases
-            local os_arch opam_arch
-            os_arch="$(uname -m)"
-            if [[ "${os_arch}" == "aarch64" ]]; then
-                opam_arch="arm64"
-            else
-                opam_arch="x86_64"
-            fi
-            local tag version binary install_dir
-            tag="$(github_latest_tag ocaml/opam)"
-            version="${tag#v}"
-            binary="opam-${version}-${opam_arch}-linux"
-            install_dir="${HOME}/.local/bin"
-            mkdir -p "${install_dir}"
-            curl -fsSL "https://github.com/ocaml/opam/releases/download/${tag}/${binary}" \
-                -o "${install_dir}/opam"
-            chmod +x "${install_dir}/opam"
+            _install_opam_linux_binary
         fi
     fi
+    unset -f _install_opam_linux_binary
 
     # Initialise opam root (idempotent: skip if ~/.opam already exists)
     if [[ -d "${HOME}/.opam" ]]; then

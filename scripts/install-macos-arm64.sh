@@ -108,44 +108,45 @@ main() {
 
     require_cmd brew
 
-    install_brew_formulae_if_missing git zsh tmux node entr
-    install_cmake
-    install_nix
-    install_direnv
-    install_nix_direnv
+    run_step install_brew_formulae_if_missing git zsh tmux node entr
+    run_step install_cmake
+    run_step install_nix
+    run_step install_direnv
+    run_step install_nix_direnv
 
-    install_zinit
-    install_rust
-    install_rust_analyzer
-    install_eza
-    install_fd
-    install_bat
-    install_zoxide
-    install_fzf
-    install_gh
-    install_tailscale
-    install_mullvad
-    install_claude_code
-    install_rtk
-    install_uv
-    install_clangd
-    install_pyright
-    install_lua_ls
-    install_opam
-    install_token_savior
-    install_token_optimizer_mcp
-    install_ccusage
-    install_mcp_manim
-    install_mcp_latex
-    install_git_mcp
-    install_starship
-    install_tmux_plugins
-    install_wezterm
-    install_nerd_font
+    run_step install_zinit
+    run_step install_rust
+    run_step install_rust_analyzer
+    run_step install_eza
+    run_step install_fd
+    run_step install_bat
+    run_step install_zoxide
+    run_step install_fzf
+    run_step install_gh
+    run_step install_tailscale
+    run_step install_mullvad
+    run_step install_claude_code
+    run_step install_rtk
+    run_step install_uv
+    run_step install_clangd
+    run_step install_pyright
+    run_step install_lua_ls
+    run_step install_opam
+    run_step install_token_savior
+    run_step install_token_optimizer_mcp
+    run_step install_ccusage
+    run_step install_mcp_manim
+    run_step install_mcp_latex
+    run_step install_git_mcp
+    run_step install_starship
+    run_step install_tmux_plugins
+    run_step install_wezterm
+    run_step install_nerd_font
 
-    install_neovim_if_missing
+    run_step install_neovim_if_missing
 
     print_chezmoi_init_hint
+    check_failed
 }
 
 main "$@"
