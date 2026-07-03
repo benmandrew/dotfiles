@@ -81,6 +81,24 @@ export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
 
 {{ end }}
 
+# OSC 7: report cwd to the terminal on every prompt. Needed for WezTerm to
+# track the tab's directory over SSH (and through tmux, remote or local),
+# since it can't introspect a remote process's cwd directly like it can for
+# local panes.
+autoload -Uz add-zsh-hook
+_osc7_cwd() {
+  local i c encoded=""
+  for (( i = 1; i <= ${#PWD}; ++i )); do
+    c="${PWD:$((i-1)):1}"
+    case "$c" in
+      [A-Za-z0-9_.!~*\'\(\)/:-]) encoded+="$c" ;;
+      *) encoded+=$(printf '%%%02X' "'$c") ;;
+    esac
+  done
+  printf '\e]7;file://%s%s\e\\' "${HOST}" "$encoded"
+}
+add-zsh-hook precmd _osc7_cwd
+
 export LANG="en_GB.UTF-8"
 export LC_ALL="en_GB.UTF-8"
 

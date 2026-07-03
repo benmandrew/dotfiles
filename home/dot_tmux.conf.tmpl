@@ -7,6 +7,11 @@ set-option -a terminal-features 'xterm-256color:RGB:extkeys'
 set-option -g focus-events on
 set -g extended-keys on
 
+# forward OSC 7 (cwd) escape sequences to the outer terminal so WezTerm can
+# track the pane's cwd through tmux — needed for SSH sessions where WezTerm
+# can't introspect the remote foreground process directly
+set -g allow-passthrough on
+
 # on: tmux sends OSC 52 to the client terminal on yank (works over SSH)
 set -s set-clipboard on
 
