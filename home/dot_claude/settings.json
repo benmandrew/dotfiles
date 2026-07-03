@@ -1,29 +1,4 @@
 {
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "rtk hook claude"
-          }
-        ]
-      }
-    ]
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "input=$(cat); pct=$(echo \"$input\" | jq -r '.context_window.remaining_percentage // empty'); [ -n \"$pct\" ] && printf 'ctx %.0f%%' \"$pct\" || echo 'ctx -'"
-  },
-  "effortLevel": "high",
-  "theme": "dark",
-  "enabledPlugins": {
-    "rust-analyzer-lsp@claude-plugins-official": true,
-    "clangd-lsp@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true,
-    "lua-lsp@claude-plugins-official": true
-  },
   "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
@@ -36,7 +11,6 @@
       "LS(**)",
       "NotebookRead(**)",
       "NotebookEdit(**)",
-
       "WebFetch(domain:docs.anthropic.com)",
       "WebFetch(domain:localhost)",
       "WebFetch(domain:127.0.0.1)",
@@ -47,11 +21,9 @@
       "WebFetch(domain:api.openai.com)",
       "WebFetch(domain:api.anthropic.com)",
       "WebSearch",
-
       "TodoRead",
       "TodoWrite(**)",
       "Task(**)",
-
       "Bash(* | *)",
       "Bash(* > *)",
       "Bash(* >> *)",
@@ -67,7 +39,6 @@
       "Bash(nohup * &)",
       "Bash(* > /dev/null 2>&1 &)",
       "Bash(disown*)",
-
       "Bash(ls*)",
       "Bash(ll*)",
       "Bash(cat *)",
@@ -106,17 +77,13 @@
       "Bash(stat *)",
       "Bash(file *)",
       "Bash(getfacl *)",
-
       "Bash(git *)",
-
       "Bash(docker *)",
       "Bash(docker-compose *)",
-
       "Bash(kubectl *)",
       "Bash(helm *)",
       "Bash(minikube *)",
       "Bash(kind *)",
-
       "Bash(ssh *)",
       "Bash(scp *)",
       "Bash(rsync *)",
@@ -124,7 +91,6 @@
       "Bash(ssh-add *)",
       "Bash(ssh-keyscan *)",
       "Bash(ssh-copy-id *)",
-
       "Bash(npm *)",
       "Bash(npx *)",
       "Bash(node *)",
@@ -187,14 +153,12 @@
       "Bash(dune *)",
       "Bash(utop *)",
       "Bash(jest *)",
-
       "Bash(nvm *)",
       "Bash(pyenv *)",
       "Bash(rbenv *)",
       "Bash(rvm *)",
       "Bash(asdf *)",
       "Bash(direnv *)",
-
       "Bash(aws *)",
       "Bash(gcloud *)",
       "Bash(gsutil *)",
@@ -204,9 +168,7 @@
       "Bash(netlify *)",
       "Bash(ntl *)",
       "Bash(heroku *)",
-
       "Bash(gh *)",
-
       "Bash(psql *)",
       "Bash(pg_dump *)",
       "Bash(pg_restore *)",
@@ -226,7 +188,6 @@
       "Bash(mongod *)",
       "Bash(sqlite3 *)",
       "Bash(redis-cli *)",
-
       "Bash(sudo docker *)",
       "Bash(sudo systemctl *)",
       "Bash(sudo journalctl *)",
@@ -248,7 +209,6 @@
       "Bash(brew *)",
       "Bash(yum *)",
       "Bash(dnf *)",
-
       "Bash(echo *)",
       "Bash(printf *)",
       "Bash(export *)",
@@ -281,7 +241,6 @@
       "Bash(shuf *)",
       "Bash(bc *)",
       "Bash(expr *)",
-
       "Bash(bash *)",
       "Bash(sh *)",
       "Bash(./*.sh*)",
@@ -289,12 +248,10 @@
       "Bash(bash scripts/*)",
       "Bash(sh scripts/*)",
       "Bash(source scripts/*)",
-
       "Bash(STACK_MANAGER_* npm *)",
       "Bash(N8N_* npm *)",
       "Bash(POSTGRES_* npm *)",
       "Bash(NODE_ENV=* npm *)",
-
       "Bash(jq *)",
       "Bash(yq *)",
       "Bash(tr *)",
@@ -306,7 +263,6 @@
       "Bash(csplit *)",
       "Bash(tee *)",
       "Bash(xargs *)",
-
       "Bash(curl *)",
       "Bash(wget *)",
       "Bash(ping *)",
@@ -322,7 +278,6 @@
       "Bash(traceroute *)",
       "Bash(ip *)",
       "Bash(ifconfig*)",
-
       "Bash(openssl *)",
       "Bash(tar *)",
       "Bash(gzip *)",
@@ -334,7 +289,6 @@
       "Bash(bunzip2 *)",
       "Bash(xz *)",
       "Bash(unxz *)",
-
       "Bash(uuidgen*)",
       "Bash(pwgen *)",
       "Bash(md5sum *)",
@@ -394,14 +348,11 @@
       "Bash(mkfs*)",
       "Bash(fdisk*)",
       "Bash(parted*)",
-
       "Bash(*fork*bomb*)",
-
       "Bash(> /dev/sda*)",
       "Bash(> /dev/nvme*)",
       "Bash(> /dev/sd*)",
       "Bash(cat /dev/urandom > *)",
-
       "Bash(* | nc -l*)",
       "Bash(* | netcat -l*)",
       "Bash(* | socat *)",
@@ -411,7 +362,6 @@
       "Bash(curl * | bash*)",
       "Bash(wget * | sh*)",
       "Bash(wget * | bash*)",
-
       "Bash(sudo passwd*)",
       "Bash(passwd*)",
       "Bash(sudo useradd*)",
@@ -421,7 +371,6 @@
       "Bash(sudo groupdel*)",
       "Bash(sudo adduser*)",
       "Bash(sudo deluser*)",
-
       "Bash(sudo chmod 777 /*)",
       "Bash(sudo chown * /*)",
       "Bash(sudo rm /etc/*)",
@@ -429,25 +378,21 @@
       "Bash(sudo rm /bin/*)",
       "Bash(sudo rm /usr/*)",
       "Bash(sudo > /etc/*)",
-
       "Bash(nc -l*)",
       "Bash(netcat -l*)",
       "Bash(socat*)",
       "Bash(nmap*)",
       "Bash(masscan*)",
-
       "Bash(*xmrig*)",
       "Bash(*monero*)",
       "Bash(*bitcoin*)",
       "Bash(*miner*)",
-
       "Bash(git push --force origin master*)",
       "Bash(git push --force origin main*)",
       "Bash(git push -f origin master*)",
       "Bash(git push -f origin main*)",
       "Bash(git reset --hard origin/master*)",
       "Bash(git reset --hard origin/main*)",
-
       "Bash(cat ~/.aws/*)",
       "Bash(cat /Users/*/.aws/*)",
       "Bash(cat /home/*/.aws/*)",
@@ -456,25 +401,21 @@
       "Bash(cat /Users/*/.ssh/id_*)",
       "Bash(cat /home/*/.ssh/id_*)",
       "Bash(cat /root/.ssh/*)",
-
       "Bash(env | base64*)",
       "Bash(printenv | base64*)",
       "Bash(set | base64*)",
-
       "Bash(bash -i >& /dev/tcp/*)",
       "Bash(sh -i >& /dev/tcp/*)",
       "Bash(python -c 'import socket*)",
       "Bash(php -r '$sock*)",
       "Bash(ruby -rsocket*)",
       "Bash(perl -e 'use Socket*)",
-
       "Bash(docker run --privileged *)",
       "Bash(docker run --pid=host *)",
       "Bash(docker run --net=host *)",
       "Bash(docker run -v /:/host *)",
       "Bash(docker run -v /etc:/etc *)",
       "Bash(docker run -v /var/run/docker.sock:/var/run/docker.sock *)",
-
       "Bash(history | grep -i password*)",
       "Bash(history | grep -i token*)",
       "Bash(history | grep -i secret*)",
@@ -484,7 +425,6 @@
       "Bash(find / -name id_rsa*)",
       "Bash(find / -name *.key*)",
       "Bash(find / -name *.pem*)",
-
       "Bash(shutdown*)",
       "Bash(reboot*)",
       "Bash(halt*)",
@@ -493,80 +433,91 @@
       "Bash(init 6*)",
       "Bash(sudo shutdown*)",
       "Bash(sudo reboot*)",
-
       "Bash(sudo ufw disable*)",
       "Bash(sudo iptables -F*)",
       "Bash(sudo iptables --flush*)",
       "Bash(sudo systemctl stop firewalld*)",
       "Bash(sudo service iptables stop*)",
-
       "Bash(curl * | sudo *)",
       "Bash(wget * | sudo *)",
       "Bash(curl -s * | sh*)",
       "Bash(wget -qO- * | sh*)",
-
       "Bash(rm /var/log/*)",
       "Bash(rm -rf /var/log/*)",
       "Bash(> /var/log/*)",
       "Bash(echo > /var/log/*)",
       "Bash(truncate -s 0 /var/log/*)",
-
       "Bash(npm install -g * --unsafe-perm*)",
       "Bash(pip install * --break-system-packages*)",
       "Bash(gem install * --no-user-install*)",
-
       "Bash(insmod *)",
       "Bash(rmmod *)",
       "Bash(modprobe *)",
       "Bash(sysctl -w *)",
-
       "Bash(chmod -R 777 /*)",
       "Bash(chmod 777 /etc/*)",
       "Bash(chmod 777 /bin/*)",
       "Bash(chmod 777 /usr/*)",
       "Bash(chown -R * /*)",
-
       "Bash(*bitcoin-cli*)",
       "Bash(*ethereum*)",
       "Bash(*wallet.dat*)",
       "Bash(*privatekey*)",
-
       "Bash(find / -type f -delete*)",
       "Bash(find / -type d -delete*)",
       "Bash(rm -rf /home/*)",
       "Bash(rm -rf /var/*)",
       "Bash(rm -rf /opt/*)",
-
       "Bash(gdb -p *)",
       "Bash(ptrace *)",
       "Bash(LD_PRELOAD=*)",
-
       "Bash(sudo -l*)",
       "Bash(sudo -V*)",
       "Bash(sudo su*)",
       "Bash(sudo su -*)",
       "Bash(sudo -i*)",
       "Bash(pkexec *)",
-
       "Bash(export PATH=*)",
       "Bash(export LD_LIBRARY_PATH=*)",
       "Bash(export PYTHONPATH=*)",
-
       "Bash(nsenter *)",
       "Bash(docker run --cap-add=ALL *)",
       "Bash(docker run --security-opt *)",
-
       "Bash(systemctl mask *)",
       "Bash(systemctl disable *)",
       "Bash(systemctl daemon-reload*)",
-
       "Bash(curl http://169.254.169.254/*)",
       "Bash(wget http://169.254.169.254/*)",
       "Bash(curl http://metadata.google.internal/*)",
-
       "Bash(exec < /dev/tcp/*)",
       "Bash(exec > /dev/tcp/*)",
       "Bash(exec 3<>/dev/tcp/*)"
     ]
-  }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "rtk hook claude"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "input=$(cat); pct=$(echo \"$input\" | jq -r '.context_window.remaining_percentage // empty'); [ -n \"$pct\" ] && printf 'ctx %.0f%%' \"$pct\" || echo 'ctx -'"
+  },
+  "enabledPlugins": {
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "clangd-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "lua-lsp@claude-plugins-official": true
+  },
+  "effortLevel": "high",
+  "theme": "dark",
+  "skipDangerousModePermissionPrompt": true
 }
