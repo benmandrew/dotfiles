@@ -53,6 +53,7 @@ export PATH="$PATH:/usr/local/bin"
 export PATH="$PATH:$HOME/.local/bin"
 export PATH="$PATH:$HOME/usr/bin"
 export PATH="$PATH:/usr/local/go/bin"
+export PATH="$PATH:${GOPATH:-$HOME/go}/bin"
 export PATH="$PATH:$HOME/.cargo/bin"
 export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
 
@@ -86,9 +87,9 @@ export VISUAL=vim
 export EDITOR="$VISUAL"
 
 {{ if eq .chezmoi.os "darwin" }}
-export PAGER=most
+export PAGER=moor
 {{ else if eq .chezmoi.os "linux" }}
-export PAGER="most -w -t4"
+export PAGER="moor --wrap --tab-size=4"
 {{ end }}
 
 alias ls="eza --long --group-directories-first"

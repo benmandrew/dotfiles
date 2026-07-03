@@ -2,7 +2,7 @@
 
 set -uo pipefail
 
-export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${HOME}/.fzf/bin:/opt/nvim-linux-x86_64/bin:/opt/nvim-linux-arm64/bin:/nix/var/nix/profiles/default/bin:${PATH}"
+export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${HOME}/.fzf/bin:${HOME}/go/bin:/opt/nvim-linux-x86_64/bin:/opt/nvim-linux-arm64/bin:/nix/var/nix/profiles/default/bin:${PATH}"
 
 ok=0
 fail=0
@@ -50,6 +50,7 @@ check_cmd direnv
 check_cmd pyright
 check_cmd lua-language-server
 check_cmd opam
+check_cmd moor
 check_cmd eza
 check_cmd fd
 check_cmd bat

@@ -126,6 +126,7 @@ Shared functions called by both platform scripts, in order:
 | `install_pyright` | `pyright` via `npm install -g` |
 | `install_lua_ls` | `lua-language-server` via `brew` (macOS) or GitHub releases binary (Linux) |
 | `install_opam` | `opam` (OCaml package manager) via `brew` (macOS) or GitHub releases binary (Linux) |
+| `install_moor` | `moor` pager (formerly `moar`) — `brew install moor` (macOS) or `go install github.com/walles/moor/v2/cmd/moor@latest` (Linux, no official arm64 binary/apt package yet) |
 | `install_eza` | `eza` via `cargo install` |
 | `install_fd` | `fd` via `cargo install fd-find` |
 | `install_bat` | `bat` via `cargo install` |
@@ -154,7 +155,7 @@ MCP servers are registered at user scope (`-s user`) and are idempotent (checked
 
 Checks that all expected commands and directories exist after installation. Run after an install script to confirm nothing is missing. Exits non-zero if any check fails.
 
-Checks: `git curl zsh tmux entr rustup cargo rust-analyzer clangd cmake nix direnv pyright lua-language-server opam eza fd zoxide fzf claude rtk node npm uv uvx ccusage starship nvim`, plus dirs `~/.local/share/zinit/zinit.git`, `~/.tmux/plugins/tpm`. On non-headless machines, also checks WezTerm and the CodeNewRoman Nerd Font (cask on macOS, `~/.local/share/fonts/CodeNewRomanNerdFont` dir on Linux).
+Checks: `git curl zsh tmux entr rustup cargo rust-analyzer clangd cmake nix direnv pyright lua-language-server opam moor eza fd zoxide fzf claude rtk node npm uv uvx ccusage starship nvim`, plus dirs `~/.local/share/zinit/zinit.git`, `~/.tmux/plugins/tpm`. On non-headless machines, also checks WezTerm and the CodeNewRoman Nerd Font (cask on macOS, `~/.local/share/fonts/CodeNewRomanNerdFont` dir on Linux).
 
 ## Key Areas
 

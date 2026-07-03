@@ -1100,6 +1100,44 @@ install_opam() {
     opam init "${init_flags[@]}"
 }
 
+install_moor() {
+    local os_name
+    os_name="$(uname -s)"
+
+    if [[ "${os_name}" == "Darwin" ]]; then
+        if brew list --formula moor >/dev/null 2>&1; then
+            if [[ -z "${UPGRADE:-}" ]]; then
+                log "moor already installed; skipping"
+                return
+            fi
+            log "Upgrading moor"
+            brew upgrade moor
+            return
+        fi
+        log "Installing moor"
+        brew install moor
+        return
+    fi
+
+    # Linux: apt only ships moor on very recent distros (Debian sid/forky,
+    # Ubuntu 26.04+) and upstream publishes no linux-arm64 binary, so build
+    # it with go install instead; GOTOOLCHAIN=auto fetches a matching Go
+    # toolchain on demand if the system Go is older than go.mod requires.
+    if command -v moor >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "moor already installed; skipping"
+            return
+        fi
+        log "Upgrading moor"
+    else
+        log "Installing moor"
+    fi
+    if ! command -v go >/dev/null 2>&1; then
+        sudo apt install -y golang-go
+    fi
+    go install github.com/walles/moor/v2/cmd/moor@latest
+}
+
 print_chezmoi_init_hint() {
     log "You can initialize chezmoi with: chezmoi init --apply git@github.com:benmandrew/dotfiles.git"
 }
