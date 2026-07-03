@@ -30,12 +30,25 @@ check_dir() {
     fi
 }
 
+# perf (linux-tools-generic) depends on an exact-version kernel-tools package
+# that isn't always available on cloud/CI kernels, so its absence is a
+# warning rather than a failure.
+check_cmd_optional() {
+    local name="$1"
+    if command -v "${name}" >/dev/null 2>&1; then
+        printf "\033[1;32m[ok]\033[0m   %s\n" "${name}"
+        ((ok++)) || true
+    else
+        printf "\033[1;33m[warn]\033[0m %s (optional, not installed)\n" "${name}"
+    fi
+}
+
 check_cmd git
 check_cmd curl
 check_cmd zsh
 check_cmd tmux
 check_cmd entr
-check_cmd perf
+check_cmd_optional perf
 
 check_dir "zinit" "${HOME}/.local/share/zinit/zinit.git"
 

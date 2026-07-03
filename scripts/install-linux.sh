@@ -28,6 +28,21 @@ install_apt_packages_if_missing() {
     sudo apt install -y "${missing_packages[@]}"
 }
 
+install_perf() {
+    if command -v perf >/dev/null 2>&1; then
+        log "perf already installed; skipping"
+        return
+    fi
+    log "Installing perf (linux-tools-generic)"
+    # linux-tools-generic depends on an exact-version linux-tools-$(uname -r)
+    # package. Cloud/CI runners often run a custom kernel with no matching
+    # package in the archive, so this install is best-effort: warn and
+    # continue rather than failing the whole script.
+    if ! sudo apt install -y linux-tools-generic; then
+        log "WARNING: failed to install linux-tools-generic (perf); skipping, this is expected on some cloud kernels"
+    fi
+}
+
 install_node() {
     if command -v node >/dev/null 2>&1; then
         local node_major
@@ -89,7 +104,8 @@ main() {
     require_cmd ssh-keygen
     require_cmd dpkg
     require_cmd apt
-    install_apt_packages_if_missing git curl build-essential zsh entr libevent-dev libncurses-dev pkg-config bubblewrap bison autoconf linux-tools-generic unzip
+    install_apt_packages_if_missing git curl build-essential zsh entr libevent-dev libncurses-dev pkg-config bubblewrap bison autoconf unzip
+    install_perf
     run_step install_tmux_from_source
     run_step install_cmake
     run_step install_nix

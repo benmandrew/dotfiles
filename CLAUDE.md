@@ -92,11 +92,12 @@ All scripts are idempotent — each step checks whether the tool is already pres
 
 Requires: `sudo`, `apt`, `dpkg`, `ssh-keygen`. Supports x86_64 and aarch64 — arch is detected at runtime.
 
-1. `apt install` — `git curl build-essential zsh entr linux-tools-generic` plus tmux build deps
-2. tmux built from source
-3. Node.js LTS via NodeSource setup script (skipped if `node ≥ 20` present)
-4. Neovim — downloads official Linux binary to `/opt/nvim-linux-<arch>/`
-5. All common tools (see below)
+1. `apt install` — `git curl build-essential zsh entr` plus tmux build deps
+2. `perf` (`linux-tools-generic`) — best-effort; skipped with a warning (not a failure) if the exact-version kernel-tools package isn't available, which is common on cloud/CI kernels
+3. tmux built from source
+4. Node.js LTS via NodeSource setup script (skipped if `node ≥ 20` present)
+5. Neovim — downloads official Linux binary to `/opt/nvim-linux-<arch>/`
+6. All common tools (see below)
 
 ### `scripts/install-macos-arm64.sh`
 
