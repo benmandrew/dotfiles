@@ -94,7 +94,15 @@ export PAGER="moor --wrap --tab-size=4"
 export MANPAGER="$PAGER"
 alias less=moor
 
-alias ls="eza --long --group-directories-first"
+# Function (not alias) so piping still works: eza's --long forces its table
+# format even when stdout isn't a tty, which breaks idioms like `ls | xargs`.
+ls() {
+  if [[ -t 1 ]]; then
+    eza --long --group-directories-first "$@"
+  else
+    eza --oneline --group-directories-first "$@"
+  fi
+}
 alias lsa="eza --long --group-directories-first --all"
 alias python="python3"
 
