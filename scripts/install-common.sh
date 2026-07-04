@@ -92,6 +92,8 @@ github_latest_tag() {
     local repo="$1"
     local tmp
     tmp="$(mktemp)"
+    # RETURN traps persist for the caller too until unset, so clear it here
+    # or it would also fire (and re-delete an unrelated tmp) when the caller returns.
     trap 'rm -f "${tmp}"; trap - RETURN' RETURN
     github_api_curl "https://api.github.com/repos/${repo}/releases/latest" -o "${tmp}"
     local tag_line tag
@@ -119,6 +121,9 @@ version_gte() {
     ((cur_patch >= req_patch))
 }
 
+# safe_git/ensure_user_owns exist because upgrade paths for git-cloned tools
+# (zinit, fzf, tpm) have hit repos owned by root — e.g. from an earlier sudo
+# or CI run — which makes plain git refuse ("dubious ownership") or fail to write.
 safe_git() {
     local dir="$1"
     shift

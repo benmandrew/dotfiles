@@ -18,6 +18,8 @@ jobs:
         uses: dorny/paths-filter@v3
         id: filter
         with:
+          # install-macos-arm64.sh is deliberately excluded: this runner is
+          # ubuntu-latest, so a macOS-only script change can't be exercised here
           filters: |
             install:
               - 'scripts/install-common.sh'

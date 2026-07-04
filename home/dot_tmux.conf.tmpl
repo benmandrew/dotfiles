@@ -3,6 +3,8 @@ unbind C-b
 set-option -g prefix C-a
 bind-key C-a send-prefix
 
+# RGB for truecolor; extkeys so tmux passes through distinct codes for
+# modified keys (e.g. Ctrl/Option+arrow) instead of collapsing them
 set-option -a terminal-features 'xterm-256color:RGB:extkeys'
 set-option -g focus-events on
 set -g extended-keys on
@@ -18,6 +20,8 @@ set -s set-clipboard on
 # reload config file
 bind r source-file ~/.tmux.conf
 
+# 0 avoids the default ~500ms delay tmux inserts after ESC, which reads as
+# lag when exiting insert mode in vim/nvim
 set -sg escape-time 0
 
 # mirror WezTerm split/navigation bindings

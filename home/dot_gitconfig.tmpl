@@ -25,6 +25,8 @@
     excludesfile = {{ .chezmoi.homeDir }}/.config/git/.gitignore_global
     editor = nvim
 {{ if eq .chezmoi.os "darwin" }}
+    # --paging=never stops delta spawning its own pager, which would nest
+    # a second pager inside moor instead of streaming straight into it
     pager = delta --paging=never | moor
 {{ else if eq .chezmoi.os "linux" }}
     pager = delta --paging=never | moor --wrap --tab-size=4

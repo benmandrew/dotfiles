@@ -11,6 +11,8 @@ fi
 unset _zsh_nvm_plugin
 
 autoload -Uz compinit
+# Only rebuild the completion cache once a day (1440 min); -C on other
+# startups skips compinit's expensive rescan of $fpath entirely.
 if [[ -z "$(find "${ZDOTDIR:-$HOME}/.zcompdump" -mmin -1440 2>/dev/null)" ]]; then
   compinit
   # Compile dump in background; subsequent startups source the faster .zwc
@@ -171,6 +173,8 @@ _cache_eval direnv hook zsh
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
+# Self-removing shim: only pay for sourcing opam-init on the first call,
+# then unfunction so later invocations hit the real opam binary directly.
 opam() {
   unfunction opam
   [[ -r "$HOME/.opam/opam-init/init.zsh" ]] && source "$HOME/.opam/opam-init/init.zsh" > /dev/null 2>&1

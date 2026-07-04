@@ -34,6 +34,8 @@ lint-typos:
 	@printf '$(BOLD_BLUE)[checking spelling]$(RESET)\n'
 	@typos
 
+# RUST_LOG is set on xargs, not taplo, but env vars propagate to the child
+# process xargs spawns, so it still silences taplo's noisy info-level logs.
 lint-toml:
 	@printf '$(BOLD_BLUE)[linting TOML]$(RESET)\n'
 	@find . -name '*.toml' -not -path './.git/*' | RUST_LOG=warn xargs taplo lint

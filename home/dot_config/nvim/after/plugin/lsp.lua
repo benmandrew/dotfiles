@@ -23,6 +23,9 @@ vim.lsp.config("*", {
     capabilities = require("cmp_nvim_lsp").default_capabilities(),
 })
 
+-- Only needed for its bundled per-server default configs (e.g. lua_ls in
+-- lsp/lua_ls.lua); actual enabling uses the native 0.11+ API below, not
+-- lspconfig's own .setup{} calls
 require("lspconfig")
 
 vim.lsp.enable({
