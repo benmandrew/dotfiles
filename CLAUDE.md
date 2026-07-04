@@ -142,15 +142,13 @@ Shared functions called by both platform scripts, in order:
 | `install_token_savior` | MCP server — registered via `claude mcp add` using `uvx` |
 | `install_token_optimizer_mcp` | MCP server — registered via `claude mcp add` using `npx` |
 | `install_ccusage` | `ccusage` CLI (`npm install -g`) + MCP server registration |
-| `install_mcp_manim` | MCP server — clones gist, builds Docker image, registers |
-| `install_mcp_latex` | MCP server — clones gist, builds Docker image, registers |
 | `install_git_mcp` | MCP server — registers `npx mcp-remote` pointing to gitmcp.io |
 | `install_starship` | Starship prompt via install script |
 | `install_tmux_plugins` | tpm to `~/.tmux/plugins/tpm` |
 | `install_wezterm` | WezTerm — `brew install --cask` (macOS), `.deb` from GitHub releases (Linux x86_64); skipped on ARM64 |
 | `install_nerd_font` | CodeNewRoman Nerd Font — `brew install --cask font-code-new-roman-nerd-font` (macOS) or GitHub releases zip extracted to `~/.local/share/fonts/` (Linux); skipped on headless Linux |
 
-MCP servers are registered at user scope (`-s user`) and are idempotent (checked via `claude mcp list`). `mcp-manim` and `mcp-latex` require Docker.
+MCP servers are registered at user scope (`-s user`) and are idempotent (checked via `claude mcp list`).
 
 ### `scripts/verify-install.sh`
 

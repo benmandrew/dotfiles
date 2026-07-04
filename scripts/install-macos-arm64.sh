@@ -136,8 +136,6 @@ main() {
     run_step install_token_savior
     run_step install_token_optimizer_mcp
     run_step install_ccusage
-    run_step install_mcp_manim
-    run_step install_mcp_latex
     run_step install_git_mcp
     run_step install_starship
     run_step install_tmux_plugins
