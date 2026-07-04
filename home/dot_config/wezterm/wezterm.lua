@@ -75,6 +75,18 @@ wezterm.on("format-tab-title", function(tab)
     return " [" .. title .. "] "
 end)
 
+-- Clear the Claude Code notification flag (see dot_claude/executable_wezterm-notify.sh)
+-- once its tab is actually viewed, reverting to the auto cwd-based title.
+wezterm.on("update-status", function(window)
+    local tab = window:active_tab()
+    if tab then
+        local title = tab:get_title()
+        if title and title:find("^🔔") then
+            tab:set_title("")
+        end
+    end
+end)
+
 -- Behaviour
 config.scrollback_lines = 10000
 config.audible_bell = "Disabled"

@@ -505,6 +505,17 @@
           }
         ]
       }
+    ],
+    "Notification": [
+      {
+        "matcher": "idle_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/wezterm-notify.sh"
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
