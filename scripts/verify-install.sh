@@ -67,6 +67,7 @@ check_cmd moor
 check_cmd eza
 check_cmd fd
 check_cmd bat
+check_cmd btop
 check_cmd zoxide
 check_cmd fzf
 check_cmd gh

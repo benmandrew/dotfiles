@@ -196,6 +196,32 @@ install_rust_analyzer() {
     rustup component add rust-analyzer
 }
 
+install_btop() {
+    if command -v btop >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "btop already installed; skipping"
+            return
+        fi
+        log "Upgrading btop"
+        local os_name
+        os_name="$(uname -s)"
+        if [[ "${os_name}" == "Darwin" ]]; then
+            brew upgrade btop
+        else
+            sudo apt install -y btop
+        fi
+        return
+    fi
+    log "Installing btop"
+    local os_name
+    os_name="$(uname -s)"
+    if [[ "${os_name}" == "Darwin" ]]; then
+        brew install btop
+    else
+        sudo apt install -y btop
+    fi
+}
+
 install_clangd() {
     if command -v clangd >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then
