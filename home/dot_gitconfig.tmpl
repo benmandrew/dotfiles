@@ -24,7 +24,11 @@
 [core]
     excludesfile = {{ .chezmoi.homeDir }}/.config/git/.gitignore_global
     editor = nvim
-    pager = delta
+{{ if eq .chezmoi.os "darwin" }}
+    pager = delta --paging=never | moor
+{{ else if eq .chezmoi.os "linux" }}
+    pager = delta --paging=never | moor --wrap --tab-size=4
+{{ end }}
 [interactive]
     diffFilter = delta --color-only
 [delta]
