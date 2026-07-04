@@ -22,7 +22,7 @@ return {
     settings = {
         Lua = {
             workspace = {
-                userThirdParty = { os.getenv("HOME") .. ".local/share/LuaAddons/love2d/library" },
+                userThirdParty = { os.getenv("HOME") .. "/.local/share/LuaAddons/love2d/library" },
                 checkThirdParty = "Apply",
             },
         },
