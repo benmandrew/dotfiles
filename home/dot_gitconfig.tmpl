@@ -24,6 +24,12 @@
 [core]
     excludesfile = {{ .chezmoi.homeDir }}/.config/git/.gitignore_global
     editor = nvim
+    pager = delta
+[interactive]
+    diffFilter = delta --color-only
+[delta]
+    navigate = true
+    line-numbers = true
 [tag]
     gpgsign = true
 [gpg]

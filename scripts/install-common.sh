@@ -222,6 +222,32 @@ install_btop() {
     fi
 }
 
+install_jq() {
+    if command -v jq >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "jq already installed; skipping"
+            return
+        fi
+        log "Upgrading jq"
+        local os_name
+        os_name="$(uname -s)"
+        if [[ "${os_name}" == "Darwin" ]]; then
+            brew upgrade jq
+        else
+            sudo apt install -y jq
+        fi
+        return
+    fi
+    log "Installing jq"
+    local os_name
+    os_name="$(uname -s)"
+    if [[ "${os_name}" == "Darwin" ]]; then
+        brew install jq
+    else
+        sudo apt install -y jq
+    fi
+}
+
 install_clangd() {
     if command -v clangd >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then
@@ -358,6 +384,9 @@ install_pyright() {
 install_eza() { install_cargo_tool eza; }
 install_fd() { install_cargo_tool fd fd-find; }
 install_bat() { install_cargo_tool bat; }
+install_ripgrep() { install_cargo_tool rg ripgrep; }
+install_git_delta() { install_cargo_tool delta git-delta; }
+install_hyperfine() { install_cargo_tool hyperfine; }
 
 install_gh() {
     if command -v gh >/dev/null 2>&1; then
