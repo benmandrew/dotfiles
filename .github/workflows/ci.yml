@@ -46,6 +46,11 @@ jobs:
       - name: Format check
         run: nix develop --command make fmt-ci
 
+      - name: Create placeholder SSH identity file
+        # sshconfig-lint's MISSING_IDENTITY check verifies IdentityFile paths
+        # exist on disk; the runner has no real key, so stub one out.
+        run: mkdir -p ~/.ssh && touch ~/.ssh/id_benmandrew
+
       - name: Lint check
         run: nix develop --command make lint
 

@@ -16,6 +16,21 @@
       system:
       let
         pkgs = import nixpkgs { inherit system; };
+        sshconfig-lint = pkgs.rustPlatform.buildRustPackage rec {
+          pname = "sshconfig-lint";
+          version = "0.4.0";
+          src = pkgs.fetchCrate {
+            inherit pname version;
+            hash = "sha256-jk7UO0EXAlznDkrUbsMHJfz+4/0pVp6bn/KB6upV6sI=";
+          };
+          cargoHash = "sha256-AlNrND4Dejud0PuqV2RvyNHbjun/Fq2lkg6ud17GwoY=";
+          meta = with pkgs.lib; {
+            description = "Linter for OpenSSH client config files";
+            homepage = "https://github.com/Noah4ever/sshconfig-lint";
+            license = licenses.mit;
+            mainProgram = "sshconfig-lint";
+          };
+        };
       in
       {
         devShells.default = pkgs.mkShell {
@@ -29,6 +44,7 @@
             taplo
             typos
             checkmake
+            sshconfig-lint
           ];
         };
       }
