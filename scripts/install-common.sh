@@ -487,6 +487,7 @@ install_nix() {
         log "Upgrading Nix"
         sudo -i nix upgrade-nix
         enable_nix_flakes
+        configure_nix_gc
         return
     fi
     log "Installing Nix"
@@ -499,6 +500,7 @@ install_nix() {
     source_nix_profile
 
     enable_nix_flakes
+    configure_nix_gc
 }
 
 install_direnv() {

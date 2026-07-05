@@ -29,7 +29,7 @@ Alternatively, if you have [Nix](https://nixos.org) installed (`scripts/install-
 $ nix develop
 ```
 
-If you installed Nix some other way, flakes are an experimental feature not enabled by default; add this to `~/.config/nix/nix.conf` (or `/etc/nix/nix.conf`) once:
+`chezmoi apply` deploys `~/.config/nix/nix.conf` (enabling flakes and setting `min-free`/`max-free` so the store auto-collects garbage instead of growing unbounded). If you installed Nix some other way and haven't run `chezmoi apply`, add at least this once:
 
 ```
 experimental-features = nix-command flakes

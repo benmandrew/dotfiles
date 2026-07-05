@@ -120,7 +120,7 @@ Shared functions called by both platform scripts, in order:
 | `install_rust_analyzer` | `rust-analyzer` via `rustup component add` |
 | `install_clangd` | `clangd` via apt (Linux) or `brew install llvm` (macOS) |
 | `install_cmake` | cmake >= 4.3.2 — prebuilt binary from GitHub releases (Linux x86_64/ARM64), or `brew install/upgrade cmake` (macOS) |
-| `install_nix` | Nix package manager — official multi-user (`--daemon`) installer from nixos.org; powers `flake.nix` devShells |
+| `install_nix` | Nix package manager — official multi-user (`--daemon`) installer from nixos.org; powers `flake.nix` devShells. `enable_nix_flakes` appends the flakes line as an immediate-post-install fallback; `home/dot_config/nix/nix.conf` (flakes + `min-free`/`max-free` auto-GC) is the source of truth once `chezmoi apply` has run |
 | `install_direnv` | `direnv` binary via official install script to `~/.local/bin`; hooked into zsh via `_cache_eval direnv hook zsh` |
 | `install_nix_direnv` | `nix-direnv` via `nix profile install`, wired into `~/.config/direnv/direnvrc`, for cached devShell loading; installs `install_modern_bash` first |
 | `install_modern_bash` | macOS only — installs bash >= 4.4 via `nix profile install nixpkgs#bash`, since nix-direnv requires it and macOS ships bash 3.2 |
