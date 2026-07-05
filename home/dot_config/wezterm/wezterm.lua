@@ -62,6 +62,9 @@ config.tab_bar_at_bottom = false
 config.hide_tab_bar_if_only_one_tab = true
 
 -- Tab title: focused directory's name, unless manually renamed
+local TAB_TITLE_MAX_WIDTH = 24
+-- Room for the " [" / "] " decoration around the truncated title above
+config.tab_max_width = TAB_TITLE_MAX_WIDTH + 4
 wezterm.on("format-tab-title", function(tab)
     local title = tab.tab_title
     if not (title and #title > 0) then
@@ -72,7 +75,7 @@ wezterm.on("format-tab-title", function(tab)
             title = tab.active_pane.title
         end
     end
-    return " [" .. title .. "] "
+    return " [" .. wezterm.truncate_right(title, TAB_TITLE_MAX_WIDTH) .. "] "
 end)
 
 -- Clear the Claude Code notification flag (see dot_claude/executable_wezterm-notify.sh)
