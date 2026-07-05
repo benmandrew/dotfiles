@@ -2,18 +2,20 @@ Host emel
 	HostName emel
 	Port 2222
 	User dev
-	IdentityFile ~/.ssh/id_benmandrew
 
 Host github.com
 	HostName github.com
 	User git
+
+Host *
+	IdentityFile ~/.ssh/id_benmandrew
+	IdentitiesOnly yes
 	AddKeysToAgent yes
 {{ if eq .chezmoi.os "darwin" -}}
 	UseKeychain yes
 {{ end -}}
-	IdentityFile ~/.ssh/id_benmandrew
-	IdentitiesOnly yes
-
-Host ssh.git.benmandrew.com
-	IdentityFile ~/.ssh/id_benmandrew
-	IdentitiesOnly yes
+	ServerAliveInterval 60
+	ServerAliveCountMax 3
+	ControlMaster auto
+	ControlPath ~/.ssh/sockets/%C
+	ControlPersist 600
