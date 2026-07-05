@@ -473,6 +473,29 @@ source_nix_profile() {
     [[ -f "/etc/profile.d/nix.sh" ]] && source /etc/profile.d/nix.sh
 }
 
+# min-free/max-free/auto-optimise-store/extra-substituters etc. in
+# ~/.config/nix/nix.conf are "restricted settings": the multi-user daemon
+# silently ignores them from anyone not listed in /etc/nix/nix.conf's
+# trusted-users (which defaults to root only), so grant the installing user
+# trust to make the chezmoi-managed nix.conf actually take effect.
+configure_nix_trusted_user() {
+    local sys_conf="/etc/nix/nix.conf"
+    local user
+    user="$(whoami)"
+    if [[ -f "${sys_conf}" ]] && grep -qE "^[[:space:]]*(extra-)?trusted-users[[:space:]]*=.*\b${user}\b" "${sys_conf}"; then
+        return
+    fi
+    log "Adding ${user} to Nix trusted-users"
+    echo "extra-trusted-users = ${user}" | sudo tee -a "${sys_conf}" >/dev/null
+    local os_name
+    os_name="$(uname -s)"
+    if [[ "${os_name}" == "Darwin" ]]; then
+        sudo launchctl kickstart -k system/org.nixos.nix-daemon
+    else
+        sudo systemctl restart nix-daemon
+    fi
+}
+
 install_nix() {
     if command -v nix >/dev/null 2>&1 || [[ -x /nix/var/nix/profiles/default/bin/nix ]]; then
         # command -v may miss an existing install under non-login shells
@@ -482,12 +505,13 @@ install_nix() {
         if [[ -z "${UPGRADE:-}" ]]; then
             log "Nix already installed; skipping"
             enable_nix_flakes
+            configure_nix_trusted_user
             return
         fi
         log "Upgrading Nix"
         sudo -i nix upgrade-nix
         enable_nix_flakes
-        configure_nix_gc
+        configure_nix_trusted_user
         return
     fi
     log "Installing Nix"
@@ -500,7 +524,7 @@ install_nix() {
     source_nix_profile
 
     enable_nix_flakes
-    configure_nix_gc
+    configure_nix_trusted_user
 }
 
 install_direnv() {

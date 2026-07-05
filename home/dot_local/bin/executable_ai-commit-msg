@@ -1,0 +1,76 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10,<3.13"
+# dependencies = ["open-interpreter", "setuptools<81"]
+# ///
+import os
+import subprocess
+import sys
+import warnings
+
+# pkg_resources warns on import (setuptools >=81), attributed to the
+# importing module (interpreter's own code) rather than to pkg_resources
+# itself, so match on message text instead of module.
+warnings.filterwarnings("ignore", category=UserWarning, message="pkg_resources is deprecated")
+
+from interpreter import interpreter
+
+interpreter.offline = True
+interpreter.auto_run = True
+# interpreter.llm.model = "ollama_chat/llama3.1:8b"
+# interpreter.llm.model = "ollama_chat/qwen2.5-coder:7b"
+interpreter.llm.model = "ollama_chat/qwen2.5-coder:14b"
+interpreter.llm.api_base = "http://100.68.151.125:11434"
+interpreter.llm.context_window = 16000
+interpreter.llm.max_tokens = 3200
+
+# Prefer AGENTS.md (symlink to CLAUDE.md) if present, else fall back to CLAUDE.md directly.
+for filename in ("AGENTS.md", "CLAUDE.md"):
+    path = os.path.join(os.getcwd(), filename)
+    if os.path.isfile(path):
+        with open(path) as f:
+            interpreter.custom_instructions = f.read()
+        break
+
+diff = subprocess.run(
+    ["git", "diff", "--staged"], capture_output=True, text=True, check=True
+).stdout
+if not diff.strip():
+    print("error: no staged changes (git diff --staged is empty)", file=sys.stderr)
+    sys.exit(1)
+
+prompt = f"""Read the diff below. Output ONLY a commit message in this exact
+format, nothing else, no markdown code fences. Use conventional commit format:
+
+<type>(<scope>): <subject>
+
+<body>
+
+Diff:
+{diff}"""
+
+try:
+    messages = interpreter.chat(prompt, display=False)
+finally:
+    # Shuts down the Jupyter kernel interpreter starts for code execution;
+    # otherwise it notices this process exiting and logs an IPKernelApp
+    # warning. finally also runs on Ctrl-C (KeyboardInterrupt), which is
+    # when this most often triggers since chat() blocks on the model.
+    interpreter.computer.terminate()
+
+text = next(
+    (
+        m["content"]
+        for m in reversed(messages)
+        if m.get("role") == "assistant" and m.get("type") == "message"
+    ),
+    None,
+)
+if text is None:
+    print("error: no assistant text message in response", file=sys.stderr)
+    sys.exit(1)
+
+# Small local models sometimes wrap output in code fences despite the
+# instruction above; strip any such lines before handing off the message.
+clean = "\n".join(line for line in text.splitlines() if not line.startswith("```"))
+print(clean.strip())
