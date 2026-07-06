@@ -943,55 +943,6 @@ install_tailscale() {
     rm -f "${script_path}"
 }
 
-install_mullvad() {
-    local os_name
-    os_name="$(uname -s)"
-
-    if [[ "${os_name}" == "Linux" ]] && [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
-        log "Mullvad: no display session detected; skipping on headless Linux"
-        return
-    fi
-
-    if [[ "${os_name}" == "Darwin" ]]; then
-        if brew list --cask mullvadvpn >/dev/null 2>&1; then
-            if [[ -z "${UPGRADE:-}" ]]; then
-                log "Mullvad already installed; skipping"
-                return
-            fi
-            log "Upgrading Mullvad"
-            brew upgrade --cask mullvadvpn
-            return
-        fi
-        log "Installing Mullvad"
-        brew install --cask mullvadvpn
-        return
-    fi
-
-    if command -v mullvad >/dev/null 2>&1; then
-        if [[ -z "${UPGRADE:-}" ]]; then
-            log "Mullvad already installed; skipping"
-            return
-        fi
-        log "Upgrading Mullvad"
-        sudo apt install -y mullvad-vpn
-        return
-    fi
-    log "Installing Mullvad"
-    sudo mkdir -p -m 755 /etc/apt/keyrings
-    local mullvad_keyring
-    mullvad_keyring="$(curl -fsSL https://repository.mullvad.net/deb/stable/mullvad-keyring.asc)"
-    echo "${mullvad_keyring}" | sudo gpg --dearmor -o /usr/share/keyrings/mullvad-keyring.gpg
-    local arch codename_line codename
-    arch="$(dpkg --print-architecture)"
-    codename_line="$(grep -m1 '^VERSION_CODENAME=' /etc/os-release || true)"
-    codename="${codename_line#VERSION_CODENAME=}"
-    codename="${codename//\"/}"
-    echo "deb [signed-by=/usr/share/keyrings/mullvad-keyring.gpg arch=${arch}] https://repository.mullvad.net/deb/stable ${codename} main" |
-        sudo tee /etc/apt/sources.list.d/mullvad.list >/dev/null
-    sudo apt update
-    sudo apt install -y mullvad-vpn
-}
-
 install_git_mcp() {
     require_cmd npx
     get_mcp_list

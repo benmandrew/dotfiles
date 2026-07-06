@@ -83,10 +83,6 @@ if [[ "${os_name}" == "Linux" ]] && [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]];
     headless_linux=true
 fi
 
-if [[ "${headless_linux}" == false ]]; then
-    check_cmd mullvad
-fi
-
 check_cmd claude
 check_cmd rtk
 

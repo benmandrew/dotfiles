@@ -127,7 +127,6 @@ main() {
     run_step install_fzf
     run_step install_gh
     run_step install_tailscale
-    run_step install_mullvad
     run_step install_claude_code
     run_step install_rtk
     run_step install_node
