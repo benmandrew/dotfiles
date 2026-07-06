@@ -1083,10 +1083,19 @@ install_opam() {
 
 install_go() {
     # Linux only — macOS gets Go via brew when needed.
+    # Check /usr/local/go directly rather than relying on PATH: a
+    # distro-packaged /usr/bin/go can shadow the toolchain this function
+    # installs, making every run think it needs to upgrade.
+    local go_bin=""
+    if [[ -x /usr/local/go/bin/go ]]; then
+        go_bin=/usr/local/go/bin/go
+    elif command -v go >/dev/null 2>&1; then
+        go_bin=go
+    fi
     local go_minor=0
-    if command -v go >/dev/null 2>&1; then
+    if [[ -n "${go_bin}" ]]; then
         local go_version_output
-        go_version_output="$(go version)"
+        go_version_output="$("${go_bin}" version)"
         go_minor="$(printf '%s' "${go_version_output}" | sed 's/.*go1\.\([0-9]*\).*/\1/')"
         if [[ "${go_minor:-0}" -ge 21 ]]; then
             if [[ -z "${UPGRADE:-}" ]]; then
