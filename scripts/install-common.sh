@@ -1081,6 +1081,47 @@ install_opam() {
     opam init "${init_flags[@]}"
 }
 
+install_go() {
+    # Linux only — macOS gets Go via brew when needed.
+    local go_minor=0
+    if command -v go >/dev/null 2>&1; then
+        go_minor="$(go version | sed 's/.*go1\.\([0-9]*\).*/\1/')"
+        if [[ "${go_minor:-0}" -ge 21 ]]; then
+            if [[ -z "${UPGRADE:-}" ]]; then
+                log "Go 1.${go_minor} already installed; skipping"
+                return
+            fi
+            log "Upgrading Go"
+        else
+            log "Go 1.${go_minor} < 1.21; upgrading to latest stable"
+        fi
+    else
+        log "Installing Go"
+    fi
+
+    local arch go_arch
+    arch="$(uname -m)"
+    case "${arch}" in
+        x86_64)  go_arch="amd64" ;;
+        aarch64) go_arch="arm64" ;;
+        *)
+            log "Unsupported arch ${arch} for Go install; skipping"
+            return
+            ;;
+    esac
+
+    local latest
+    latest="$(curl -fsSL 'https://go.dev/VERSION?m=text' | head -1)" # e.g. go1.24.2
+    local tarball="${latest}.linux-${go_arch}.tar.gz"
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
+    curl -fsSL "https://go.dev/dl/${tarball}" -o "${tmp_dir}/${tarball}"
+    sudo rm -rf /usr/local/go
+    sudo tar -C /usr/local -xzf "${tmp_dir}/${tarball}"
+    export PATH="/usr/local/go/bin:${PATH}"
+}
+
 install_moor() {
     local os_name
     os_name="$(uname -s)"
@@ -1100,10 +1141,7 @@ install_moor() {
         return
     fi
 
-    # Linux: apt only ships moor on very recent distros (Debian sid/forky,
-    # Ubuntu 26.04+) and upstream publishes no linux-arm64 binary, so build
-    # it with go install instead; GOTOOLCHAIN=auto fetches a matching Go
-    # toolchain on demand if the system Go is older than go.mod requires.
+    # Linux
     if command -v moor >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then
             log "moor already installed; skipping"
@@ -1113,10 +1151,27 @@ install_moor() {
     else
         log "Installing moor"
     fi
-    if ! command -v go >/dev/null 2>&1; then
-        sudo apt install -y golang-go
+
+    local arch
+    arch="$(uname -m)"
+
+    if [[ "${arch}" == "aarch64" ]]; then
+        # No official arm64 binary; build from source. install_go ensures a
+        # modern Go is available; GOTOOLCHAIN=auto downloads a newer toolchain
+        # if go.mod requires one beyond what's installed.
+        GOTOOLCHAIN=auto go install github.com/walles/moor/v2/cmd/moor@latest
+        return
     fi
-    go install github.com/walles/moor/v2/cmd/moor@latest
+
+    # x86_64: download official release binary
+    local tag
+    tag="$(github_latest_tag walles/moor)"
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
+    curl -fsSL "https://github.com/walles/moor/releases/download/${tag}/moor-${tag}-linux-amd64" \
+        -o "${tmp_dir}/moor"
+    install -m755 "${tmp_dir}/moor" "${HOME}/.local/bin/moor"
 }
 
 print_chezmoi_init_hint() {

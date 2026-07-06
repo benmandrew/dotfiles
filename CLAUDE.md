@@ -127,7 +127,8 @@ Shared functions called by both platform scripts, in order:
 | `install_pyright` | `pyright` via `npm install -g` |
 | `install_lua_ls` | `lua-language-server` via `brew` (macOS) or GitHub releases binary (Linux) |
 | `install_opam` | `opam` (OCaml package manager) via `brew` (macOS) or GitHub releases binary (Linux) |
-| `install_moor` | `moor` pager (formerly `moar`) — `brew install moor` (macOS) or `go install github.com/walles/moor/v2/cmd/moor@latest` (Linux, no official arm64 binary/apt package yet) |
+| `install_go` | Go toolchain — downloads latest stable from `go.dev/dl`; upgrades system Go if < 1.21 (needed for `GOTOOLCHAIN=auto`); Linux only (macOS uses brew as needed) |
+| `install_moor` | `moor` pager (formerly `moar`) — `brew install moor` (macOS); Linux x86_64: official release binary from GitHub; Linux arm64: `GOTOOLCHAIN=auto go install` (no official arm64 binary) |
 | `install_eza` | `eza` via `cargo install` |
 | `install_fd` | `fd` via `cargo install fd-find` |
 | `install_bat` | `bat` via `cargo install` |
