@@ -75,6 +75,9 @@ chezmoi apply
 
 # Preview changes before applying
 chezmoi diff
+
+# One-time setup: run fmt-ci + lint as a pre-commit hook
+make hooks
 ```
 
 ## CI

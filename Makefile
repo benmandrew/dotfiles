@@ -1,4 +1,4 @@
-.PHONY: all clean test fmt fmt-ci lint lint-sh lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-ssh deps
+.PHONY: all clean test fmt fmt-ci lint lint-sh lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-ssh deps hooks
 
 BOLD_BLUE := \033[1;34m
 RESET     := \033[0m
@@ -8,6 +8,10 @@ all: fmt lint
 clean:
 
 test: lint
+
+hooks:
+	@printf '$(BOLD_BLUE)[installing git hooks]$(RESET)\n'
+	@git config core.hooksPath .githooks
 
 deps:
 	@printf '$(BOLD_BLUE)[installing dev deps]$(RESET)\n'
