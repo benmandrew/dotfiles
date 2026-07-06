@@ -1085,7 +1085,9 @@ install_go() {
     # Linux only — macOS gets Go via brew when needed.
     local go_minor=0
     if command -v go >/dev/null 2>&1; then
-        go_minor="$(go version | sed 's/.*go1\.\([0-9]*\).*/\1/')"
+        local go_version_output
+        go_version_output="$(go version)"
+        go_minor="$(printf '%s' "${go_version_output}" | sed 's/.*go1\.\([0-9]*\).*/\1/')"
         if [[ "${go_minor:-0}" -ge 21 ]]; then
             if [[ -z "${UPGRADE:-}" ]]; then
                 log "Go 1.${go_minor} already installed; skipping"
@@ -1102,7 +1104,7 @@ install_go() {
     local arch go_arch
     arch="$(uname -m)"
     case "${arch}" in
-        x86_64)  go_arch="amd64" ;;
+        x86_64) go_arch="amd64" ;;
         aarch64) go_arch="arm64" ;;
         *)
             log "Unsupported arch ${arch} for Go install; skipping"
@@ -1110,8 +1112,9 @@ install_go() {
             ;;
     esac
 
-    local latest
-    latest="$(curl -fsSL 'https://go.dev/VERSION?m=text' | head -1)" # e.g. go1.24.2
+    local latest version_output
+    version_output="$(curl -fsSL 'https://go.dev/VERSION?m=text')"
+    latest="$(printf '%s' "${version_output}" | head -1)" # e.g. go1.24.2
     local tarball="${latest}.linux-${go_arch}.tar.gz"
     local tmp_dir
     tmp_dir="$(mktemp -d)"
