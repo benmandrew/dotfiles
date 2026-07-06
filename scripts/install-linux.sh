@@ -43,6 +43,16 @@ install_perf() {
     fi
 }
 
+remove_conflicting_libnode_dev() {
+    # The distro-provided libnode-dev ships headers (e.g. common.gypi) that
+    # the NodeSource nodejs package also ships, so dpkg refuses to unpack
+    # nodejs while libnode-dev is still installed.
+    if dpkg -s libnode-dev >/dev/null 2>&1; then
+        log "Removing distro libnode-dev (conflicts with NodeSource nodejs package)"
+        sudo apt remove -y libnode-dev
+    fi
+}
+
 install_node() {
     if command -v node >/dev/null 2>&1; then
         local node_major
@@ -54,6 +64,7 @@ install_node() {
             fi
             log "Upgrading Node.js LTS"
             sudo apt update
+            remove_conflicting_libnode_dev
             sudo apt install -y nodejs
             return
         fi
@@ -61,6 +72,7 @@ install_node() {
     else
         log "Installing Node.js LTS"
     fi
+    remove_conflicting_libnode_dev
     local setup_path
     setup_path="$(mktemp)"
     curl -fsSL https://deb.nodesource.com/setup_lts.x -o "${setup_path}"
