@@ -98,6 +98,9 @@ alias less=moor
 
 # Function (not alias) so piping still works: eza's --long forces its table
 # format even when stdout isn't a tty, which breaks idioms like `ls | xargs`.
+# unalias first: zsh refuses to define a function over an existing alias
+# of the same name (e.g. one set by a system skeleton .zshrc).
+unalias ls 2>/dev/null || true
 ls() {
   if [[ -t 1 ]]; then
     eza --long --group-directories-first "$@"
