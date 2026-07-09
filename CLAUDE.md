@@ -147,9 +147,7 @@ Shared functions called by both platform scripts, in order:
 | `install_claude_code` | Claude Code CLI |
 | `install_rtk` | rtk token-optimization proxy |
 | `install_uv` | uv Python package manager |
-| `install_token_savior` | MCP server — registered via `claude mcp add` using `uvx` |
-| `install_token_optimizer_mcp` | MCP server — registered via `claude mcp add` using `npx` |
-| `install_ccusage` | `ccusage` CLI (`npm install -g`) + MCP server registration |
+| `install_ccusage` | `ccusage` CLI via `npm install -g` (no MCP registration) |
 | `install_git_mcp` | MCP server — registers `npx mcp-remote` pointing to gitmcp.io |
 | `install_starship` | Starship prompt via install script |
 | `install_tmux_plugins` | tpm to `~/.tmux/plugins/tpm` |
@@ -167,7 +165,7 @@ Checks: `git curl zsh tmux entr rustup cargo rust-analyzer clangd cmake nix dire
 ## Key Areas
 
 - **Neovim config** — `home/dot_config/nvim/` — Lua, uses Lazy.nvim; LSP for bash, rust, ocaml, lua
-- **Claude Code config** — `home/dot_claude/` — settings, MCP docs (RTK.md, TOKEN_TOOLS.md)
+- **Claude Code config** — `home/dot_claude/` — settings, CLAUDE.md/VOICE.md/PRACTICES.md
 - **Shell** — `home/dot_zshrc.tmpl` — zinit, zoxide, fzf, starship, auto-attach tmux
 - **Tmux** — `home/dot_tmux.conf.tmpl` — prefix C-a, Hacktober theme (matches WezTerm), OS-specific clipboard
 - **Git** — `home/dot_gitconfig.tmpl` and `home/dot_config/git/` — SSH signing, aliases

@@ -149,8 +149,6 @@ main() {
     run_step install_opam
     run_step install_go
     run_step install_moor
-    run_step install_token_savior
-    run_step install_token_optimizer_mcp
     run_step install_ccusage
     run_step install_git_mcp
     run_step install_starship

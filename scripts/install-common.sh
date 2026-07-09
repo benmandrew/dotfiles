@@ -668,28 +668,6 @@ install_uv() {
     export PATH="${HOME}/.local/bin:${PATH}"
 }
 
-install_token_savior() {
-    require_cmd uvx
-    get_mcp_list
-    if echo "${MCP_LIST}" | grep -q "token-savior"; then
-        log "token-savior MCP server already registered; skipping"
-        return
-    fi
-    log "Registering token-savior MCP server"
-    claude mcp add -s user token-savior -- uvx --python 3.11 --from "token-savior-recall[mcp]" token-savior
-}
-
-install_token_optimizer_mcp() {
-    require_cmd npx
-    get_mcp_list
-    if echo "${MCP_LIST}" | grep -q "token-optimizer-mcp"; then
-        log "token-optimizer-mcp MCP server already registered; skipping"
-        return
-    fi
-    log "Registering token-optimizer-mcp MCP server"
-    claude mcp add -s user token-optimizer-mcp -- npx -y @ooples/token-optimizer-mcp
-}
-
 install_ccusage() {
     require_cmd npm
     if command -v ccusage >/dev/null 2>&1; then
@@ -703,13 +681,6 @@ install_ccusage() {
         log "Installing ccusage"
         npm_install_g ccusage
     fi
-    get_mcp_list
-    if echo "${MCP_LIST}" | grep -q "ccusage"; then
-        log "ccusage MCP server already registered; skipping"
-        return
-    fi
-    log "Registering ccusage MCP server"
-    claude mcp add -s user ccusage -- npx @ccusage/mcp@latest
 }
 
 install_tmux_from_source() {
