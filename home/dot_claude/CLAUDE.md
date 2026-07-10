@@ -12,7 +12,7 @@ Keep it concise — it is loaded on every conversation start, so a bloated CLAUD
 
 ## Writing prose
 
-When a task calls for prose — commit bodies, PR descriptions, docs, READMEs, blog posts, comments beyond a line or two — read `VOICE.md` first and follow it. It's a voice spec with two modes: **write-up** (first-person project narrative) and **explainer** (impersonal technical exposition). Pick the mode that fits, then apply its rules. Skip VOICE.md for pure-code work and short mechanical text.
+When a task calls for prose — commit bodies, PR descriptions, docs, READMEs, blog posts, comments beyond a line or two — read `~/.claude/VOICE.md` first and follow it (it lives at that absolute path, not in the current working directory). It's a voice spec with two modes: **write-up** (first-person project narrative) and **explainer** (impersonal technical exposition). Pick the mode that fits, then apply its rules. Skip `~/.claude/VOICE.md` for pure-code work and short mechanical text.
 
 ## Plan files in the filesystem
 
