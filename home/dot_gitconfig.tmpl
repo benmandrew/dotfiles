@@ -7,7 +7,7 @@
 [alias]
     st = status -s --show-stash
     cm = commit -m
-    rv = remote -v
+    rv = "!git remote -v | awk -v y=$(tput setaf 3) -v b=$(tput setaf 4) -v g=$(tput setaf 2) -v x=$(tput sgr0) '{name=$1; url=$2; type=$3; gsub(/[()]/,\"\",type); if(!(name in seen)){order[++n]=name; seen[name]=1}; if(type==\"fetch\")f[name]=url; else p[name]=url} END{for(i=1;i<=n;i++){nm=order[i]; if(f[nm]==p[nm]) printf \"%s%-8s%s %s%s%s %s(fetch+push)%s\\n\", y,nm,x, b,f[nm],x, g,x; else {printf \"%s%-8s%s %s%s%s %s(fetch)%s\\n\", y,nm,x, b,f[nm],x, g,x; printf \"%s%-8s%s %s%s%s %s(push)%s\\n\", y,nm,x, b,p[nm],x, g,x}}}'"
     ch = checkout
     ll = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s - %Cblue%aN%Creset (%Cgreen%cr%Creset)' --abbrev-commit --date=relative
     d = diff
