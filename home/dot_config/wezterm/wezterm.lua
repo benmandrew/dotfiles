@@ -151,6 +151,35 @@ local function ssh_host(tab)
     return nil
 end
 
+-- format-tab-title runs on every status tick (100ms, see status_update_interval)
+-- and ssh_host walks process state, so memoise it per tab. os.time only has
+-- whole-second resolution, which is precisely the recompute rate we want: this
+-- keeps the lookup at ~1/sec regardless of how often the tab bar repaints.
+local SSH_HOST_TTL_SECONDS = 1
+local ssh_host_cache = {}
+
+local function ssh_host_cached(tab)
+    local now = os.time()
+    -- Expire as we go, which also stops closed tabs' entries accumulating.
+    -- A negative age means the wall clock stepped back; treat it as expired.
+    for id, entry in pairs(ssh_host_cache) do
+        local age = now - entry.at
+        if age < 0 or age >= SSH_HOST_TTL_SECONDS then
+            ssh_host_cache[id] = nil
+        end
+    end
+
+    local hit = ssh_host_cache[tab.tab_id]
+    if hit then
+        return hit.host or nil
+    end
+    -- nil is both the common answer (any local tab) and a full-price lookup,
+    -- so cache it too, as false — the misses are what we're paying for.
+    local host = ssh_host(tab)
+    ssh_host_cache[tab.tab_id] = { host = host or false, at = now }
+    return host
+end
+
 wezterm.on("format-tab-title", function(tab)
     local title = tab.tab_title
     if not (title and #title > 0) then
@@ -161,7 +190,7 @@ wezterm.on("format-tab-title", function(tab)
             -- that emits it (our dotfiles do).
             title = host
         else
-            local remote = ssh_host(tab)
+            local remote = ssh_host_cached(tab)
             if remote and remote ~= "" then
                 -- Foreground process is ssh: use its destination host.
                 title = remote
@@ -187,7 +216,47 @@ wezterm.on("update-status", function(window)
     end
 end)
 
+-- Clipboard indicator. WezTerm has no clipboard event, so every binding that
+-- copies emits "copied" itself; the handler flashes the right status rather
+-- than raising a desktop notification, which would pile up in the OS tray at
+-- one entry per copy.
+local COPIED_FLASH_SECONDS = 1.0
+-- Bumped per flash so a stale call_after can't clear a newer flash early.
+local copied_generation = 0
+
+wezterm.on("copied", function(window, pane)
+    -- The mouse binding below fires on every left-click release, not just ones
+    -- that completed a selection, so confirm something was actually copied.
+    local ok, sel = pcall(function()
+        return window:get_selection_text_for_pane(pane)
+    end)
+    if not (ok and sel and #sel > 0) then
+        return
+    end
+
+    copied_generation = copied_generation + 1
+    local this_flash = copied_generation
+    window:set_right_status(wezterm.format({
+        { Background = { Color = hacktober.orange } },
+        { Foreground = { Color = hacktober.bg } },
+        { Attribute = { Intensity = "Bold" } },
+        { Text = " copied " },
+    }))
+    wezterm.time.call_after(COPIED_FLASH_SECONDS, function()
+        if copied_generation == this_flash then
+            pcall(function()
+                window:set_right_status("")
+            end)
+        end
+    end)
+end)
+
 -- Behaviour
+-- The right status only repaints when the tab bar is recomputed on this tick,
+-- so the stock 1000ms makes the "copied" flash appear up to a second late (and
+-- linger as long again). This bounds both to 100ms, at the cost of running
+-- format-tab-title 10x more often.
+config.status_update_interval = 100
 config.scrollback_lines = 10000
 config.audible_bell = "Disabled"
 config.enable_kitty_keyboard = true
@@ -195,7 +264,22 @@ config.enable_kitty_keyboard = true
 -- Leader (mirrors tmux C-a prefix)
 config.leader = { key = "a", mods = "CTRL", timeout_milliseconds = 1000 }
 
+-- Wrap a copy action so it also flashes the "copied" indicator. EmitEvent runs
+-- after the copy, while the selection is still live for the handler to check.
+local function copy_and_flash(dest)
+    return act.Multiple({ act.CopyTo(dest), act.EmitEvent("copied") })
+end
+
+-- Same, for the mouse bindings, which complete a selection rather than copying
+-- an existing one.
+local function complete_selection_and_flash(dest)
+    return act.Multiple({ act.CompleteSelection(dest), act.EmitEvent("copied") })
+end
+
 config.keys = {
+    -- Copy (overrides the stock CopyTo bindings to add the indicator)
+    { key = "c", mods = "SHIFT|CTRL", action = copy_and_flash("Clipboard") },
+    { key = "c", mods = "SUPER", action = copy_and_flash("Clipboard") },
     -- Splits
     { key = "v", mods = "LEADER", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
     { key = "s", mods = "LEADER", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
@@ -227,6 +311,49 @@ config.keys = {
     { key = "[", mods = "LEADER", action = act.ActivateCopyMode },
     -- Send literal C-a to the terminal (e.g. for remote tmux): double-tap C-a
     { key = "a", mods = "LEADER|CTRL", action = act.SendKey({ key = "a", mods = "CTRL" }) },
+}
+
+-- Copy mode's `y` (LEADER [ above). Assigning key_tables.copy_mode replaces the
+-- whole table, so start from the defaults and patch just the yank entry.
+-- wezterm.gui is absent in the mux server, which also loads this file.
+if wezterm.gui then
+    local copy_mode = wezterm.gui.default_key_tables().copy_mode
+    for _, entry in ipairs(copy_mode) do
+        if entry.key == "y" and entry.mods == "NONE" then
+            -- Emit before Close: closing copy mode drops the selection the
+            -- handler inspects.
+            entry.action = act.Multiple({
+                act.CopyTo("ClipboardAndPrimarySelection"),
+                act.EmitEvent("copied"),
+                act.CopyMode("Close"),
+            })
+        end
+    end
+    config.key_tables = { copy_mode = copy_mode }
+end
+
+-- Selecting with the mouse copies by default (ClipboardAndPrimarySelection);
+-- streak 1/2/3 are drag-release, double-click word and triple-click line.
+-- User mouse bindings merge over the defaults, so only these are replaced.
+config.mouse_bindings = {
+    {
+        event = { Up = { streak = 1, button = "Left" } },
+        mods = "NONE",
+        action = act.Multiple({
+            act.CompleteSelectionOrOpenLinkAtMouseCursor("ClipboardAndPrimarySelection"),
+            act.EmitEvent("copied"),
+        }),
+    },
+    {
+        event = { Up = { streak = 2, button = "Left" } },
+        mods = "NONE",
+        action = complete_selection_and_flash("ClipboardAndPrimarySelection"),
+    },
+    {
+        event = { Up = { streak = 3, button = "Left" } },
+        mods = "NONE",
+        action = complete_selection_and_flash("ClipboardAndPrimarySelection"),
+    },
 }
 
 return config
