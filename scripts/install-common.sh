@@ -621,7 +621,9 @@ install_claude_code() {
             return
         fi
         log "Upgrading Claude Code"
-        npm_install_g @anthropic-ai/claude-code
+        # Use the native updater, not npm -g: npm would install a second copy
+        # under /usr/lib/node_modules that shadows the native one on PATH.
+        claude update
         return
     fi
     log "Installing Claude Code"
