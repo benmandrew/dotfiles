@@ -111,6 +111,10 @@ ls() {
 alias lsa="eza --long --group-directories-first --all"
 alias python="python3"
 
+# Shadow the C-compiler `cc` interactively only — Makefiles/build scripts that
+# exec `cc` still hit the real /usr/bin/cc, since aliases aren't expanded there.
+alias cc="claude --dangerously-skip-permissions"
+
 alias gst="git st"
 alias gs="git st"
 alias gsv="git sv"
