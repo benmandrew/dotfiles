@@ -516,6 +516,9 @@ config.keys = {
     { key = "c", mods = "LEADER", action = act.SpawnTab("CurrentPaneDomain") },
     { key = "n", mods = "LEADER", action = act.ActivateTabRelative(1) },
     { key = "p", mods = "LEADER", action = act.ActivateTabRelative(-1) },
+    -- Reorder: move the active tab left/right rather than just switching focus.
+    { key = "n", mods = "LEADER|SHIFT", action = act.MoveTabRelative(1) },
+    { key = "p", mods = "LEADER|SHIFT", action = act.MoveTabRelative(-1) },
     {
         key = ",",
         mods = "LEADER",
@@ -535,6 +538,17 @@ config.keys = {
     -- Send literal C-a to the terminal (e.g. for remote tmux): double-tap C-a
     { key = "a", mods = "LEADER|CTRL", action = act.SendKey({ key = "a", mods = "CTRL" }) },
 }
+
+-- Jump straight to a tab: LEADER + 1..8 (ActivateTab is 0-indexed); LEADER + 9
+-- always lands on the last tab (tmux behaviour), regardless of tab count.
+for i = 1, 8 do
+    table.insert(config.keys, {
+        key = tostring(i),
+        mods = "LEADER",
+        action = act.ActivateTab(i - 1),
+    })
+end
+table.insert(config.keys, { key = "9", mods = "LEADER", action = act.ActivateTab(-1) })
 
 -- Copy mode's `y` (LEADER [ above). Assigning key_tables.copy_mode replaces the
 -- whole table, so start from the defaults and patch just the yank entry.
