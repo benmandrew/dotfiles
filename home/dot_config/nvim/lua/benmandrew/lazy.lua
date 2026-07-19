@@ -40,4 +40,15 @@ require("lazy").setup({
     { "hrsh7th/nvim-cmp" },
     { "hrsh7th/cmp-nvim-lsp" },
     { "L3MON4D3/LuaSnip" },
+    { "folke/which-key.nvim", event = "VeryLazy" },
+    { "lewis6991/gitsigns.nvim" },
+    {
+        "sindrets/diffview.nvim",
+        dependencies = { "nvim-lua/plenary.nvim" },
+    },
+    {
+        "ThePrimeagen/harpoon",
+        branch = "harpoon2",
+        dependencies = { "nvim-lua/plenary.nvim" },
+    },
 })
