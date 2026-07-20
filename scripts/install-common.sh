@@ -394,28 +394,33 @@ install_git_delta() { install_cargo_tool delta git-delta; }
 install_hyperfine() { install_cargo_tool hyperfine; }
 
 install_gh() {
-    if command -v gh >/dev/null 2>&1; then
-        if [[ -z "${UPGRADE:-}" ]]; then
-            log "GitHub CLI already installed; skipping"
-            return
-        fi
-        log "Upgrading GitHub CLI"
-        local os_name
-        os_name="$(uname -s)"
-        if [[ "${os_name}" == "Darwin" ]]; then
-            brew upgrade gh
-        else
-            sudo apt install -y gh
-        fi
-        return
-    fi
-    log "Installing GitHub CLI"
     local os_name
     os_name="$(uname -s)"
     if [[ "${os_name}" == "Darwin" ]]; then
+        if command -v gh >/dev/null 2>&1; then
+            if [[ -z "${UPGRADE:-}" ]]; then
+                log "GitHub CLI already installed; skipping"
+                return
+            fi
+            log "Upgrading GitHub CLI"
+            brew upgrade gh
+            return
+        fi
+        log "Installing GitHub CLI"
         brew install gh
         return
     fi
+    # Linux: install from GitHub's official apt repo — Ubuntu's `gh` package is
+    # years out of date. Skip only when gh is present AND already sourced from
+    # the official repo, so a gh first installed from Ubuntu's repos gets
+    # migrated to the official one on the next run.
+    if command -v gh >/dev/null 2>&1 &&
+        [[ -f /etc/apt/sources.list.d/github-cli.list ]] &&
+        [[ -z "${UPGRADE:-}" ]]; then
+        log "GitHub CLI already installed; skipping"
+        return
+    fi
+    log "Installing GitHub CLI from official apt repo"
     sudo mkdir -p -m 755 /etc/apt/keyrings
     local tmp
     tmp="$(mktemp)"
