@@ -63,7 +63,7 @@ lint-sh:
 
 lint-ssh:
 	@printf '$(BOLD_BLUE)[linting ssh config]$(RESET)\n'
-	@sed 's/{{[^{}]*}}//g' home/private_dot_ssh/private_config.tmpl > /tmp/chezmoi-ssh-config-lint.tmp
+	@chezmoi execute-template < home/private_dot_ssh/private_config.tmpl > /tmp/chezmoi-ssh-config-lint.tmp
 	@sshconfig-lint --config /tmp/chezmoi-ssh-config-lint.tmp
 	@rm -f /tmp/chezmoi-ssh-config-lint.tmp
 

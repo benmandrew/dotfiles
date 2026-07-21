@@ -7,6 +7,7 @@ Host github.com
 	HostName github.com
 	User git
 
+{{ if stat (joinPath .chezmoi.homeDir ".ssh/id_avlab") -}}
 Host av2
 	HostName av2.cs.man.ac.uk
 	IdentityFile ~/.ssh/id_avlab
@@ -17,6 +18,7 @@ Host av3
 	IdentityFile ~/.ssh/id_avlab
 	User benandrew
 
+{{ end -}}
 Host *
 	IdentityFile ~/.ssh/id_benmandrew
 	IdentitiesOnly yes
