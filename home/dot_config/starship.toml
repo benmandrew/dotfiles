@@ -4,6 +4,10 @@
 # Inserts a blank line between shell prompts
 add_newline = true
 
+# Raise the per-command timeout (default 500ms) so slow-starting version
+# probes like typst from the Nix store don't warn on every prompt
+command_timeout = 2000
+
 format = "$all$fill$os$time$line_break$character"
 
 [directory]
