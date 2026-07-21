@@ -11,6 +11,7 @@ chezmoi/
 │   ├── dot_tmux.conf.tmpl
 │   ├── dot_gitconfig.tmpl
 │   ├── dot_fzf.zsh.tmpl
+│   ├── dot_vimrc             # real vim only; nvim reads dot_config/nvim/
 │   ├── run_onchange_reload_tmux.sh.tmpl
 │   ├── dot_claude/          # → ~/.claude/ (Claude Code config)
 │   └── dot_config/          # → ~/.config/

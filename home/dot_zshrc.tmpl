@@ -85,7 +85,9 @@ export LC_ALL="en_GB.UTF-8"
 export COLORTERM=truecolor
 
 alias vim="nvim"
-export VISUAL=vim
+# Not "vim" — the alias is interactive-only, so tools that exec $EDITOR
+# (ansible-vault, git, crontab) would get real vim and its ~/.vimrc.
+export VISUAL=nvim
 export EDITOR="$VISUAL"
 
 {{ if eq .chezmoi.os "darwin" }}
