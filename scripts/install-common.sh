@@ -1164,6 +1164,60 @@ install_moor() {
     install -m755 "${tmp_dir}/moor" "${HOME}/.local/bin/moor"
 }
 
+install_treehouse() {
+    # Not in brew and no upstream arm64-Linux gap, so download the official
+    # release binary on every platform (darwin/linux x amd64/arm64).
+    local tag
+    tag="$(github_latest_tag kunchenguid/treehouse)"
+
+    if command -v treehouse >/dev/null 2>&1; then
+        local version_output current
+        version_output="$(treehouse --version 2>/dev/null)"
+        current="$(awk '{print $NF}' <<<"${version_output}")"
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "treehouse ${current} already installed; skipping"
+            return
+        fi
+        if [[ "${current}" == "${tag}" ]]; then
+            log "treehouse ${current} already at latest; skipping"
+            return
+        fi
+        log "Upgrading treehouse to ${tag}"
+    else
+        log "Installing treehouse ${tag}"
+    fi
+
+    local os_name arch go_os go_arch
+    os_name="$(uname -s)"
+    arch="$(uname -m)"
+    case "${os_name}" in
+        Darwin) go_os="darwin" ;;
+        Linux) go_os="linux" ;;
+        *)
+            log "Unsupported OS ${os_name} for treehouse install; skipping"
+            return
+            ;;
+    esac
+    case "${arch}" in
+        x86_64 | amd64) go_arch="amd64" ;;
+        aarch64 | arm64) go_arch="arm64" ;;
+        *)
+            log "Unsupported arch ${arch} for treehouse install; skipping"
+            return
+            ;;
+    esac
+
+    local tarball="treehouse-${tag}-${go_os}-${go_arch}.tar.gz"
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
+    curl -fsSL "https://github.com/kunchenguid/treehouse/releases/download/${tag}/${tarball}" \
+        -o "${tmp_dir}/${tarball}"
+    tar -C "${tmp_dir}" -xzf "${tmp_dir}/${tarball}"
+    mkdir -p "${HOME}/.local/bin"
+    install -m755 "${tmp_dir}/treehouse" "${HOME}/.local/bin/treehouse"
+}
+
 print_chezmoi_init_hint() {
     log "You can initialize chezmoi with: chezmoi init --apply git@github.com:benmandrew/dotfiles.git"
 }
