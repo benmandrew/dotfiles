@@ -1,0 +1,8 @@
+# SyncTeX inverse search: Ctrl+click in the PDF jumps to the source in VS Code.
+#
+# sandbox must be none. zathura's seccomp filter is inherited by every process
+# it spawns, and it kills pivot_root, which Chromium needs at startup — so the
+# editor command silently fails under the default "normal" sandbox.
+set sandbox none
+set synctex true
+set synctex-editor-command "code --reuse-window --goto %{input}:%{line}"
