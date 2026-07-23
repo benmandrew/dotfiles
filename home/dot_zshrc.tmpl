@@ -21,6 +21,8 @@ else
   compinit -C
 fi
 zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}'
+# make: complete only Makefile targets, not directory files
+zstyle ':completion:*:*:make:*' tag-order 'targets'
 
 # SSH agent — only start a new agent and load keys when no agent is running.
 # In subsequent shells the inherited SSH_AUTH_SOCK skips this block entirely.
