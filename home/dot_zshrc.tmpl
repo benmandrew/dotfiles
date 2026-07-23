@@ -20,9 +20,17 @@ if [[ -z "$(find "${ZDOTDIR:-$HOME}/.zcompdump" -mmin -1440 2>/dev/null)" ]]; th
 else
   compinit -C
 fi
-zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}'
+# Case-insensitive, then partial-word (_/-), then substring matching.
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
+zstyle ':completion:*' menu select
+# Cache completions that shell out (apt, brew, ...).
+zstyle ':completion:*' use-cache on
+zstyle ':completion:*' cache-path "${ZDOTDIR:-$HOME}/.zcompcache"
 # make: complete only Makefile targets, not directory files
 zstyle ':completion:*:*:make:*' tag-order 'targets'
+
+setopt COMPLETE_IN_WORD    # complete from the cursor, not just word end
+setopt ALWAYS_TO_END       # move cursor to word end after completing
 
 # SSH agent — only start a new agent and load keys when no agent is running.
 # In subsequent shells the inherited SSH_AUTH_SOCK skips this block entirely.
