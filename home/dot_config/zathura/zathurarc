@@ -5,4 +5,9 @@
 # editor command silently fails under the default "normal" sandbox.
 set sandbox none
 set synctex true
-set synctex-editor-command "code --reuse-window --goto %{input}:%{line}"
+# The `code` CLI has a ~1s slow path when its stdout is not a TTY. Zathura, being
+# a GUI app, spawns it without a controlling terminal, so every jump paid that 1s.
+# `script` allocates a pseudo-terminal, which takes the fast path (~0.1s). The
+# single-quoted inner command is one argv element to script's -c; zathura parses
+# it with g_shell_parse_argv, so the quoting survives substitution.
+set synctex-editor-command "script -qec 'code --reuse-window --goto %{input}:%{line}' /dev/null"
