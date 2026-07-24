@@ -778,7 +778,12 @@ install_wezterm() {
         fi
         log "Upgrading WezTerm"
         if [[ "${os_name}" == "Darwin" ]]; then
-            brew upgrade --cask wezterm@nightly
+            # wezterm@nightly's cask upstream occasionally ships a broken source
+            # glob; a failed upgrade reverts to the existing working install, so
+            # treat it as best-effort rather than failing the whole run.
+            if ! brew upgrade --cask wezterm@nightly; then
+                log "WezTerm nightly upgrade failed (likely upstream cask bug); keeping existing install; skipping"
+            fi
             return
         fi
         # Linux: fall through to re-download latest
