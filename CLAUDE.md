@@ -98,10 +98,11 @@ Requires: `sudo`, `apt`, `dpkg`, `ssh-keygen`. Supports x86_64 and aarch64 — a
 
 1. `apt install` — `git curl build-essential zsh entr` plus tmux build deps
 2. `perf` (`linux-tools-generic`) — best-effort; skipped with a warning (not a failure) if the exact-version kernel-tools package isn't available, which is common on cloud/CI kernels
-3. tmux built from source
-4. Node.js LTS via NodeSource setup script (skipped if `node ≥ 20` present)
-5. Neovim — downloads official Linux binary to `/opt/nvim-linux-<arch>/`
-6. All common tools (see below)
+3. `install_inotify_limits` — writes a sysctl drop-in (`/etc/sysctl.d/60-inotify-watches.conf`) raising `fs.inotify.max_user_watches`/`max_user_instances`, so VS Code's file watcher doesn't hit "Unable to watch for file changes" on large workspaces
+4. tmux built from source
+5. Node.js LTS via NodeSource setup script (skipped if `node ≥ 20` present)
+6. Neovim — downloads official Linux binary to `/opt/nvim-linux-<arch>/`
+7. All common tools (see below)
 
 ### `scripts/install-macos-arm64.sh`
 

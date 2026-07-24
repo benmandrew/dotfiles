@@ -43,6 +43,24 @@ install_perf() {
     fi
 }
 
+install_inotify_limits() {
+    # VS Code and other file watchers exhaust the default inotify limits on
+    # large workspaces, producing "Unable to watch for file changes". Raise the
+    # persistent limits via a sysctl drop-in.
+    local conf="/etc/sysctl.d/60-inotify-watches.conf"
+    local desired="fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 512"
+    local current=""
+    [[ -f "${conf}" ]] && current="$(<"${conf}")"
+    if [[ "${current}" == "${desired}" ]]; then
+        log "inotify limits already configured; skipping"
+        return
+    fi
+    log "Configuring inotify watch/instance limits"
+    printf '%s\n' "${desired}" | sudo tee "${conf}" >/dev/null
+    sudo sysctl -p "${conf}" >/dev/null
+}
+
 remove_conflicting_libnode_dev() {
     # The distro-provided libnode-dev ships headers (e.g. common.gypi) that
     # the NodeSource nodejs package also ships, so dpkg refuses to unpack
@@ -118,6 +136,7 @@ main() {
     require_cmd apt
     install_apt_packages_if_missing git curl build-essential zsh entr libevent-dev libncurses-dev pkg-config bubblewrap bison autoconf unzip
     install_perf
+    run_step install_inotify_limits
     run_step install_tmux_from_source
     run_step install_cmake
     run_step install_nix
