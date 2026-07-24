@@ -68,14 +68,14 @@ parse_args() {
     done
 }
 
+# Pin npm's global prefix to ~/.local rather than trusting `npm prefix -g`.
+# Homebrew's node points that at the versioned keg (Cellar/node/<version>), so
+# globals installed there are orphaned by the next `brew upgrade node` while
+# stale copies left in /opt/homebrew/lib/node_modules keep winning on PATH.
+# ~/.local is version-independent and user-writable, so no sudo fallback either.
 npm_install_g() {
-    local npm_prefix
-    npm_prefix="$(npm prefix -g 2>/dev/null)"
-    if [[ -w "${npm_prefix}" ]]; then
-        npm install -g "$@"
-    else
-        sudo npm install -g "$@"
-    fi
+    npm config set prefix "${HOME}/.local" >/dev/null
+    npm install -g "$@"
 }
 
 # Wrapper around curl for GitHub API calls; adds auth header when GITHUB_TOKEN is set
