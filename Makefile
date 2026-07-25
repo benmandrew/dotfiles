@@ -52,7 +52,7 @@ lint-actions:
 
 lint-zsh:
 	@printf '$(BOLD_BLUE)[linting zsh templates]$(RESET)\n'
-	@for f in home/dot_zshrc.tmpl home/dot_fzf.zsh.tmpl home/*.sh.tmpl; do \
+	@for f in home/dot_zshrc.tmpl home/dot_fzf.zsh.tmpl home/*.sh.tmpl home/.chezmoitemplates/*.sh.tmpl; do \
 		[ -f "$$f" ] || continue; \
 		sed 's/{{[^{}]*}}//g' "$$f" | shellcheck --shell=bash --severity=error -; \
 	done

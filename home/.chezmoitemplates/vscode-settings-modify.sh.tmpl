@@ -1,0 +1,65 @@
+#!/bin/sh
+# VS Code owns settings.json: the UI and extensions rewrite it whenever a
+# setting is toggled or a "don't show again" prompt is dismissed. Managing it
+# as a plain file means every such write trips chezmoi's "has changed since
+# chezmoi last wrote it" prompt.
+#
+# So instead chezmoi manages a *subset* of keys. The current file arrives on
+# stdin; we merge our keys over the top and emit the result. Keys VS Code
+# added on its own survive; ours are re-asserted on every apply.
+set -eu
+
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
+
+cat >"$tmpdir/current"
+
+cat >"$tmpdir/managed" <<'CHEZMOI_MANAGED_SETTINGS'
+{{ template "vscode-settings.json.tmpl" . }}
+CHEZMOI_MANAGED_SETTINGS
+
+# Without jq or node we cannot merge; fall back to asserting our keys only.
+if ! command -v jq >/dev/null 2>&1 || ! command -v node >/dev/null 2>&1; then
+	cat "$tmpdir/managed"
+	exit 0
+fi
+
+# settings.json is JSONC — comments and trailing commas are legal there but not
+# in jq. Strip both with a scanner that skips over string literals, so a "//"
+# inside a URL or a comma inside a value is left alone.
+node -e '
+	const s = require("fs").readFileSync(0, "utf8");
+	let out = "", i = 0;
+	while (i < s.length) {
+		const c = s[i];
+		if (c === "\"") {
+			let j = i + 1;
+			while (j < s.length) {
+				if (s[j] === "\\") { j += 2; continue; }
+				if (s[j] === "\"") break;
+				j++;
+			}
+			out += s.slice(i, j + 1);
+			i = j + 1;
+		} else if (c === "/" && s[i + 1] === "/") {
+			while (i < s.length && s[i] !== "\n") i++;
+		} else if (c === "/" && s[i + 1] === "*") {
+			i += 2;
+			while (i < s.length && !(s[i] === "*" && s[i + 1] === "/")) i++;
+			i += 2;
+		} else if (c === "}" || c === "]") {
+			out = out.replace(/,\s*$/, "") + c;
+			i++;
+		} else {
+			out += c;
+			i++;
+		}
+	}
+	process.stdout.write(out.trim() || "{}");
+' <"$tmpdir/current" >"$tmpdir/clean" 2>/dev/null || printf '{}' >"$tmpdir/clean"
+
+# Recursive merge, managed keys winning. If the existing file is unparseable
+# (hand-mangled, half-written), fall back to our keys rather than erroring out
+# and leaving chezmoi unable to apply.
+jq -s '.[0] * .[1]' "$tmpdir/clean" "$tmpdir/managed" 2>/dev/null ||
+	cat "$tmpdir/managed"
