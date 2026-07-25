@@ -572,14 +572,72 @@ end
 -- Selecting with the mouse copies by default (ClipboardAndPrimarySelection);
 -- streak 1/2/3 are drag-release, double-click word and triple-click line.
 -- User mouse bindings merge over the defaults, so only these are replaced.
+--
+-- Ctrl-click opens links; nothing else does. A plain click never opens one, so
+-- brushing a URL while clicking to place the cursor is safe -- the stock NONE
+-- binding is CompleteSelectionOrOpenLinkAtMouseCursor, which is where the
+-- accidental opens came from, and it is a plain CompleteSelection below.
+-- Shift-click is likewise demoted to selection only, overriding the stock
+-- SHIFT opener, so ctrl really is the single gesture.
+--
+-- Each ctrl binding is declared twice, once per mouse-reporting state. Inside
+-- a pane that reports the mouse (tmux sets mouse on, nvim mouse=a) events
+-- normally go straight to the application, and mouse_reporting=true is what
+-- claims ctrl-click back from it. Scoping that to CTRL and never to NONE is
+-- the whole trick: tmux keeps every plain click it expects to see, and the
+-- gesture needs no bypass modifier, so it is identical in both worlds.
+--
+-- The Down half is bound to Nop so the application never sees a press whose
+-- release it will not get -- otherwise nvim would act on <C-LeftMouse> (jump
+-- to tag) while WezTerm opened the link. That is the documented pattern, and
+-- the cost of unifying on ctrl: <C-LeftMouse> no longer reaches nvim.
+-- No copy indicator on the link bindings: ctrl-click opens, it never copies,
+-- so the "copied-if-selection" flash would be a lie about a stale selection.
+local complete_only_and_flash = act.Multiple({
+    act.CompleteSelection("ClipboardAndPrimarySelection"),
+    act.EmitEvent("copied-if-selection"),
+})
+
 config.mouse_bindings = {
     {
         event = { Up = { streak = 1, button = "Left" } },
         mods = "NONE",
-        action = act.Multiple({
-            act.CompleteSelectionOrOpenLinkAtMouseCursor("ClipboardAndPrimarySelection"),
-            act.EmitEvent("copied-if-selection"),
-        }),
+        action = complete_only_and_flash,
+    },
+    {
+        event = { Up = { streak = 1, button = "Left" } },
+        mods = "SHIFT",
+        action = complete_only_and_flash,
+    },
+    {
+        event = { Up = { streak = 1, button = "Left" } },
+        mods = "CTRL",
+        action = act.OpenLinkAtMouseCursor,
+    },
+    {
+        event = { Up = { streak = 1, button = "Left" } },
+        mods = "CTRL",
+        mouse_reporting = true,
+        action = act.OpenLinkAtMouseCursor,
+    },
+    {
+        -- Stock SHIFT|ALT is the block-selection extender and its release is
+        -- another CompleteSelectionOrOpenLink; keep the block select, drop the
+        -- opener, so ctrl really is the only gesture that follows a link.
+        event = { Up = { streak = 1, button = "Left" } },
+        mods = "SHIFT|ALT",
+        action = act.CompleteSelection("PrimarySelection"),
+    },
+    {
+        event = { Down = { streak = 1, button = "Left" } },
+        mods = "CTRL",
+        action = act.Nop,
+    },
+    {
+        event = { Down = { streak = 1, button = "Left" } },
+        mods = "CTRL",
+        mouse_reporting = true,
+        action = act.Nop,
     },
     {
         event = { Up = { streak = 2, button = "Left" } },
