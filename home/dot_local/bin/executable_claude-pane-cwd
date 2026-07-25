@@ -1,0 +1,60 @@
+#!/bin/sh
+# Print the directory a new tmux window or pane spawned from this pane should
+# open in.
+#
+# Claude Code registers every live session in ~/.claude/sessions/<pid>.json,
+# recording the cwd it is actually working in. That drifts from the shell's cwd
+# whenever claude moves workspace — entering a worktree, say — because claude
+# chdir()s its own process while zsh, suspended behind it, never redraws a
+# prompt. tmux only ever sees the shell, so #{pane_current_path} would hand the
+# new pane a stale directory. Look for a registered claude session inside the
+# pane's process subtree and prefer its cwd; otherwise pass through whatever
+# tmux already knew.
+#
+# Usage: claude-pane-cwd <pane-pid> <fallback-dir>
+set -u
+
+pane_pid=${1:-}
+fallback=${2:-$HOME}
+sessions="${HOME}/.claude/sessions"
+
+emit_fallback() {
+    printf '%s\n' "$fallback"
+    exit 0
+}
+
+case $pane_pid in
+    '' | *[!0-9]*) emit_fallback ;;
+esac
+[ -d "$sessions" ] || emit_fallback
+command -v jq >/dev/null 2>&1 || emit_fallback
+
+# Newest first: claude rewrites the file on every status change, so this prefers
+# the most recently active session in the rare case a pane holds more than one.
+candidates=$(ls -t "$sessions" 2>/dev/null | sed -n 's/^\([0-9][0-9]*\)\.json$/\1/p')
+[ -n "$candidates" ] || emit_fallback
+
+# One ps snapshot, then walk each candidate's parent chain in awk looking for the
+# pane's own process — cheaper than forking ps per hop on a keypress. The hop
+# cap is a guard against a cycle in a torn snapshot, not a real depth limit.
+claude_pid=$(ps -axo pid=,ppid= 2>/dev/null | awk -v root="$pane_pid" -v cands="$candidates" '
+    { parent[$1 + 0] = $2 + 0 }
+    END {
+        target = root + 0
+        n = split(cands, c, "\n")
+        for (i = 1; i <= n; i++) {
+            p = c[i] + 0
+            for (hops = 0; p > 1 && hops < 64; hops++) {
+                if (p == target) { print c[i]; exit }
+                if (!(p in parent)) break
+                p = parent[p]
+            }
+        }
+    }
+')
+[ -n "$claude_pid" ] || emit_fallback
+
+cwd=$(jq -r '.cwd // empty' "$sessions/$claude_pid.json" 2>/dev/null)
+[ -n "$cwd" ] && [ -d "$cwd" ] || emit_fallback
+
+printf '%s\n' "$cwd"

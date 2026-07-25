@@ -24,9 +24,14 @@ bind r source-file ~/.tmux.conf
 # lag when exiting insert mode in vim/nvim
 set -sg escape-time 0
 
-# mirror WezTerm split/navigation bindings
-bind v split-window -h -c "#{pane_current_path}"
-bind s split-window -v -c "#{pane_current_path}"
+# mirror WezTerm split/navigation bindings. New panes and windows inherit the
+# pane's directory, but resolve it through claude-pane-cwd first: a pane running
+# claude hands over the directory claude is actually working in, which diverges
+# from #{pane_current_path} once claude moves workspace (into a worktree, say),
+# because only the suspended shell's cwd is visible to tmux.
+bind v run-shell -b 'tmux split-window -h -t "#{pane_id}" -c "$(~/.local/bin/claude-pane-cwd "#{pane_pid}" "#{pane_current_path}")"'
+bind s run-shell -b 'tmux split-window -v -t "#{pane_id}" -c "$(~/.local/bin/claude-pane-cwd "#{pane_pid}" "#{pane_current_path}")"'
+bind c run-shell -b 'tmux new-window -c "$(~/.local/bin/claude-pane-cwd "#{pane_pid}" "#{pane_current_path}")"'
 bind h select-pane -L
 bind j select-pane -D
 bind k select-pane -U

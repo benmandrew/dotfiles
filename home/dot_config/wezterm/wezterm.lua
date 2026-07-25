@@ -499,13 +499,66 @@ local function complete_selection_and_flash(dest)
     return act.Multiple({ act.CompleteSelection(dest), act.EmitEvent("copied") })
 end
 
+-- Claude Code registers every live session in ~/.claude/sessions/<pid>.json,
+-- recording the cwd it is actually working in. That diverges from the pane's cwd
+-- once claude moves workspace — entering a worktree, say — because claude
+-- chdir()s its own process while zsh, suspended behind it, never redraws a
+-- prompt to emit a fresh OSC 7. Since OSC 7 wins over process introspection once
+-- it has been seen, WezTerm otherwise keeps handing new panes the directory the
+-- shell reported before claude started.
+local claude_sessions = wezterm.home_dir .. "/.claude/sessions"
+
+local function session_cwd(pid)
+    local f = io.open(claude_sessions .. "/" .. pid .. ".json", "r")
+    if not f then
+        return nil
+    end
+    local body = f:read("*a")
+    f:close()
+    local ok, session = pcall(wezterm.json_parse, body)
+    if ok and type(session) == "table" then
+        return session.cwd
+    end
+    return nil
+end
+
+-- claude is normally the pane's foreground process outright, but it can have a
+-- child in front of it (a tool call, a pager), so search the subtree too.
+local function claude_cwd(pane)
+    local ok, proc = pcall(pane.get_foreground_process_info, pane)
+    if not ok or not proc then
+        return nil
+    end
+    local queue = { proc }
+    while #queue > 0 do
+        local node = table.remove(queue, 1)
+        local cwd = session_cwd(node.pid)
+        if cwd then
+            return cwd
+        end
+        for _, child in pairs(node.children or {}) do
+            table.insert(queue, child)
+        end
+    end
+    return nil
+end
+
+-- `variant` names a spawn action taking a SpawnCommand: SplitHorizontal,
+-- SplitVertical or SpawnCommandInNewTab. A nil cwd leaves the field unset, which
+-- is the stock "inherit from the current pane" behaviour we want as a fallback.
+local function spawn_in_claude_cwd(variant)
+    return wezterm.action_callback(function(window, pane)
+        window:perform_action(act[variant]({ domain = "CurrentPaneDomain", cwd = claude_cwd(pane) }), pane)
+    end)
+end
+
 config.keys = {
     -- Copy (overrides the stock CopyTo bindings to add the indicator)
     { key = "c", mods = "SHIFT|CTRL", action = copy_and_flash("Clipboard") },
     { key = "c", mods = "SUPER", action = copy_and_flash("Clipboard") },
     -- Splits
-    { key = "v", mods = "LEADER", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
-    { key = "s", mods = "LEADER", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
+    { key = "v", mods = "LEADER", action = spawn_in_claude_cwd("SplitHorizontal") },
+    { key = "s", mods = "LEADER", action = spawn_in_claude_cwd("SplitVertical") },
     -- Pane navigation
     { key = "h", mods = "LEADER", action = act.ActivatePaneDirection("Left") },
     { key = "j", mods = "LEADER", action = act.ActivatePaneDirection("Down") },
@@ -513,7 +566,7 @@ config.keys = {
     { key = "l", mods = "LEADER", action = act.ActivatePaneDirection("Right") },
     { key = "w", mods = "LEADER", action = act.PaneSelect({ mode = "SwapWithActive" }) },
     -- Tabs
-    { key = "c", mods = "LEADER", action = act.SpawnTab("CurrentPaneDomain") },
+    { key = "c", mods = "LEADER", action = spawn_in_claude_cwd("SpawnCommandInNewTab") },
     { key = "n", mods = "LEADER", action = act.ActivateTabRelative(1) },
     { key = "p", mods = "LEADER", action = act.ActivateTabRelative(-1) },
     -- Reorder: move the active tab left/right rather than just switching focus.
