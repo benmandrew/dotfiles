@@ -8,6 +8,8 @@ o.encoding = "UTF-8" -- Sets the character encoding used inside Vim.
 o.ruler = true -- Show the line and column number of the cursor position, separated by a comma.
 o.mouse = "a" -- Enable the use of the mouse. "a" you can use on all modes
 o.title = true -- When on, the title of the window will be set to the value of 'titlestring'
+o.clipboard = "unnamedplus" -- Yank/delete go to the system clipboard (pbcopy on macOS,
+-- xclip/wl-copy on Linux, OSC 52 over SSH)
 
 require("benmandrew.remap")
 require("benmandrew.lazy")
