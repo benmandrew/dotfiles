@@ -1169,6 +1169,61 @@ install_moor() {
     install -m755 "${tmp_dir}/moor" "${HOME}/.local/bin/moor"
 }
 
+install_glow() {
+    local os_name
+    os_name="$(uname -s)"
+
+    if [[ "${os_name}" == "Darwin" ]]; then
+        if brew list --formula glow >/dev/null 2>&1; then
+            if [[ -z "${UPGRADE:-}" ]]; then
+                log "glow already installed; skipping"
+                return
+            fi
+            log "Upgrading glow"
+            brew upgrade glow
+            return
+        fi
+        log "Installing glow"
+        brew install glow
+        return
+    fi
+
+    # Linux
+    if command -v glow >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "glow already installed; skipping"
+            return
+        fi
+        log "Upgrading glow"
+    else
+        log "Installing glow"
+    fi
+
+    local arch release_arch
+    arch="$(uname -m)"
+    case "${arch}" in
+        x86_64) release_arch="x86_64" ;;
+        aarch64) release_arch="arm64" ;;
+        *)
+            log "Unsupported arch ${arch} for glow install; skipping"
+            return
+            ;;
+    esac
+
+    local tag version
+    tag="$(github_latest_tag charmbracelet/glow)"
+    version="${tag#v}" # release assets drop the leading v
+    local dir_name="glow_${version}_Linux_${release_arch}"
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
+    curl -fsSL "https://github.com/charmbracelet/glow/releases/download/${tag}/${dir_name}.tar.gz" \
+        -o "${tmp_dir}/glow.tar.gz"
+    tar -C "${tmp_dir}" -xzf "${tmp_dir}/glow.tar.gz"
+    mkdir -p "${HOME}/.local/bin"
+    install -m755 "${tmp_dir}/${dir_name}/glow" "${HOME}/.local/bin/glow"
+}
+
 install_treehouse() {
     # Not in brew and no upstream arm64-Linux gap, so download the official
     # release binary on every platform (darwin/linux x amd64/arm64).

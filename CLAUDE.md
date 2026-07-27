@@ -135,6 +135,7 @@ Shared functions called by both platform scripts, in order:
 | `install_opam` | `opam` (OCaml package manager) via `brew` (macOS) or GitHub releases binary (Linux) |
 | `install_go` | Go toolchain — downloads latest stable from `go.dev/dl`; upgrades system Go if < 1.21 (needed for `GOTOOLCHAIN=auto`); Linux only (macOS uses brew as needed) |
 | `install_moor` | `moor` pager (formerly `moar`) — `brew install moor` (macOS); Linux x86_64: official release binary from GitHub; Linux arm64: `GOTOOLCHAIN=auto go install` (no official arm64 binary) |
+| `install_glow` | `glow` markdown renderer — `brew install glow` (macOS) or official release tarball from GitHub extracted to `~/.local/bin` (Linux x86_64/arm64) |
 | `install_treehouse` | `treehouse` git-worktree pool manager — official release tarball from GitHub extracted to `~/.local/bin` (all platforms: darwin/linux x amd64/arm64; no brew formula) |
 | `install_eza` | `eza` via `cargo install` |
 | `install_fd` | `fd` via `cargo install fd-find` |
@@ -164,7 +165,7 @@ MCP servers are registered at user scope (`-s user`) and are idempotent (checked
 
 Checks that all expected commands and directories exist after installation. Run after an install script to confirm nothing is missing. Exits non-zero if any check fails.
 
-Checks: `git curl zsh tmux entr rustup cargo rust-analyzer clangd cmake nix direnv pyright lua-language-server opam moor treehouse eza fd bat btop rg jq delta hyperfine zoxide fzf claude rtk node npm uv uvx ccusage starship nvim`, plus dirs `~/.local/share/zinit/zinit.git`, `~/.tmux/plugins/tpm`. On non-headless machines, also checks WezTerm and the CodeNewRoman Nerd Font (cask on macOS, `~/.local/share/fonts/CodeNewRomanNerdFont` dir on Linux).
+Checks: `git curl zsh tmux entr rustup cargo rust-analyzer clangd cmake nix direnv pyright lua-language-server opam moor glow treehouse eza fd bat btop rg jq delta hyperfine zoxide fzf claude rtk node npm uv uvx ccusage starship nvim`, plus dirs `~/.local/share/zinit/zinit.git`, `~/.tmux/plugins/tpm`. On non-headless machines, also checks WezTerm and the CodeNewRoman Nerd Font (cask on macOS, `~/.local/share/fonts/CodeNewRomanNerdFont` dir on Linux).
 
 ## Key Areas
 

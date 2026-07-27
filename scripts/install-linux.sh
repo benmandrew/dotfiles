@@ -168,6 +168,7 @@ main() {
     run_step install_opam
     run_step install_go
     run_step install_moor
+    run_step install_glow
     run_step install_treehouse
     run_step install_ccusage
     run_step install_git_mcp

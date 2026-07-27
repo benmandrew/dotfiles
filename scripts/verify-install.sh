@@ -64,6 +64,7 @@ check_cmd pyright
 check_cmd lua-language-server
 check_cmd opam
 check_cmd moor
+check_cmd glow
 check_cmd treehouse
 check_cmd eza
 check_cmd fd
