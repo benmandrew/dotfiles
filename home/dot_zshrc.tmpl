@@ -101,9 +101,9 @@ export VISUAL=nvim
 export EDITOR="$VISUAL"
 
 {{ if eq .chezmoi.os "darwin" }}
-export PAGER=moor
+export PAGER="moor --quit-if-one-screen"
 {{ else if eq .chezmoi.os "linux" }}
-export PAGER="moor --wrap --tab-size=4"
+export PAGER="moor --wrap --tab-size=4 --quit-if-one-screen"
 {{ end }}
 export MANPAGER="$PAGER"
 alias less=moor
