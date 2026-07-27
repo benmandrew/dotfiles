@@ -30,7 +30,7 @@ Delegate most non-trivial work to subagents via the Agent tool, proactively, wit
 
 - Use `Explore` for research, codebase search, and read-only investigation.
 - Use `general-purpose` for tasks that write or edit code, or that mix research with action.
-- For read-only delegations (search, summarization, doc lookup), pin a cheaper model — use the `researcher` agent or pass `model: haiku`. Reserve the session model for agents that write code or make judgement calls.
+- For read-only delegations (search, summarization, doc lookup), pin a cheaper model — pass `model: haiku`. Reserve the session model for agents that write code or make judgement calls.
 - Skip delegation only for genuinely trivial one-step actions: a single file read, a one-line edit, a quick question with an immediate answer.
 
 Subagents start cold — they do not see the main context — so long tool output and intermediate reasoning stays out of your conversation entirely. Brief them like a colleague who just walked in: state the goal, relevant file paths, and what's already been ruled out.
