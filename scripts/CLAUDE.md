@@ -64,13 +64,12 @@ Shared functions called by both platform scripts, in order:
 | `install_rtk` | rtk token-optimization proxy |
 | `install_uv` | uv Python package manager |
 | `install_ccusage` | `ccusage` CLI via `npm install -g` (no MCP registration) |
-| `install_git_mcp` | MCP server — registers `npx mcp-remote` pointing to gitmcp.io |
 | `install_starship` | Starship prompt via install script |
 | `install_tmux_plugins` | tpm to `~/.tmux/plugins/tpm` |
 | `install_wezterm` | WezTerm — `brew install --cask` (macOS), `.deb` from GitHub releases (Linux x86_64); skipped on ARM64 |
 | `install_nerd_font` | CodeNewRoman Nerd Font — `brew install --cask font-code-new-roman-nerd-font` (macOS) or GitHub releases zip extracted to `~/.local/share/fonts/` (Linux); skipped on headless Linux |
 
-MCP servers are registered at user scope (`-s user`) and are idempotent (checked via `claude mcp list`).
+No install step registers MCP servers — that is left to `claude mcp add` by hand.
 
 ## `scripts/verify-install.sh`
 

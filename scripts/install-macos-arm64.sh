@@ -140,7 +140,6 @@ main() {
     run_step install_glow
     run_step install_treehouse
     run_step install_ccusage
-    run_step install_git_mcp
     run_step install_starship
     run_step install_tmux_plugins
     run_step install_wezterm

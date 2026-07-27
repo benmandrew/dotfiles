@@ -1,8 +1,6 @@
 #!/bin/bash
 
 UPGRADE=""
-_MCP_LIST_LOADED=false
-MCP_LIST=""
 _INSTALL_FAILED=false
 
 run_step() {
@@ -16,22 +14,6 @@ check_failed() {
     if [[ "${_INSTALL_FAILED}" == "true" ]]; then
         err "One or more install steps failed; see errors above"
         exit 1
-    fi
-}
-
-get_mcp_list() {
-    if [[ "${_MCP_LIST_LOADED}" != "true" ]]; then
-        local claude_json="${HOME}/.claude.json"
-        if [[ -f "${claude_json}" ]] && command -v python3 >/dev/null 2>&1; then
-            MCP_LIST="$(python3 -c "
-import json, sys
-d = json.load(open(sys.argv[1]))
-print('\n'.join(d.get('mcpServers', {}).keys()))
-" "${claude_json}" 2>/dev/null)" || true
-        else
-            MCP_LIST="$(claude mcp list 2>/dev/null)" || true
-        fi
-        _MCP_LIST_LOADED=true
     fi
 }
 
@@ -924,17 +906,6 @@ install_tailscale() {
     curl -fsSL https://tailscale.com/install.sh -o "${script_path}"
     sh "${script_path}"
     rm -f "${script_path}"
-}
-
-install_git_mcp() {
-    require_cmd npx
-    get_mcp_list
-    if echo "${MCP_LIST}" | grep -q "git-mcp"; then
-        log "git-mcp MCP server already registered; skipping"
-        return
-    fi
-    log "Registering git-mcp MCP server"
-    claude mcp add -s user git-mcp -- npx mcp-remote https://gitmcp.io/docs
 }
 
 install_lua_ls() {
