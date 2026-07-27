@@ -124,6 +124,7 @@ main() {
     run_step install_ripgrep
     run_step install_git_delta
     run_step install_jq
+    run_step install_zstd
     run_step install_hyperfine
     run_step install_zoxide
     run_step install_fzf

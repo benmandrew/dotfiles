@@ -100,6 +100,17 @@ alias vim="nvim"
 export VISUAL=nvim
 export EDITOR="$VISUAL"
 
+# Read by the zstd CLI itself, so everything that shells out to it inherits
+# them — tar --zstd, mksquashfs, borg. 0 threads means one per core; level 6
+# still compresses faster than `gzip -6` at a noticeably better ratio.
+export ZSTD_NBTHREADS=0
+export ZSTD_CLEVEL=6
+
+# -a picks the compressor from the output suffix (`tarc x.tar.zst ./dir`).
+# Extraction needs no flag at all: tar sniffs the magic bytes, so a plain
+# `tar -xf` handles .zst, .gz and .xz alike.
+alias tarc="tar -a -cf"
+
 export PAGER="moor --wrap --tab-size=4 --quit-if-one-screen"
 export MANPAGER="$PAGER"
 alias less=moor

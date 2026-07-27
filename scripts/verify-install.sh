@@ -73,6 +73,7 @@ check_cmd btop
 check_cmd rg
 check_cmd delta
 check_cmd jq
+check_cmd zstd
 check_cmd hyperfine
 check_cmd zoxide
 check_cmd fzf

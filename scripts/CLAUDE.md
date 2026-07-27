@@ -55,6 +55,7 @@ Shared functions called by both platform scripts, in order:
 | `install_ripgrep` | `rg` via `cargo install ripgrep` |
 | `install_git_delta` | `delta` via `cargo install git-delta` |
 | `install_jq` | `jq` — `brew install jq` (macOS) or apt (Linux) |
+| `install_zstd` | Zstandard CLI + headers — `brew install zstd` (macOS) or apt `zstd libzstd-dev` (Linux). The Linux guard checks `dpkg -s libzstd-dev` as well as `command -v zstd`, since Ubuntu images often ship the CLI alone and a `command -v` check would skip the headers forever |
 | `install_hyperfine` | `hyperfine` via `cargo install` |
 | `install_gh` | GitHub CLI — `brew install gh` (macOS) or official apt repo (Linux) |
 | `install_tailscale` | Tailscale — `brew install --cask tailscale` (macOS) or official install script (Linux) |
@@ -71,9 +72,11 @@ Shared functions called by both platform scripts, in order:
 
 No install step registers MCP servers — that is left to `claude mcp add` by hand.
 
+Release archives are extracted with `tar -xf`, never `-xzf`: tar picks the decompressor from the archive's magic bytes, so an upstream that switches from `.tar.gz` to `.tar.zst` needs no script change. GNU tar shells out to the `zstd` binary to do it, which `install_zstd` guarantees is present.
+
 ## `scripts/verify-install.sh`
 
 Checks that all expected commands and directories exist after installation. Run after an install script to confirm nothing is missing. Exits non-zero if any check fails.
 
-Checks: `git curl zsh tmux entr rustup cargo rust-analyzer clangd cmake nix direnv pyright lua-language-server opam moor glow treehouse eza fd bat btop rg jq delta hyperfine zoxide fzf claude rtk node npm uv uvx ccusage starship nvim`, plus dirs `~/.local/share/zinit/zinit.git`, `~/.tmux/plugins/tpm`. On non-headless machines, also checks WezTerm and the CodeNewRoman Nerd Font (cask on macOS, `~/.local/share/fonts/CodeNewRomanNerdFont` dir on Linux).
+Checks: `git curl zsh tmux entr rustup cargo rust-analyzer clangd cmake nix direnv pyright lua-language-server opam moor glow treehouse eza fd bat btop rg jq zstd delta hyperfine zoxide fzf claude rtk node npm uv uvx ccusage starship nvim`, plus dirs `~/.local/share/zinit/zinit.git`, `~/.tmux/plugins/tpm`. On non-headless machines, also checks WezTerm and the CodeNewRoman Nerd Font (cask on macOS, `~/.local/share/fonts/CodeNewRomanNerdFont` dir on Linux).
 

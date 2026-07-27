@@ -124,7 +124,7 @@ install_neovim_if_missing() {
     curl -fsSL "https://github.com/neovim/neovim/releases/latest/download/${nvim_dir}.tar.gz" \
         -o "${tmp_dir}/${nvim_dir}.tar.gz"
     sudo rm -rf "/opt/${nvim_dir}"
-    sudo tar -C /opt -xzf "${tmp_dir}/${nvim_dir}.tar.gz"
+    sudo tar -C /opt -xf "${tmp_dir}/${nvim_dir}.tar.gz"
 }
 
 main() {
@@ -153,6 +153,7 @@ main() {
     run_step install_ripgrep
     run_step install_git_delta
     run_step install_jq
+    run_step install_zstd
     run_step install_hyperfine
     run_step install_zoxide
     run_step install_fzf

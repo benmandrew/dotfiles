@@ -235,6 +235,40 @@ install_jq() {
     fi
 }
 
+# apt splits zstd across two packages: `zstd` is the CLI (which GNU tar shells
+# out to for .tar.zst) and `libzstd-dev` the headers, so cargo/cc builds link
+# the system copy instead of vendoring their own. Ubuntu images often ship the
+# CLI already, so the guard checks for the dev package too or the headers never
+# land. brew's single formula covers both.
+install_zstd() {
+    local os_name
+    os_name="$(uname -s)"
+    if [[ "${os_name}" == "Darwin" ]]; then
+        if command -v zstd >/dev/null 2>&1; then
+            if [[ -z "${UPGRADE:-}" ]]; then
+                log "zstd already installed; skipping"
+                return
+            fi
+            log "Upgrading zstd"
+            brew upgrade zstd
+            return
+        fi
+        log "Installing zstd"
+        brew install zstd
+        return
+    fi
+    if command -v zstd >/dev/null 2>&1 && dpkg -s libzstd-dev >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "zstd already installed; skipping"
+            return
+        fi
+        log "Upgrading zstd"
+    else
+        log "Installing zstd"
+    fi
+    sudo apt install -y zstd libzstd-dev
+}
+
 install_clangd() {
     if command -v clangd >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then
@@ -719,7 +753,7 @@ install_tmux_from_source() {
     trap 'rm -rf "${build_dir}"; trap - RETURN' RETURN
     curl -fsSL "https://github.com/tmux/tmux/releases/download/${build_version}/${tarball}" \
         -o "${build_dir}/${tarball}"
-    tar -C "${build_dir}" -xzf "${build_dir}/${tarball}"
+    tar -C "${build_dir}" -xf "${build_dir}/${tarball}"
     local cpu_count
     cpu_count="$(nproc)"
     (cd "${build_dir}/tmux-${build_version}" && ./configure && make -j"${cpu_count}" && sudo make install)
@@ -961,7 +995,7 @@ install_lua_ls() {
     mkdir -p "${install_dir}"
     curl -fsSL "https://github.com/LuaLS/lua-language-server/releases/download/${tag}/${archive}" \
         -o "${tmp_dir}/${archive}"
-    tar -xzf "${tmp_dir}/${archive}" -C "${install_dir}"
+    tar -xf "${tmp_dir}/${archive}" -C "${install_dir}"
     ln -sf "${install_dir}/bin/lua-language-server" "${HOME}/.local/bin/lua-language-server"
 }
 
@@ -1084,7 +1118,7 @@ install_go() {
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
     curl -fsSL "https://go.dev/dl/${tarball}" -o "${tmp_dir}/${tarball}"
     sudo rm -rf /usr/local/go
-    sudo tar -C /usr/local -xzf "${tmp_dir}/${tarball}"
+    sudo tar -C /usr/local -xf "${tmp_dir}/${tarball}"
     export PATH="/usr/local/go/bin:${PATH}"
 }
 
@@ -1190,7 +1224,7 @@ install_glow() {
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
     curl -fsSL "https://github.com/charmbracelet/glow/releases/download/${tag}/${dir_name}.tar.gz" \
         -o "${tmp_dir}/glow.tar.gz"
-    tar -C "${tmp_dir}" -xzf "${tmp_dir}/glow.tar.gz"
+    tar -C "${tmp_dir}" -xf "${tmp_dir}/glow.tar.gz"
     mkdir -p "${HOME}/.local/bin"
     install -m755 "${tmp_dir}/${dir_name}/glow" "${HOME}/.local/bin/glow"
 }
@@ -1244,7 +1278,7 @@ install_treehouse() {
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
     curl -fsSL "https://github.com/kunchenguid/treehouse/releases/download/${tag}/${tarball}" \
         -o "${tmp_dir}/${tarball}"
-    tar -C "${tmp_dir}" -xzf "${tmp_dir}/${tarball}"
+    tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}"
     mkdir -p "${HOME}/.local/bin"
     install -m755 "${tmp_dir}/treehouse" "${HOME}/.local/bin/treehouse"
 }
