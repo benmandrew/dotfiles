@@ -147,6 +147,10 @@ main() {
     run_step install_wezterm
     run_step install_nerd_font
 
+    run_optional_step obsidian \
+        "Obsidian: notes app. Ships the 'obsidian' CLI, but needs the GUI app running — a dev-machine tool, not a server one." \
+        install_obsidian
+
     run_step install_neovim_if_missing
 
     print_chezmoi_init_hint

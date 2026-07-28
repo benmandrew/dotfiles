@@ -4,6 +4,24 @@ How `scripts/` is organised. Loaded when working with files under this directory
 
 All scripts are idempotent — each step checks whether the tool is already present and skips if so. Pass `--upgrade` to upgrade already-installed tools to their latest versions instead of skipping them.
 
+## Optional tools
+
+Almost everything here is installed unconditionally, on the assumption that every machine wants it. A few tools are not like that — they only earn their place on a machine that is actually sat in front of, and are noise on a box that only ever gets ssh'd into. Those go through `optional_enabled`, which asks once and remembers.
+
+Answers live in `~/.config/dotfiles/optional-tools.conf` (respecting `XDG_CONFIG_HOME`) as `name=yes|no`, one per line. Because the answer is recorded, later runs — including `--upgrade` — stay fully non-interactive, so the prompt does not become a tax on every install.
+
+The split is deliberately *not* inferred. Hostnames churn, and the existing `DISPLAY`/`WAYLAND_DISPLAY` headless check only catches the Linux GUI case — it says nothing on macOS, and nothing about a desktop Linux box that is still only used as a server. Asking is the honest version.
+
+| Flag | Effect |
+|---|---|
+| `--all-optional` | install every optional tool, no prompting (does not touch the state file) |
+| `--no-optional` | skip every optional tool, no prompting (does not touch the state file) |
+| `--reconfigure-optional` | re-ask every optional tool, overwriting the recorded answers |
+
+With no flag and no recorded answer, the user is prompted; the default on a bare `<enter>` is no. The prompt reads from `/dev/tty` rather than stdin, since the platform scripts are routinely piped. When there is no terminal at all (CI, a provisioning run), the tool is skipped and **no answer is recorded**, so a later interactive run still gets to ask. Note that `[[ -r /dev/tty ]]` is not a usable interactivity test — the device node reads as readable even with no controlling terminal attached, where actually opening it fails — hence the `{ : </dev/tty; }` open attempt.
+
+Add an optional tool with `run_optional_step <key> <description> <install_fn>` in both platform scripts.
+
 ## Sudo
 
 Both platform scripts call `start_sudo_keepalive` (in `install-common.sh`) as their first privileged action, so the password is asked for exactly once. A full install — especially `--upgrade`, which rebuilds tmux and re-fetches every toolchain — runs far longer than sudo's credential cache (15 min by default), so without this the later steps each re-prompt. It authenticates with `sudo -v`, then backgrounds a loop refreshing the timestamp with `sudo -n true` every 50s, torn down by an `EXIT` trap. The loop is additionally bounded by `kill -0 $$` so no refresher survives a `SIGKILL`ed install, and breaks rather than blocking if `sudo -n` fails (`timestamp_timeout=0`), degrading to per-step prompts. Skipped entirely when already root.
@@ -75,8 +93,19 @@ Shared functions called by both platform scripts, in order:
 | `install_tmux_plugins` | tpm to `~/.tmux/plugins/tpm` |
 | `install_wezterm` | WezTerm — `brew install --cask` (macOS), `.deb` from GitHub releases (Linux x86_64); skipped on ARM64 |
 | `install_nerd_font` | CodeNewRoman Nerd Font — `brew install --cask font-code-new-roman-nerd-font` (macOS) or GitHub releases zip extracted to `~/.local/share/fonts/` (Linux); skipped on headless Linux |
+| `install_obsidian` | **Optional** (key `obsidian`) — Obsidian desktop app. `brew install --cask obsidian` (macOS), `obsidian_<ver>_amd64.deb` from GitHub releases (Linux x86_64), or the `obsidian-<ver>-arm64.tar.gz` unpacked to `~/.local/share/obsidian` (Linux ARM64, since upstream ships no ARM64 `.deb`); skipped on headless Linux |
 
 No install step registers MCP servers — that is left to `claude mcp add` by hand.
+
+### The Obsidian CLI is not separately installable
+
+`install_obsidian` installs the **desktop app**, not the CLI, because the thing advertised at [obsidian.md/cli](https://obsidian.md/cli) is not a standalone binary. It ships inside the app (1.12.7+) and is registered by a GUI toggle — Settings → General → *Command line interface* — which copies the binary to `~/.local/bin/obsidian` on Linux, or symlinks `/usr/local/bin/obsidian` on macOS (needing admin). There is no documented non-interactive registration, so the script installs the app and prints the remaining manual step via `print_obsidian_cli_hint`.
+
+The CLI also requires the app to be **running** — the first command launches it if it is not. That is what makes this a dev-machine tool rather than a server one, and why it is gated behind a prompt.
+
+On Linux ARM64 the unpacked launcher is symlinked to `~/.local/bin/obsidian-app`, deliberately *not* `obsidian`: that name belongs to the CLI that registration installs, and clobbering it would break the CLI. The same branch also `chown root:root` + `chmod 4755`es the bundled `chrome-sandbox`, since Electron refuses to start without a setuid sandbox helper — the `.deb` does this itself, an unpacked tarball cannot. It is best-effort, and logs a `--no-sandbox` hint if it fails.
+
+For syncing a vault from a server with no desktop app, upstream publishes a separate npm package, `obsidian-headless` (binary `ob`, Node >= 22, proprietary). It is Sync-only, not the CLI, and is not installed here.
 
 Release archives are extracted with `tar -xf`, never `-xzf`: tar picks the decompressor from the archive's magic bytes, so an upstream that switches from `.tar.gz` to `.tar.zst` needs no script change. GNU tar shells out to the `zstd` binary to do it, which `install_zstd` guarantees is present.
 
@@ -85,4 +114,6 @@ Release archives are extracted with `tar -xf`, never `-xzf`: tar picks the decom
 Checks that all expected commands and directories exist after installation. Run after an install script to confirm nothing is missing. Exits non-zero if any check fails.
 
 Checks: `git curl zsh tmux entr rustup cargo rust-analyzer clangd cmake nix direnv pyright lua-language-server opam moor glow treehouse eza fd bat btop rg jq zstd delta hyperfine zoxide fzf claude rtk node npm uv uvx ccusage starship nvim`, plus dirs `~/.local/share/zinit/zinit.git`, `~/.tmux/plugins/tpm`. On non-headless machines, also checks WezTerm and the CodeNewRoman Nerd Font (cask on macOS, `~/.local/share/fonts/CodeNewRomanNerdFont` dir on Linux).
+
+`obsidian` is checked with `check_cmd_optional`, so it warns rather than fails. It is optional per machine, and even where it is opted into, the command only exists after the app's manual GUI registration step — a hard check would fail on a correctly-installed machine.
 

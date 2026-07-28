@@ -113,6 +113,11 @@ if [[ "${headless_linux}" == false ]]; then
     fi
 fi
 
+# Optional (opted into per machine) and, even when opted in, the `obsidian`
+# command only appears after the app's GUI registration step — so absence is
+# never a failure.
+check_cmd_optional obsidian
+
 check_dir "tpm" "${HOME}/.tmux/plugins/tpm"
 
 check_cmd nvim

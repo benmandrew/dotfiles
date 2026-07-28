@@ -6,6 +6,18 @@ The install script bootstraps all required tools for a given platform. It auto-d
 $ ./scripts/install.sh
 ```
 
+### Optional tools
+
+Most tools are installed on every machine. A few only make sense where you actually sit in front of the machine, rather than ssh into it — currently the Obsidian desktop app, which is what provides the `obsidian` CLI. Those are prompted for on first install, and the answer is remembered in `~/.config/dotfiles/optional-tools.conf` so later runs stay non-interactive.
+
+```bash
+$ ./scripts/install.sh --all-optional          # take everything, no prompts
+$ ./scripts/install.sh --no-optional           # take nothing, no prompts
+$ ./scripts/install.sh --reconfigure-optional  # ask again
+```
+
+Without a terminal to prompt on, optional tools are skipped and no answer is recorded, so an unattended run never silently opts a machine out for good.
+
 ### Supported platforms
 
 These are the platforms with a tested install script. Running `install.sh` on anything else will exit with an error.

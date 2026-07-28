@@ -86,12 +86,99 @@ parse_args() {
     for arg in "$@"; do
         case "${arg}" in
             --upgrade) UPGRADE=true ;;
+            --all-optional) OPTIONAL_MODE=all ;;
+            --no-optional) OPTIONAL_MODE=none ;;
+            --reconfigure-optional) OPTIONAL_RECONFIGURE=true ;;
             *)
-                err "Unknown argument: ${arg}. Usage: $0 [--upgrade]"
+                err "Unknown argument: ${arg}. Usage: $0 [--upgrade] [--all-optional|--no-optional] [--reconfigure-optional]"
                 exit 1
                 ;;
         esac
     done
+}
+
+# Optional tools: everything else here installs everywhere, but a few tools only
+# make sense on a machine that is actually sat in front of (a GUI app, say) and
+# are pure noise on a server that only ever gets ssh'd into. Rather than
+# hardcoding that split — hostnames churn and a headless check only catches the
+# Linux GUI case — ask once, then remember the answer in a state file so every
+# later run, including --upgrade, stays non-interactive.
+OPTIONAL_MODE=""
+OPTIONAL_RECONFIGURE=""
+OPTIONAL_STATE_FILE="${XDG_CONFIG_HOME:-${HOME}/.config}/dotfiles/optional-tools.conf"
+
+# Answers are stored one per line as `name=yes|no`. Returns 0 if the tool should
+# be installed. $1 is the key, $2 a one-line description shown in the prompt.
+optional_enabled() {
+    local name="$1" description="$2"
+
+    case "${OPTIONAL_MODE}" in
+        all) return 0 ;;
+        none) return 1 ;;
+        *) ;; # unset: fall through to the recorded answer, or ask for one
+    esac
+
+    local recorded=""
+    if [[ -z "${OPTIONAL_RECONFIGURE}" ]] && [[ -f "${OPTIONAL_STATE_FILE}" ]]; then
+        local line
+        line="$(grep -m1 "^${name}=" "${OPTIONAL_STATE_FILE}" 2>/dev/null || true)"
+        recorded="${line#*=}"
+    fi
+
+    if [[ -z "${recorded}" ]]; then
+        # Prefer /dev/tty over stdin: the platform scripts are routinely piped
+        # (`curl ... | bash`), which leaves stdin as the script text itself.
+        # `-r /dev/tty` is not a usable test — the device node is readable even
+        # with no controlling terminal attached, where opening it fails — so
+        # actually try to open it.
+        local tty_ok=false
+        if { : </dev/tty; } 2>/dev/null; then
+            tty_ok=true
+        fi
+        # Nothing to ask on (CI, a provisioning run, a detached shell): decline
+        # rather than block on a read that can never be answered, and leave it
+        # unrecorded so a later interactive run still gets to ask.
+        if [[ "${tty_ok}" == false ]] && [[ ! -t 0 ]]; then
+            log "${name}: optional and no terminal to prompt on; skipping"
+            return 1
+        fi
+        local reply=""
+        printf "\033[1;35m[install]\033[0m %s\n" "${description}"
+        if [[ "${tty_ok}" == true ]]; then
+            read -r -p "[install] Install ${name}? [y/N] " reply </dev/tty
+        else
+            read -r -p "[install] Install ${name}? [y/N] " reply
+        fi
+        case "${reply}" in
+            [Yy]*) recorded=yes ;;
+            *) recorded=no ;;
+        esac
+        optional_record "${name}" "${recorded}"
+    fi
+
+    [[ "${recorded}" == "yes" ]]
+}
+
+optional_record() {
+    local name="$1" answer="$2"
+    mkdir -p "$(dirname "${OPTIONAL_STATE_FILE}")"
+    local tmp
+    tmp="$(mktemp)"
+    if [[ -f "${OPTIONAL_STATE_FILE}" ]]; then
+        grep -v "^${name}=" "${OPTIONAL_STATE_FILE}" >"${tmp}" 2>/dev/null || true
+    fi
+    printf '%s=%s\n' "${name}" "${answer}" >>"${tmp}"
+    mv "${tmp}" "${OPTIONAL_STATE_FILE}"
+    log "Recorded ${name}=${answer} in ${OPTIONAL_STATE_FILE}"
+}
+
+# Wrapper mirroring run_step for tools behind an optional_enabled gate.
+run_optional_step() {
+    local name="$1" description="$2"
+    shift 2
+    if optional_enabled "${name}" "${description}"; then
+        run_step "$@"
+    fi
 }
 
 # Pin npm's global prefix to ~/.local rather than trusting `npm prefix -g`.
@@ -1325,6 +1412,139 @@ install_treehouse() {
     tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}"
     mkdir -p "${HOME}/.local/bin"
     install -m755 "${tmp_dir}/treehouse" "${HOME}/.local/bin/treehouse"
+}
+
+# The thing advertised at obsidian.md/cli is not a separately installable
+# binary: it ships inside the desktop app and is registered by a GUI toggle
+# (Settings -> General -> Command line interface), which copies the binary to
+# ~/.local/bin/obsidian on Linux or symlinks /usr/local/bin/obsidian on macOS.
+# It also needs the app to be running — the first command launches it. So the
+# most a script can do is install the app and point at the remaining manual
+# step, which is also why this is optional rather than installed everywhere.
+install_obsidian() {
+    local os_name os_arch
+    os_name="$(uname -s)"
+    os_arch="$(uname -m)"
+
+    if [[ "${os_name}" == "Darwin" ]]; then
+        if brew list --cask obsidian >/dev/null 2>&1; then
+            if [[ -z "${UPGRADE:-}" ]]; then
+                log "Obsidian already installed; skipping"
+                print_obsidian_cli_hint
+                return
+            fi
+            log "Upgrading Obsidian"
+            brew upgrade --cask obsidian || true
+        else
+            log "Installing Obsidian"
+            brew install --cask obsidian
+        fi
+        print_obsidian_cli_hint
+        return
+    fi
+
+    # The CLI drives a running GUI app, so an Obsidian install on a machine with
+    # no display buys nothing.
+    if [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
+        log "Obsidian: no display session detected; skipping on headless Linux"
+        return
+    fi
+
+    local tag version
+    tag="$(github_latest_tag obsidianmd/obsidian-releases)"
+    version="${tag#v}"
+
+    case "${os_arch}" in
+        x86_64 | amd64)
+            if dpkg -s obsidian >/dev/null 2>&1; then
+                local current
+                current="$(dpkg-query -W -f='${Version}' obsidian 2>/dev/null || true)"
+                if [[ -z "${UPGRADE:-}" ]]; then
+                    log "Obsidian ${current} already installed; skipping"
+                    print_obsidian_cli_hint
+                    return
+                fi
+                if [[ "${current}" == "${version}" ]]; then
+                    log "Obsidian ${current} already at latest; skipping"
+                    print_obsidian_cli_hint
+                    return
+                fi
+                log "Upgrading Obsidian to ${version}"
+            else
+                log "Installing Obsidian ${version}"
+            fi
+            local deb="obsidian_${version}_amd64.deb"
+            local tmp_dir
+            tmp_dir="$(mktemp -d)"
+            trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
+            curl -fsSL "https://github.com/obsidianmd/obsidian-releases/releases/download/${tag}/${deb}" \
+                -o "${tmp_dir}/${deb}"
+            sudo apt-get install -y "${tmp_dir}/${deb}"
+            ;;
+        aarch64 | arm64)
+            # Upstream publishes no arm64 .deb, only a tarball, so unpack it
+            # under ~/.local/share and link the launcher onto PATH by hand.
+            local dest="${HOME}/.local/share/obsidian"
+            local version_file="${dest}/.version"
+            if [[ -f "${version_file}" ]]; then
+                local current
+                current="$(cat "${version_file}")"
+                if [[ -z "${UPGRADE:-}" ]]; then
+                    log "Obsidian ${current} already installed; skipping"
+                    print_obsidian_cli_hint
+                    return
+                fi
+                if [[ "${current}" == "${version}" ]]; then
+                    log "Obsidian ${current} already at latest; skipping"
+                    print_obsidian_cli_hint
+                    return
+                fi
+                log "Upgrading Obsidian to ${version}"
+            else
+                log "Installing Obsidian ${version}"
+            fi
+            local tarball="obsidian-${version}-arm64.tar.gz"
+            local tmp_dir
+            tmp_dir="$(mktemp -d)"
+            trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
+            curl -fsSL "https://github.com/obsidianmd/obsidian-releases/releases/download/${tag}/${tarball}" \
+                -o "${tmp_dir}/${tarball}"
+            tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}"
+            local unpacked="${tmp_dir}/obsidian-${version}-arm64"
+            if [[ ! -x "${unpacked}/obsidian" ]]; then
+                err "Obsidian: no 'obsidian' binary at ${unpacked}; upstream layout changed"
+                return 1
+            fi
+            rm -rf "${dest}"
+            mkdir -p "$(dirname "${dest}")"
+            mv "${unpacked}" "${dest}"
+            printf '%s\n' "${version}" >"${version_file}"
+            # Electron refuses to start if its setuid sandbox helper is not
+            # root-owned and mode 4755. The .deb arranges that; an unpacked
+            # tarball cannot, so do it here. Best-effort: failing only costs the
+            # sandbox, and saying so beats a bare "app won't launch".
+            if [[ -e "${dest}/chrome-sandbox" ]]; then
+                if ! sudo chown root:root "${dest}/chrome-sandbox" ||
+                    ! sudo chmod 4755 "${dest}/chrome-sandbox"; then
+                    log "Obsidian: could not setuid chrome-sandbox; skipping (launch with --no-sandbox if the app refuses to start)"
+                fi
+            fi
+            mkdir -p "${HOME}/.local/bin"
+            ln -sf "${dest}/obsidian" "${HOME}/.local/bin/obsidian-app"
+            ;;
+        *)
+            log "Unsupported arch ${os_arch} for Obsidian install; skipping"
+            return
+            ;;
+    esac
+
+    print_obsidian_cli_hint
+}
+
+print_obsidian_cli_hint() {
+    log "Obsidian CLI needs a one-time manual step: open Obsidian, then"
+    log "  Settings -> General -> enable 'Command line interface'"
+    log "  and follow the prompt to register it (installs the 'obsidian' command)"
 }
 
 print_chezmoi_init_hint() {
