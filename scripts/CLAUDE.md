@@ -4,6 +4,12 @@ How `scripts/` is organised. Loaded when working with files under this directory
 
 All scripts are idempotent — each step checks whether the tool is already present and skips if so. Pass `--upgrade` to upgrade already-installed tools to their latest versions instead of skipping them.
 
+## Sudo
+
+Both platform scripts call `start_sudo_keepalive` (in `install-common.sh`) as their first privileged action, so the password is asked for exactly once. A full install — especially `--upgrade`, which rebuilds tmux and re-fetches every toolchain — runs far longer than sudo's credential cache (15 min by default), so without this the later steps each re-prompt. It authenticates with `sudo -v`, then backgrounds a loop refreshing the timestamp with `sudo -n true` every 50s, torn down by an `EXIT` trap. The loop is additionally bounded by `kill -0 $$` so no refresher survives a `SIGKILL`ed install, and breaks rather than blocking if `sudo -n` fails (`timestamp_timeout=0`), degrading to per-step prompts. Skipped entirely when already root.
+
+Uses no bash 4+ features, so it is safe under the bash 3.2 macOS ships. Ordering matters on macOS: the Homebrew installer arms a `trap '/usr/bin/sudo -k' EXIT` that would wipe the cached timestamp, but only when guarded by `! sudo -n -v` — i.e. only if sudo was not already active — so `start_sudo_keepalive` must run before `install_homebrew`. It cannot suppress GUI escalation, which is a separate mechanism from sudo's timestamp: the `xcode-select --install` dialog and any cask using Authorization Services or a system-extension approval still prompt.
+
 ## `scripts/install-linux.sh`
 
 Requires: `sudo`, `apt`, `dpkg`, `ssh-keygen`. Supports x86_64 and aarch64 — arch is detected at runtime.

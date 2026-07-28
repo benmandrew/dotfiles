@@ -38,6 +38,50 @@ require_cmd() {
     fi
 }
 
+# sudo caches credentials for a short window (15 minutes by default, less on
+# some configs) and a full install — especially the --upgrade path, which
+# rebuilds tmux and re-downloads every toolchain — comfortably outruns it, so
+# the password gets asked for again at each later sudo step. Authenticate once
+# up front and refresh the timestamp from the background for as long as the
+# script runs, so the user is prompted exactly once.
+_SUDO_KEEPALIVE_PID=""
+
+start_sudo_keepalive() {
+    # Already root: nothing to cache, and `sudo -v` would be pointless.
+    if ((EUID == 0)); then
+        return
+    fi
+    log "Requesting sudo access (prompted for once; refreshed for the rest of the install)"
+    if ! sudo -v; then
+        err "sudo authentication failed"
+        exit 1
+    fi
+    local parent=$$
+    # `kill -0` bounds the loop to the lifetime of the install even if the EXIT
+    # trap never fires (SIGKILL, say), so no stray refresher is left behind.
+    # `sudo -n true` never prompts, so a sudoers config with
+    # timestamp_timeout=0 breaks the loop rather than blocking on a password
+    # read that has no terminal attached.
+    while kill -0 "${parent}" 2>/dev/null; do
+        sudo -n true 2>/dev/null || break
+        sleep 50
+    done &
+    _SUDO_KEEPALIVE_PID=$!
+    # Suppress a "Terminated" job notice if the script is ever run with job
+    # control on (sourced from an interactive shell); a plain `bash install.sh`
+    # never prints one. Best-effort: macOS ships bash 3.2, where `disown` may
+    # only accept a %jobspec rather than a bare pid, so failure is ignored.
+    disown "${_SUDO_KEEPALIVE_PID}" 2>/dev/null || true
+    trap stop_sudo_keepalive EXIT
+}
+
+stop_sudo_keepalive() {
+    if [[ -n "${_SUDO_KEEPALIVE_PID}" ]]; then
+        kill "${_SUDO_KEEPALIVE_PID}" 2>/dev/null || true
+        _SUDO_KEEPALIVE_PID=""
+    fi
+}
+
 parse_args() {
     for arg in "$@"; do
         case "${arg}" in

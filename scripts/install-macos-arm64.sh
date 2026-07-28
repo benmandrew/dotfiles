@@ -103,6 +103,7 @@ main() {
     require_cmd sudo
     require_cmd curl
     require_cmd ssh-keygen
+    start_sudo_keepalive
     install_xcode_clt
     install_homebrew
 

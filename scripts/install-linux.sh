@@ -134,6 +134,7 @@ main() {
     require_cmd ssh-keygen
     require_cmd dpkg
     require_cmd apt
+    start_sudo_keepalive
     install_apt_packages_if_missing git curl build-essential zsh entr libevent-dev libncurses-dev pkg-config bubblewrap bison autoconf unzip
     install_perf
     run_step install_inotify_limits
