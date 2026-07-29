@@ -315,29 +315,78 @@ install_rust_analyzer() {
 }
 
 install_btop() {
-    if command -v btop >/dev/null 2>&1; then
-        if [[ -z "${UPGRADE:-}" ]]; then
-            log "btop already installed; skipping"
-            return
-        fi
-        log "Upgrading btop"
-        local os_name
-        os_name="$(uname -s)"
-        if [[ "${os_name}" == "Darwin" ]]; then
-            brew upgrade btop
-        else
-            sudo apt install -y btop
-        fi
-        return
-    fi
-    log "Installing btop"
     local os_name
     os_name="$(uname -s)"
+
     if [[ "${os_name}" == "Darwin" ]]; then
+        if command -v btop >/dev/null 2>&1; then
+            if [[ -z "${UPGRADE:-}" ]]; then
+                log "btop already installed; skipping"
+                return
+            fi
+            log "Upgrading btop"
+            brew upgrade btop
+            return
+        fi
+        log "Installing btop"
         brew install btop
-    else
-        sudo apt install -y btop
+        return
     fi
+
+    # Linux: build from source, because neither packaged option can show GPU
+    # metrics. apt (jammy/universe) is pinned at 1.2.3, which predates GPU
+    # monitoring entirely (added in 1.3.0). The upstream release binaries are
+    # newer but built STATIC=true, and btop's Makefile force-disables
+    # GPU_SUPPORT for static builds since the NVIDIA/AMD backends dlopen their
+    # vendor libraries. A stock source build turns GPU_SUPPORT on by default on
+    # linux/x86_64 and resolves libnvidia-ml.so at runtime, so it needs no CUDA
+    # toolkit at build time -- just the driver already being present.
+    #
+    # Pinned rather than tracking latest: btop >= 1.4.5 uses std::ranges::to,
+    # which needs GCC 14, and jammy ships GCC 11. Bump this once the oldest
+    # target distro has a new enough compiler.
+    local version="1.4.4"
+
+    # ~/.local/bin is appended after /usr/bin on PATH, so a leftover apt btop
+    # would shadow the binary installed below.
+    if dpkg -s btop >/dev/null 2>&1; then
+        log "Removing apt btop (predates GPU support, and shadows ~/.local/bin)"
+        sudo apt purge -y btop
+    fi
+
+    if command -v btop >/dev/null 2>&1; then
+        local current
+        current="$(btop --version 2>/dev/null | awk '{print $NF}')"
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "btop ${current} already installed; skipping"
+            return
+        fi
+        if [[ "${current}" == "${version}" ]]; then
+            log "btop ${current} already at pinned version; skipping"
+            return
+        fi
+        log "Upgrading btop to ${version}"
+    else
+        log "Installing btop ${version}"
+    fi
+
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
+    curl -fsSL "https://github.com/aristocratos/btop/archive/refs/tags/v${version}.tar.gz" \
+        -o "${tmp_dir}/btop.tar.gz"
+    tar -C "${tmp_dir}" -xf "${tmp_dir}/btop.tar.gz"
+    # Build with a pruned PATH and an explicit CXX. If nix is on PATH its
+    # binutils/glibc get picked up alongside the system g++, and the link fails
+    # on __isoc23_* symbols that the older system glibc does not export.
+    env PATH=/usr/local/bin:/usr/bin:/bin CXX=/usr/bin/g++ \
+        make -C "${tmp_dir}/btop-${version}" -j"$(nproc)"
+    mkdir -p "${HOME}/.local/bin"
+    install -m755 "${tmp_dir}/btop-${version}/bin/btop" "${HOME}/.local/bin/btop"
+    # The apt package supplied themes via /usr/share/btop/themes, which the purge
+    # above removes; ship them to the user theme dir so theme selection still works.
+    mkdir -p "${HOME}/.config/btop/themes"
+    install -m644 "${tmp_dir}/btop-${version}"/themes/*.theme "${HOME}/.config/btop/themes/"
 }
 
 install_jq() {

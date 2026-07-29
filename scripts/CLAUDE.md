@@ -75,7 +75,7 @@ Shared functions called by both platform scripts, in order:
 | `install_eza` | `eza` via `cargo install` |
 | `install_fd` | `fd` via `cargo install fd-find` |
 | `install_bat` | `bat` via `cargo install` |
-| `install_btop` | `btop` resource monitor (modern `top`/`htop` alternative) — `brew install btop` (macOS) or apt (Linux) |
+| `install_btop` | `btop` resource monitor (modern `top`/`htop` alternative) — `brew install btop` (macOS) or **built from source** into `~/.local/bin` (Linux), version-pinned. Source build because neither packaged option shows GPU metrics: apt jammy/universe is stuck at 1.2.3 (GPU monitoring arrived in 1.3.0), and the upstream release binaries are `STATIC=true`, which btop's Makefile treats as force-disabling `GPU_SUPPORT` since the NVIDIA/AMD backends dlopen their vendor libraries. A stock source build defaults `GPU_SUPPORT=true` on linux/x86_64 and resolves `libnvidia-ml.so` at runtime, so no CUDA toolkit is needed to build. Pinned at 1.4.4 because 1.4.5+ needs GCC 14 (`std::ranges::to`) and jammy ships GCC 11 — bump when the oldest target distro catches up. `make` is invoked with a pruned `PATH` and explicit `CXX=/usr/bin/g++`, since a nix-populated PATH mixes nix binutils/glibc into the link and fails on `__isoc23_*`. Also `apt purge`es any packaged btop, which would otherwise shadow `~/.local/bin` on PATH, and copies themes to `~/.config/btop/themes` to replace the `/usr/share/btop/themes` the purge removes |
 | `install_ripgrep` | `rg` via `cargo install ripgrep` |
 | `install_git_delta` | `delta` via `cargo install git-delta` |
 | `install_jq` | `jq` — `brew install jq` (macOS) or apt (Linux) |
