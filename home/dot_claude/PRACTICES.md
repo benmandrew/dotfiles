@@ -27,11 +27,7 @@ Self-triggered compaction gives control over the summary; auto-compaction does n
 
 ## rtk meta commands
 
-```bash
-rtk gain              # Show token savings analytics
-rtk gain --history    # Show command usage history with savings
-rtk discover          # Analyze Claude Code history for missed opportunities
-rtk proxy <cmd>       # Execute raw command without filtering (for debugging)
-```
-
-Note: measured savings are ~37% overall (`rtk gain`), concentrated in grep/test output.
+See `~/.claude/RTK.md` for the command list and the measured savings breakdown. The short version:
+`rtk gain` reports 79.6%, but a single outlier `curl` carries 92.3M of the 107.7M saved. Everyday
+filtering runs 12–17% on reads and greps, so treat rtk as a search-heavy-workload optimisation
+rather than a blanket win.
