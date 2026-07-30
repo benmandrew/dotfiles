@@ -355,8 +355,9 @@ install_btop() {
     fi
 
     if command -v btop >/dev/null 2>&1; then
-        local current
-        current="$(btop --version 2>/dev/null | awk '{print $NF}')"
+        local current raw
+        raw="$(btop --version 2>/dev/null)" || raw=""
+        current="$(awk '{print $NF}' <<<"${raw}")"
         if [[ -z "${UPGRADE:-}" ]]; then
             log "btop ${current} already installed; skipping"
             return
@@ -379,8 +380,10 @@ install_btop() {
     # Build with a pruned PATH and an explicit CXX. If nix is on PATH its
     # binutils/glibc get picked up alongside the system g++, and the link fails
     # on __isoc23_* symbols that the older system glibc does not export.
+    local jobs
+    jobs="$(nproc)"
     env PATH=/usr/local/bin:/usr/bin:/bin CXX=/usr/bin/g++ \
-        make -C "${tmp_dir}/btop-${version}" -j"$(nproc)"
+        make -C "${tmp_dir}/btop-${version}" -j"${jobs}"
     mkdir -p "${HOME}/.local/bin"
     install -m755 "${tmp_dir}/btop-${version}/bin/btop" "${HOME}/.local/bin/btop"
     # The apt package supplied themes via /usr/share/btop/themes, which the purge
