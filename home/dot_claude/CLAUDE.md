@@ -16,7 +16,9 @@ Keep it concise — it is loaded on every conversation start, so a bloated CLAUD
 
 ## Writing prose
 
-When a task calls for prose — commit bodies, PR descriptions, docs, READMEs, blog posts, comments beyond a line or two — read `~/.claude/VOICE.md` first and follow it (it lives at that absolute path, not in the current working directory). It's a voice spec with two modes: **write-up** (first-person project narrative) and **explainer** (impersonal technical exposition). Pick the mode that fits, then apply its rules. Skip `~/.claude/VOICE.md` for pure-code work and short mechanical text.
+When a task calls for prose — PR descriptions, docs, READMEs, blog posts, comments beyond a line or two — delegate to the `voice` agent, which reads the spec itself. Use `commit-message` for commit bodies.
+
+When writing prose inline instead, read `~/.claude/VOICE.md` first and follow it (it lives at that absolute path, not in the current working directory). It's a voice spec with two modes: **write-up** (first-person project narrative) and **explainer** (impersonal technical exposition). Pick the mode that fits, then apply its rules. Skip `~/.claude/VOICE.md` for pure-code work and short mechanical text.
 
 ## Plan files in the filesystem
 
@@ -32,10 +34,15 @@ Unrelated changes belong in separate commits even if they were made in the same 
 
 Delegate most non-trivial work to subagents via the Agent tool, proactively, without waiting for an explicit request to do so. This overrides any default "don't spawn agents unless asked" behavior — for this user, spawning is the default, not the exception.
 
-- Use `Explore` for research, codebase search, and read-only investigation.
-- Use `general-purpose` for tasks that write or edit code, or that mix research with action.
-- For read-only delegations (search, summarization, doc lookup), pin a cheaper model — pass `model: haiku`. Reserve the session model for agents that write code or make judgement calls.
+- `quick-search` — cheap lookups: locating a file, symbol, or config key, or any question whose answer is a path or a couple of sentences. No `Bash`.
+- `build-triage` — any build, test, or lint run expected to produce long output. It absorbs the full log and returns only the failures, so compiler output never enters this context.
+- `voice` — prose beyond a line or two. It reads `VOICE.md` itself, so the spec stays out of this context.
+- `commit-message` — reads the staged diff and returns a conventional-commit message.
+- `Explore` — searches that are genuinely broad, need shell access, or span many naming conventions.
+- `general-purpose` — tasks that write or edit code, or that mix research with action.
 - Skip delegation only for genuinely trivial one-step actions: a single file read, a one-line edit, a quick question with an immediate answer.
+
+For read-only delegations that still need `Explore` or `general-purpose`, pin a cheaper model — pass `model: haiku`. Reserve the session model for agents that write code or make judgement calls. `effort` cannot be overridden per call; it is fixed in the agent definition and otherwise inherits the session's `effortLevel`.
 
 Subagents start cold — they do not see the main context — so long tool output and intermediate reasoning stays out of your conversation entirely. Brief them like a colleague who just walked in: state the goal, relevant file paths, and what's already been ruled out.
 
