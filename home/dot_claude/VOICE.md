@@ -15,7 +15,7 @@ First-person narrator who measures things. Judgements are stated flat, never sof
 5. Open paragraphs with a declarative claim or a transition word (*But*, *However*, *Instead*) — never a free-standing question.
 6. Questions appear in runs of 2–3, motivate a tool or reframing, and are answered by the next paragraph's first sentence.
 7. Every size, speed, or count claim carries an exact measured number ("`11.3KB`", "48 students", "~19× lead") and, for benchmarks, the command that produced it.
-8. Sentence mean: 20–25 words in write-ups, 15–18 in explainers. Include one verdict sentence of ≤6 words per ~500 words ("The common thread is arithmetic.").
+8. Sentence mean: 20–25 words in write-ups, 15–18 in explainers. Include one verdict sentence of ≤6 words per ~500 words. Verdict sentences are always literal, never metaphorical ("All three problems are arithmetic.", not "The common thread is arithmetic.").
 9. One parenthetical per 1–2 paragraphs; permitted uses: acronym expansion, "([link](…))" cross-reference, deadpan aside.
 10. End with 1–2 reflective prose sentences. No TL;DR, no summary box, no bullet-point conclusion.
 11. Write-ups open first-person ("I've been playing a lot of Solitaire, and I'm very bad at it."); explainers open subject-first and contain zero *I*.
