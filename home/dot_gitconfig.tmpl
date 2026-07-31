@@ -45,3 +45,6 @@
     allowedSignersFile = {{ .chezmoi.homeDir }}/.config/git/allowed-signers
 [advice]
     addIgnoredFile = false
+[credential "https://git.overleaf.com"]
+    helper = "!f() { t=\"$HOME/.config/overleaf/git-token\"; test \"$1\" = get && test -f \"$t\" && printf \"password=%s\\n\" \"$(cat \"$t\")\"; }; f"
+    username = git
