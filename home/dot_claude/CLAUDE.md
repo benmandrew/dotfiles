@@ -1,3 +1,5 @@
+Use Plain English/Plain Language (PL). When appropriate, use ASD-STE100.
+
 # rtk
 
 A PreToolUse hook transparently rewrites Bash commands through `rtk`, a token-filtering proxy (e.g. `git status` → `rtk git status`) — no action needed. If output looks truncated or missing detail you need, re-run the raw command with `rtk proxy <cmd>`. Analytics: `rtk gain`.
@@ -16,7 +18,7 @@ Keep it concise — it is loaded on every conversation start, so a bloated CLAUD
 
 ## Writing prose
 
-When a task calls for prose — PR descriptions, docs, READMEs, blog posts, comments beyond a line or two — delegate to the `voice` agent, which reads the spec itself. For commit bodies use `commit-message`, subject to the exception below.
+When a task calls for prose — PR descriptions, docs, READMEs, blog posts, comments beyond a line or two — delegate to the `voice` agent, which reads the spec itself. Use `commit-message` for commit bodies.
 
 When writing prose inline instead, read `~/.claude/VOICE.md` first and follow it (it lives at that absolute path, not in the current working directory). It's a voice spec with two modes: **write-up** (first-person project narrative) and **explainer** (impersonal technical exposition). Pick the mode that fits, then apply its rules. Skip `~/.claude/VOICE.md` for pure-code work and short mechanical text.
 
@@ -37,7 +39,7 @@ Delegate most non-trivial work to subagents via the Agent tool, proactively, wit
 - `quick-search` — cheap lookups: locating a file, symbol, or config key, or any question whose answer is a path or a couple of sentences. No `Bash`.
 - `build-triage` — any build, test, or lint run expected to produce long output. It absorbs the full log and returns only the failures, so compiler output never enters this context.
 - `voice` — prose beyond a line or two. It reads `VOICE.md` itself, so the spec stays out of this context.
-- `commit-message` — reads the staged diff and returns a conventional-commit message. Only when the diff is *not* already in this context: a fresh session, or a diff too large to want here. If I have already read it, write the message inline instead — the agent's cold start plus its own `git diff` and `git log` costs more than the message is worth, and it re-derives style I can already see.
+- `commit-message` — reads the staged diff and returns a conventional-commit message.
 - `Explore` — searches that are genuinely broad, need shell access, or span many naming conventions.
 - `general-purpose` — tasks that write or edit code, or that mix research with action.
 - Skip delegation only for genuinely trivial one-step actions: a single file read, a one-line edit, a quick question with an immediate answer.
