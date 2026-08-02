@@ -1,9 +1,15 @@
 # SyncTeX inverse search: Ctrl+click in the PDF jumps to the source in VS Code.
+{{ if eq .chezmoi.os "linux" -}}
 #
 # sandbox must be none. zathura's seccomp filter is inherited by every process
 # it spawns, and it kills pivot_root, which Chromium needs at startup — so the
 # editor command silently fails under the default "normal" sandbox.
+#
+# Linux only: the option configures seccomp, which macOS has no equivalent of,
+# so the macOS build never registers it and warns "Unknown option: sandbox" on
+# every launch if it is set unconditionally.
 set sandbox none
+{{ end -}}
 set synctex true
 # The ~1s from Ctrl+click to the line appearing is VS Code's own goto handling
 # (~0.6s reveal) plus GNOME/Wayland deferring the paint of the unfocused window.

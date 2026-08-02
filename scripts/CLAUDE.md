@@ -94,6 +94,7 @@ Shared functions called by both platform scripts, in order:
 | `install_wezterm` | WezTerm — `brew install --cask` (macOS), `.deb` from GitHub releases (Linux x86_64); skipped on ARM64 |
 | `install_nerd_font` | CodeNewRoman Nerd Font — `brew install --cask font-code-new-roman-nerd-font` (macOS) or GitHub releases zip extracted to `~/.local/share/fonts/` (Linux); skipped on headless Linux |
 | `install_obsidian` | **Optional** (key `obsidian`) — Obsidian desktop app. `brew install --cask obsidian` (macOS), `obsidian_<ver>_amd64.deb` from GitHub releases (Linux x86_64), or the `obsidian-<ver>-arm64.tar.gz` unpacked to `~/.local/share/obsidian` (Linux ARM64, since upstream ships no ARM64 `.deb`); skipped on headless Linux |
+| `install_zathura` | **Optional** (key `zathura`) — zathura PDF viewer. `brew install zathura --with-synctex` plus `zathura-pdf-poppler` from the `homebrew-zathura/zathura` tap (macOS), or `apt install zathura zathura-pdf-poppler` (Linux); skipped on headless Linux. Config lives at `home/dot_config/zathura/zathurarc` |
 
 No install step registers MCP servers — that is left to `claude mcp add` by hand.
 
@@ -107,6 +108,39 @@ On Linux ARM64 the unpacked launcher is symlinked to `~/.local/bin/obsidian-app`
 
 For syncing a vault from a server with no desktop app, upstream publishes a separate npm package, `obsidian-headless` (binary `ob`, Node >= 22, proprietary). It is Sync-only, not the CLI, and is not installed here.
 
+### zathura on macOS needs a tap, a plugin, and a symlink
+
+There is no zathura in homebrew-core, so `install_zathura` taps [`homebrew-zathura/zathura`](https://github.com/homebrew-zathura/homebrew-zathura) and builds from source. Three things about that tap do not follow the usual formula:
+
+- **The tap has to be trusted.** Homebrew 6 refuses to load formulae from an unofficial tap until `brew trust` records it. The refusal is a per-formula error, *not* a failed `brew tap`, so a step that only checks the tap walks straight past it and reports a clean install having built nothing — which is exactly what happened the first time this ran. `install_zathura` checks `brew trust --json v1` and trusts the tap once. The same gate applies to `Noah4ever/tap` in the `deps` Make target.
+- **`--with-synctex` is not optional here.** The formula declares `synctex` as an `:optional` dependency, so a plain `brew install zathura` produces a build with no SyncTeX. The managed `zathurarc` is mostly *about* SyncTeX inverse search, so the option is always passed. `brew upgrade` reuses the options a formula was installed with, and the flag is appended on the upgrade path too, which repairs a build made before this step existed.
+- **A backend plugin is mandatory.** zathura renders nothing on its own; each document format is a separate formula. `zathura-pdf-poppler` is installed and guarded separately from zathura itself, so an interrupted first run cannot leave a viewer with no backend.
+- **The plugin has to be linked by hand.** Its formula installs `libpdf-poppler.dylib` into its own keg, but zathura only scans `$(brew --prefix zathura)/lib/zathura`. `link_zathura_pdf_plugin` creates that directory and symlinks the dylib in, and runs on every path including the already-installed one, so a plugin that was installed but never linked gets fixed on the next run.
+
+The tap also publishes a `convert-into-app.sh` that builds an `/Applications/Zathura.app` wrapper. It is not run — it is a `curl | sh` that needs re-running after every plugin change, and the command-line viewer is enough for inverse search — so `print_zathura_app_hint` just points at it.
+
+Linux needs none of this: Debian and Ubuntu package zathura with SyncTeX already built in, and `zathura-pdf-poppler` is a plain apt package that lands in the right place.
+
+### Why poppler and not mupdf
+
+The tap recommends `zathura-pdf-mupdf`, and mupdf *is* the faster renderer — but only in ratio. Measured with hyperfine on a 6-page typst paper (text, display math, tables), rendering identical 1241×1754 rasters:
+
+| workload | mupdf | poppler | gap |
+|---|---|---|---|
+| 1 page @150 DPI | 24.3 ms | 30.2 ms | 5.9 ms |
+| 1 page @300 DPI | 26.9 ms | 42.2 ms | 15.3 ms |
+| 6 pages @150 DPI | 37.6 ms | 102.3 ms | 64.7 ms |
+
+Watch mode re-renders the *visible page*, so the first row is the case that matters; the 2.7× only appears when rendering a whole document at once, which zathura never does. Most of each figure is process startup and parse — 4× the pixels costs mupdf just +2.6 ms — so true rasterisation is roughly 1 ms against 4 ms. For scale, `typst compile` on the same document is **92 ms ± 2.5**, its jitter alone comparable to the entire backend difference.
+
+So poppler costs ~3 ms per re-render and saves 71 MB of mupdf (plus `mujs` and `gumbo-parser`, orphaned once mupdf goes), reuses the poppler most machines already have, and puts both platforms on one renderer instead of two sets of rendering quirks.
+
+The macOS build is cheaper than "builds from source" suggests. Nothing in the dependency closure compiles — `girara` resolves to the **homebrew/core** formula, which is bottled and shadows the tap's copy — so only the tap's own small meson projects build.
+
+Timings on an M1 with `gtk+3` already present. The full run was measured against the *mupdf* backend before the switch: **6m43s wall-clock, of which 34s was compilation** (`synctex` 4s, `zathura` 19s, `zathura-pdf-mupdf` 11s), the rest Homebrew overhead and bottle downloads with `mupdf` alone at ~170s. Dropping mupdf removes that download; `zathura-pdf-poppler` was separately measured at **61s** with zathura already built. A clean poppler install end-to-end was never timed from scratch, so treat "a few minutes" as the honest figure rather than either number.
+
+Both figures hold only while `arm64_*` bottles exist for the running macOS. On a just-released version, a bottle-less dependency falls back to source — which is the case that turns minutes into an hour.
+
 Release archives are extracted with `tar -xf`, never `-xzf`: tar picks the decompressor from the archive's magic bytes, so an upstream that switches from `.tar.gz` to `.tar.zst` needs no script change. GNU tar shells out to the `zstd` binary to do it, which `install_zstd` guarantees is present.
 
 ## `scripts/verify-install.sh`
@@ -115,5 +149,5 @@ Checks that all expected commands and directories exist after installation. Run 
 
 Checks: `git curl zsh tmux entr rustup cargo rust-analyzer clangd cmake nix direnv pyright lua-language-server opam moor glow treehouse eza fd bat btop rg jq zstd delta hyperfine zoxide fzf claude rtk node npm uv uvx ccusage starship nvim`, plus dirs `~/.local/share/zinit/zinit.git`, `~/.tmux/plugins/tpm`. On non-headless machines, also checks WezTerm and the CodeNewRoman Nerd Font (cask on macOS, `~/.local/share/fonts/CodeNewRomanNerdFont` dir on Linux).
 
-`obsidian` is checked with `check_cmd_optional`, so it warns rather than fails. It is optional per machine, and even where it is opted into, the command only exists after the app's manual GUI registration step — a hard check would fail on a correctly-installed machine.
+`obsidian` and `zathura` are checked with `check_cmd_optional`, so they warn rather than fail. Both are optional per machine. `obsidian` additionally only exists after the app's manual GUI registration step, and `zathura` is skipped outright on headless Linux — a hard check would fail on a correctly-installed machine in either case.
 

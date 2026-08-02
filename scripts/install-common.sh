@@ -1599,6 +1599,124 @@ print_obsidian_cli_hint() {
     log "  and follow the prompt to register it (installs the 'obsidian' command)"
 }
 
+# zathura is a keyboard-driven PDF viewer. The managed zathurarc wires up SyncTeX
+# inverse search into VS Code, so the build has to have SyncTeX support: Debian's
+# package does, but the macOS formula makes it an :optional dependency, hence
+# --with-synctex.
+#
+# macOS has no zathura in homebrew-core, so this uses the community tap. That tap
+# builds from source and ships each document backend as its own formula, so a
+# bare `brew install zathura` renders nothing at all — the backend plugin is not
+# a nicety. The plugin also has to be linked into place by hand: its formula
+# installs the .dylib into its own keg, while zathura only scans
+# $(brew --prefix zathura)/lib/zathura.
+#
+# poppler is the backend on both platforms. The tap recommends mupdf and mupdf is
+# the faster renderer, but only in ratio: measured on a 6-page typst paper, a
+# single-page re-render — which is all watch mode does — is 24.3ms under mupdf
+# against 30.2ms under poppler, and typst's own compile of the same document is
+# 92ms. A ~6ms edge is invisible next to that, and it costs 71MB of mupdf plus a
+# second renderer's quirks to learn. poppler is already present on most machines
+# and is what Debian ships, so one backend covers both platforms.
+install_zathura() {
+    local os_name
+    os_name="$(uname -s)"
+
+    if [[ "${os_name}" == "Darwin" ]]; then
+        local taps
+        taps="$(brew tap)"
+        if ! grep -q "^homebrew-zathura/zathura$" <<<"${taps}"; then
+            log "Tapping homebrew-zathura/zathura"
+            brew tap homebrew-zathura/zathura
+        fi
+        # Homebrew 6 refuses to load formulae from an unofficial tap until it is
+        # trusted. The refusal is a per-formula error rather than a failed tap,
+        # so without this the step walks straight past it and "succeeds" having
+        # built nothing. Answering yes to the optional-tool prompt is the opt-in;
+        # re-asking per tap would make the install interactive again.
+        local trusted_taps
+        trusted_taps="$(brew trust --json v1)"
+        if ! jq -e '.taps | index("homebrew-zathura/zathura")' <<<"${trusted_taps}" >/dev/null; then
+            log "Trusting tap homebrew-zathura/zathura"
+            brew trust --tap homebrew-zathura/zathura || return 1
+        fi
+        if brew list --formula zathura >/dev/null 2>&1; then
+            if [[ -n "${UPGRADE:-}" ]]; then
+                log "Upgrading zathura"
+                # `brew upgrade` reuses the options a formula was installed with
+                # and appends any given here, so --with-synctex also repairs a
+                # build that predates it.
+                brew upgrade zathura --with-synctex || return 1
+            else
+                log "zathura already installed; skipping"
+            fi
+        else
+            log "Installing zathura"
+            brew install zathura --with-synctex || return 1
+        fi
+        # Guarded separately from zathura itself: the two are distinct formulae,
+        # and an interrupted first run can leave the viewer without a backend.
+        if brew list --formula zathura-pdf-poppler >/dev/null 2>&1; then
+            if [[ -n "${UPGRADE:-}" ]]; then
+                log "Upgrading zathura-pdf-poppler"
+                brew upgrade zathura-pdf-poppler || return 1
+            fi
+        else
+            log "Installing zathura-pdf-poppler"
+            brew install zathura-pdf-poppler || return 1
+        fi
+        # Deliberately not the last command in the function: the hint below
+        # returns 0, so letting it run last would mask a link failure and report
+        # a clean install that renders nothing.
+        link_zathura_pdf_plugin || return 1
+        print_zathura_app_hint
+        return 0
+    fi
+
+    # A GUI document viewer buys nothing on a machine with no display.
+    if [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
+        log "zathura: no display session detected; skipping on headless Linux"
+        return
+    fi
+
+    if command -v zathura >/dev/null 2>&1 && dpkg -s zathura-pdf-poppler >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "zathura already installed; skipping"
+            return
+        fi
+        log "Upgrading zathura"
+    else
+        log "Installing zathura"
+    fi
+    sudo apt install -y zathura zathura-pdf-poppler
+}
+
+link_zathura_pdf_plugin() {
+    local zathura_prefix plugin_prefix
+    # `brew --prefix <formula>` answers with the opt path whether or not the
+    # formula is installed, so check installation separately or a failed install
+    # gets misreported as an upstream layout change.
+    if ! brew list --formula zathura-pdf-poppler >/dev/null 2>&1; then
+        err "zathura: zathura-pdf-poppler is not installed; cannot link the PDF backend"
+        return 1
+    fi
+    zathura_prefix="$(brew --prefix zathura)"
+    plugin_prefix="$(brew --prefix zathura-pdf-poppler)"
+    if [[ ! -f "${plugin_prefix}/libpdf-poppler.dylib" ]]; then
+        err "zathura: no libpdf-poppler.dylib under ${plugin_prefix}; upstream layout changed"
+        return 1
+    fi
+    mkdir -p "${zathura_prefix}/lib/zathura"
+    ln -sf "${plugin_prefix}/libpdf-poppler.dylib" \
+        "${zathura_prefix}/lib/zathura/libpdf-poppler.dylib"
+}
+
+print_zathura_app_hint() {
+    log "zathura on macOS is a command-line tool. To also get a /Applications bundle"
+    log "  that opens PDFs on double-click, run the tap's convert-into-app.sh:"
+    log "  https://github.com/homebrew-zathura/homebrew-zathura"
+}
+
 print_chezmoi_init_hint() {
     log "You can initialize chezmoi with: chezmoi init --apply git@github.com:benmandrew/dotfiles.git"
 }

@@ -118,6 +118,10 @@ fi
 # never a failure.
 check_cmd_optional obsidian
 
+# Also optional per machine, and skipped outright on headless Linux even when
+# opted into.
+check_cmd_optional zathura
+
 check_dir "tpm" "${HOME}/.tmux/plugins/tpm"
 
 check_cmd nvim

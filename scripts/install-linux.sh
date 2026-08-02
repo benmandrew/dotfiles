@@ -182,6 +182,10 @@ main() {
         "Obsidian: notes app. Ships the 'obsidian' CLI, but needs the GUI app running — a dev-machine tool, not a server one." \
         install_obsidian
 
+    run_optional_step zathura \
+        "zathura: keyboard-driven PDF viewer, with SyncTeX inverse search into VS Code. A GUI app — noise on a server." \
+        install_zathura
+
     run_step install_neovim_if_missing
 
     print_chezmoi_init_hint
