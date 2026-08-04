@@ -209,6 +209,20 @@ opam() {
   opam "$@"
 }
 
+# A dropped SSH link kills the session before the remote TUI can restore the
+# terminal, so raw mode, mouse reporting, the hidden cursor and the alt charset
+# stay set locally — which reads as a hung tab. Undo it on every ssh exit; a
+# clean exit sees no difference. `stty sane` alone leaves the DEC private modes.
+ssh() {
+  command ssh "$@"
+  local ret=$?
+  if [[ -t 1 ]]; then
+    stty sane
+    printf '\e[?1049l\e[?25h\e[?1000l\e[?1002l\e[?1003l\e[?1006l\e[?2004l\e(B\e[m\017'
+  fi
+  return $ret
+}
+
 # git_dirty() {
 #   git status --porcelain 2>/dev/null | grep -q . && echo "%{$fg[red]%}*%{$reset_color%}"
 # }

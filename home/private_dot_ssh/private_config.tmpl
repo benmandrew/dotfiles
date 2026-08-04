@@ -26,7 +26,7 @@ Host *
 {{ if eq .chezmoi.os "darwin" -}}
 	UseKeychain yes
 {{ end -}}
-	ServerAliveInterval 60
+	ServerAliveInterval 15
 	ServerAliveCountMax 3
 	ControlMaster auto
 	ControlPath ~/.ssh/sockets/%C
