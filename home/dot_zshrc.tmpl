@@ -151,14 +151,12 @@ alias gwt="git wt"
 # process, so it can never change this shell's directory. Reuse its --paths
 # output rather than listing worktrees again, so the picker and the plain
 # listing can never drift apart. Field 1 is the absolute path, which the rows
-# themselves no longer carry once the shared prefix is stripped; that prefix is
-# the first line, which --header-lines holds still instead of offering it up as
-# something to pick.
+# themselves no longer carry once they are shortened to a directory name.
 gws() {
   local rows target
   rows=$(GIT_WT_FORCE_COLOUR=1 git wt --paths) || return
   target=$(print -r -- "$rows" | fzf --ansi --delimiter='\t' --with-nth=2.. \
-    --header-lines=1 --height=40% --reverse --no-multi --prompt='worktree> ') || return
+    --height=40% --reverse --no-multi --prompt='worktree> ') || return
   [[ -n $target ]] && cd "${target%%$'\t'*}"
 }
 unalias gl 2>/dev/null || true

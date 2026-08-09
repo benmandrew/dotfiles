@@ -1,16 +1,28 @@
 #!/bin/sh
 # List this repository's worktrees, as `git wt` (git finds any git-* on PATH).
 #
-#     ~/projects/
-#     wayfare                              e215256c main             ● wayfare-77 (idle)
-#     wayfare-perf                         db9307e9 feat/read-path
-#     wayfare/.claude/worktrees/query-spec cebf336c feat/query-spec  ● query-spec (busy)
+#     wayfare        e215256c main             ● wayfare-77 (idle)
+#     wayfare-perf   db9307e9 feat/read-path
+#     query-spec     cebf336c feat/query-spec  ● query-spec (busy)
 #
 # `git worktree list` prints every path in full, so a repository with several
 # worktrees repeats the same long prefix on every line and pushes the part that
-# differs off to the right. Strip the directory prefix that every path shares,
-# print it once as a header, and size each column to its content — a fixed
-# column width misaligns as soon as one entry outgrows it.
+# differs off to the right. What tells worktrees apart is the last component,
+# so print that alone. Where two worktrees share a directory name the labels
+# grow back up their paths a component at a time until they differ, because a
+# listing that shows one name twice cannot be acted on.
+#
+# --full keeps the whole path instead, factored: the directory prefix every
+# worktree shares is printed once as a header, and the rows hold what is left.
+# There is no such header without --full, since a bare directory name does not
+# hang off the shared prefix — nested worktrees live several levels below it.
+#
+#     ~/projects/
+#     wayfare                              e215256c main
+#     wayfare/.claude/worktrees/query-spec cebf336c feat/query-spec
+#
+# Every column is sized to its content: a fixed width misaligns as soon as one
+# entry outgrows it.
 #
 # The last column names the Claude Code sessions working in each worktree.
 # Claude registers every live session in ~/.claude/sessions/<pid>.json with the
@@ -19,16 +31,20 @@
 # session inside a nested .claude/worktrees/* checkout to both.
 #
 # --paths writes the same rows as "<absolute path>\t<row>" for the `gws` picker
-# in .zshrc, which cannot reconstruct an absolute path from a stripped one. The
-# shared prefix goes on its own first line, so fzf can take the path from field
-# 1, display field 2 onwards, and hold that first line still as a header.
+# in .zshrc, which cannot reconstruct an absolute path from a shortened one. It
+# never prints the header, with or without --full: field 1 already says where
+# every row is, so nothing is left for a header to disambiguate.
 
 paths=""
-case ${1:-} in
-    --paths) paths=1 ;;
-    "") ;;
-    *) echo "usage: git wt [--paths]" >&2; exit 2 ;;
-esac
+full=""
+while [ $# -gt 0 ]; do
+    case $1 in
+        --paths) paths=1 ;;
+        --full) full=1 ;;
+        *) echo "usage: git wt [--full] [--paths]" >&2; exit 2 ;;
+    esac
+    shift
+done
 
 # --paths feeds fzf --ansi rather than a terminal, so it asks for colour itself.
 if [ -t 1 ] || [ -n "${GIT_WT_FORCE_COLOUR:-}" ]; then
@@ -70,8 +86,17 @@ printf '%s\n' "$list" | GIT_WT_AGENTS="$agents" awk \
     -v m="$agent_colour" \
     -v d="$dim" \
     -v x="$reset" \
-    -v paths="$paths" '
+    -v paths="$paths" \
+    -v full="$full" '
 function gap(k,   s) { s = ""; while (k-- > 0) s = s " "; return s }
+
+# The last k components of a path: tail("/a/b/c", 1) is "c", tail(..., 2) "b/c".
+function tail(p, k,   part, count, out, j) {
+    count = split(p, part, "/")
+    out = part[count]
+    for (j = 1; j < k && count - j >= 1; j++) out = part[count - j] "/" out
+    return out
+}
 
 # Is target the directory dir itself, or something underneath it?
 function under(dir, target) {
@@ -85,10 +110,10 @@ BEGIN {
         if (line[i] == "") continue
         split(line[i], field, "\t")
         # Background sessions are named after their task, which runs long.
-        label = field[2]
-        if (length(label) > 24) label = substr(label, 1, 23) "…"
+        who = field[2]
+        if (length(who) > 24) who = substr(who, 1, 23) "…"
         agentcwd[++agentn] = field[1]
-        agentlabel[agentn] = "● " label " (" field[3] ")"
+        agentlabel[agentn] = "● " who " (" field[3] ")"
     }
 }
 
@@ -110,47 +135,66 @@ END {
             agent[deepest] = (agent[deepest] == "" ? "" : agent[deepest] "  ") agentlabel[i]
     }
 
-    # Longest run of leading path components every worktree has in common.
-    # Component 1 is empty, because each path starts with "/", so a run of 1
-    # means the paths share nothing but the root and there is no prefix worth
-    # hoisting into a header.
-    shared = split(path[1], first, "/") - 1
-    for (i = 2; i <= n; i++) {
-        count = split(path[i], part, "/") - 1
-        if (count < shared) shared = count
-        for (j = 1; j <= shared; j++)
-            if (part[j] != first[j]) { shared = j - 1; break }
-    }
+    for (i = 1; i <= n; i++) abs[i] = path[i]
 
     prefix = ""
-    if (shared > 1)
-        for (j = 1; j <= shared; j++) prefix = prefix first[j] "/"
+    if (full != "") {
+        # Longest run of leading path components every worktree has in common.
+        # Component 1 is empty, because each path starts with "/", so a run of
+        # 1 means the paths share nothing but the root and there is no prefix
+        # worth hoisting into a header.
+        shared = split(abs[1], first, "/") - 1
+        for (i = 2; i <= n; i++) {
+            count = split(abs[i], part, "/") - 1
+            if (count < shared) shared = count
+            for (j = 1; j <= shared; j++)
+                if (part[j] != first[j]) { shared = j - 1; break }
+        }
+        if (shared > 1)
+            for (j = 1; j <= shared; j++) prefix = prefix first[j] "/"
+        for (i = 1; i <= n; i++) label[i] = substr(abs[i], length(prefix) + 1)
+    } else {
+        # Start at the directory name and lengthen only the labels that clash,
+        # so one awkwardly-placed worktree cannot drag the whole listing out.
+        # The round cap is a backstop: two identical paths would never settle.
+        for (i = 1; i <= n; i++) depth[i] = 1
+        for (round = 0; round < 32; round++) {
+            clash = 0
+            split("", seen)
+            for (i = 1; i <= n; i++) {
+                label[i] = tail(abs[i], depth[i])
+                seen[label[i]]++
+            }
+            for (i = 1; i <= n; i++)
+                if (seen[label[i]] > 1) { depth[i]++; clash = 1 }
+            if (!clash) break
+        }
+    }
 
-    pathwidth = 0
+    labelwidth = 0
     namewidth = 0
     for (i = 1; i <= n; i++) {
-        full[i] = path[i]
-        path[i] = substr(path[i], length(prefix) + 1)
-        if (length(path[i]) > pathwidth) pathwidth = length(path[i])
+        if (length(label[i]) > labelwidth) labelwidth = length(label[i])
         if (length(name[i]) > namewidth) namewidth = length(name[i])
     }
 
-    if (prefix != "") {
+    # Field 1 of --paths already locates every row, leaving a header nothing
+    # to say.
+    if (paths == "" && prefix != "") {
         home = ENVIRON["HOME"]
         if (home != "" && index(prefix, home "/") == 1)
             prefix = "~" substr(prefix, length(home) + 1)
+        printf "%s%s%s\n", d, prefix, x
     }
-    if (paths != "") printf "\t%s%s%s\n", d, prefix, x
-    else if (prefix != "") printf "%s%s%s\n", d, prefix, x
 
     for (i = 1; i <= n; i++) {
         # Pad outside the colour spans, so a row with no agent ends at its
         # branch name rather than trailing the width of the agent column.
-        row = y path[i] x gap(pathwidth - length(path[i])) " " \
+        row = y label[i] x gap(labelwidth - length(label[i])) " " \
               r head[i] x " " b name[i] x
         if (agent[i] != "")
             row = row gap(namewidth - length(name[i])) "  " m agent[i] x
-        if (paths != "") printf "%s\t%s\n", full[i], row
+        if (paths != "") printf "%s\t%s\n", abs[i], row
         else print row
     }
 }
