@@ -1,0 +1,66 @@
+#!/bin/sh
+# List this repository's remotes, as `git rv` (git finds any git-* on PATH).
+#
+#     origin    git@github.com:benmandrew/wayfare.git (fetch+push)
+#     upstream  git@github.com:acme/wayfare.git       (fetch)
+#     upstream  no-push                               (push)
+#
+# `git remote -v` prints a line per direction, so a remote whose fetch and push
+# URLs are the same — nearly all of them — takes two near-identical lines and
+# leaves the reader to diff them. Collapse those into one line labelled
+# fetch+push, and keep two lines only where the URLs really do differ.
+
+if [ -t 1 ]; then
+    colour() { tput "$@" 2>/dev/null || true; }
+else
+    colour() { :; }
+fi
+
+name_colour=$(colour setaf 3)
+url_colour=$(colour setaf 4)
+label_colour=$(colour setaf 2)
+reset=$(colour sgr0)
+
+remotes=$(git remote -v) || exit $?
+# A repository with no remotes gives an empty string, which printf would still
+# turn into one blank line for awk to read as a record.
+[ -n "$remotes" ] || exit 0
+
+printf '%s\n' "$remotes" | awk \
+    -v y="$name_colour" \
+    -v b="$url_colour" \
+    -v g="$label_colour" \
+    -v x="$reset" '
+{
+    kind = $3
+    gsub(/[()]/, "", kind)
+    if (!($1 in seen)) { order[++n] = $1; seen[$1] = 1 }
+    if (kind == "fetch") fetch[$1] = $2; else push[$1] = $2
+}
+
+END {
+    if (!n) exit
+
+    # Size both columns to their content: a fixed width misaligns as soon as
+    # one remote name or URL outgrows it.
+    namewidth = 0
+    urlwidth = 0
+    for (i = 1; i <= n; i++) {
+        nm = order[i]
+        if (length(nm) > namewidth) namewidth = length(nm)
+        if (length(fetch[nm]) > urlwidth) urlwidth = length(fetch[nm])
+        if (length(push[nm]) > urlwidth) urlwidth = length(push[nm])
+    }
+
+    row = sprintf("%%s%%-%ds%%s %%s%%-%ds%%s %%s%%s%%s\n", namewidth, urlwidth)
+    for (i = 1; i <= n; i++) {
+        nm = order[i]
+        if (fetch[nm] == push[nm])
+            printf row, y, nm, x, b, fetch[nm], x, g, "(fetch+push)", x
+        else {
+            printf row, y, nm, x, b, fetch[nm], x, g, "(fetch)", x
+            printf row, y, nm, x, b, push[nm], x, g, "(push)", x
+        }
+    }
+}
+'
