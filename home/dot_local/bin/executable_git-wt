@@ -2,16 +2,36 @@
 # List this repository's worktrees, as `git wt` (git finds any git-* on PATH).
 #
 #     ~/projects/
-#     wayfare                              e215256c main
-#     wayfare/.claude/worktrees/query-spec cebf336c feat/query-spec
+#     wayfare                              e215256c main             ● wayfare-77 (idle)
+#     wayfare-perf                         db9307e9 feat/read-path
+#     wayfare/.claude/worktrees/query-spec cebf336c feat/query-spec  ● query-spec (busy)
 #
 # `git worktree list` prints every path in full, so a repository with several
 # worktrees repeats the same long prefix on every line and pushes the part that
 # differs off to the right. Strip the directory prefix that every path shares,
-# print it once as a header, and size the path column to the longest path that
-# is left — a fixed column width misaligns as soon as one path outgrows it.
+# print it once as a header, and size each column to its content — a fixed
+# column width misaligns as soon as one entry outgrows it.
+#
+# The last column names the Claude Code sessions working in each worktree.
+# Claude registers every live session in ~/.claude/sessions/<pid>.json with the
+# cwd it is actually working in, so each session is credited to the deepest
+# worktree containing that cwd: matching on the parent alone would credit a
+# session inside a nested .claude/worktrees/* checkout to both.
+#
+# --paths writes the same rows as "<absolute path>\t<row>" for the `gws` picker
+# in .zshrc, which cannot reconstruct an absolute path from a stripped one. The
+# shared prefix goes on its own first line, so fzf can take the path from field
+# 1, display field 2 onwards, and hold that first line still as a header.
 
-if [ -t 1 ]; then
+paths=""
+case ${1:-} in
+    --paths) paths=1 ;;
+    "") ;;
+    *) echo "usage: git wt [--paths]" >&2; exit 2 ;;
+esac
+
+# --paths feeds fzf --ansi rather than a terminal, so it asks for colour itself.
+if [ -t 1 ] || [ -n "${GIT_WT_FORCE_COLOUR:-}" ]; then
     colour() { tput "$@" 2>/dev/null || true; }
 else
     colour() { :; }
@@ -20,17 +40,58 @@ fi
 path_colour=$(colour setaf 3)
 head_colour=$(colour setaf 1)
 name_colour=$(colour setaf 4)
+agent_colour=$(colour setaf 5)
 dim=$(colour setaf 8)
 reset=$(colour sgr0)
 
+# One "cwd<tab>name<tab>status" line per live session. The pid is the file name,
+# which saves parsing it back out, and registrations outlive the process that
+# wrote them, so drop the ones whose process is gone.
+sessions="${HOME}/.claude/sessions"
+agents=""
+if [ -d "$sessions" ] && command -v jq >/dev/null 2>&1; then
+    for file in "$sessions"/*.json; do
+        [ -e "$file" ] || continue
+        pid=${file##*/}
+        pid=${pid%.json}
+        case $pid in *[!0-9]*) continue ;; esac
+        kill -0 "$pid" 2>/dev/null || continue
+        agents="${agents}$(jq -r '[.cwd, .name, .status] | @tsv' "$file" 2>/dev/null)
+"
+    done
+fi
+
 list=$(git worktree list --porcelain) || exit $?
 
-printf '%s\n' "$list" | awk \
+printf '%s\n' "$list" | GIT_WT_AGENTS="$agents" awk \
     -v y="$path_colour" \
     -v r="$head_colour" \
     -v b="$name_colour" \
+    -v m="$agent_colour" \
     -v d="$dim" \
-    -v x="$reset" '
+    -v x="$reset" \
+    -v paths="$paths" '
+function gap(k,   s) { s = ""; while (k-- > 0) s = s " "; return s }
+
+# Is target the directory dir itself, or something underneath it?
+function under(dir, target) {
+    return index(target, dir) == 1 &&
+           (length(target) == length(dir) || substr(target, length(dir) + 1, 1) == "/")
+}
+
+BEGIN {
+    count = split(ENVIRON["GIT_WT_AGENTS"], line, "\n")
+    for (i = 1; i <= count; i++) {
+        if (line[i] == "") continue
+        split(line[i], field, "\t")
+        # Background sessions are named after their task, which runs long.
+        label = field[2]
+        if (length(label) > 24) label = substr(label, 1, 23) "…"
+        agentcwd[++agentn] = field[1]
+        agentlabel[agentn] = "● " label " (" field[3] ")"
+    }
+}
+
 /^worktree / { path[++n] = substr($0, 10) }   # not $2: paths may hold spaces
 /^HEAD /     { head[n] = substr($2, 1, 8) }
 /^branch /   { ref = $2; sub(/^refs\/heads\//, "", ref); name[n] = ref }
@@ -39,6 +100,15 @@ printf '%s\n' "$list" | awk \
 
 END {
     if (!n) exit
+
+    for (i = 1; i <= agentn; i++) {
+        deepest = 0
+        for (j = 1; j <= n; j++)
+            if (under(path[j], agentcwd[i]) && length(path[j]) > length(path[deepest]))
+                deepest = j
+        if (deepest)
+            agent[deepest] = (agent[deepest] == "" ? "" : agent[deepest] "  ") agentlabel[i]
+    }
 
     # Longest run of leading path components every worktree has in common.
     # Component 1 is empty, because each path starts with "/", so a run of 1
@@ -56,21 +126,32 @@ END {
     if (shared > 1)
         for (j = 1; j <= shared; j++) prefix = prefix first[j] "/"
 
-    width = 0
+    pathwidth = 0
+    namewidth = 0
     for (i = 1; i <= n; i++) {
+        full[i] = path[i]
         path[i] = substr(path[i], length(prefix) + 1)
-        if (length(path[i]) > width) width = length(path[i])
+        if (length(path[i]) > pathwidth) pathwidth = length(path[i])
+        if (length(name[i]) > namewidth) namewidth = length(name[i])
     }
 
     if (prefix != "") {
         home = ENVIRON["HOME"]
         if (home != "" && index(prefix, home "/") == 1)
             prefix = "~" substr(prefix, length(home) + 1)
-        printf "%s%s%s\n", d, prefix, x
     }
+    if (paths != "") printf "\t%s%s%s\n", d, prefix, x
+    else if (prefix != "") printf "%s%s%s\n", d, prefix, x
 
-    row = sprintf("%%s%%-%ds%%s %%s%%s%%s %%s%%s%%s\n", width)
-    for (i = 1; i <= n; i++)
-        printf row, y, path[i], x, r, head[i], x, b, name[i], x
+    for (i = 1; i <= n; i++) {
+        # Pad outside the colour spans, so a row with no agent ends at its
+        # branch name rather than trailing the width of the agent column.
+        row = y path[i] x gap(pathwidth - length(path[i])) " " \
+              r head[i] x " " b name[i] x
+        if (agent[i] != "")
+            row = row gap(namewidth - length(name[i])) "  " m agent[i] x
+        if (paths != "") printf "%s\t%s\n", full[i], row
+        else print row
+    }
 }
 '
