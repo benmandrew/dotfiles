@@ -1,1 +1,9 @@
-benmandrew@gmail.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHuz3iuVPWWkB0vH7w2D/6n6GicOvrDvFMIXikk9EP2U benmandrew@gmail.com
+# Every SSH signing key registered on the GitHub account, so local
+# verification agrees with the badge GitHub shows. A key missing here makes
+# git report its commits as "No principal matched" (%G? = U), which looks
+# identical to unsigned at a glance but is not — %G? = N is unsigned.
+# List with: gh api /user/ssh_signing_keys
+benmandrew@gmail.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHuz3iuVPWWkB0vH7w2D/6n6GicOvrDvFMIXikk9EP2U Manchester Laptop
+benmandrew@gmail.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKTgdsix+0ZC2TPJwRDy0BF//tQQv+s1azF7VaYP/gEh Macbook
+benmandrew@gmail.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICZBNG+yyT/4M627/5cfMVlSu+mx3vNWi1sCkYRNOCGd Emel
+benmandrew@gmail.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINZs9Vyn2lIfi73XyjGEe9nD7Q1G1nzdRnze2bv3HPcZ AVLab
