@@ -14,7 +14,7 @@
     sv = status -vv
     bv = for-each-ref --sort=-committerdate refs/heads/ --format='%(HEAD) %(color:yellow)%(refname:short)%(color:reset) - %(color:red)%(objectname:short)%(color:reset) - %(contents:subject) - %(color:blue)%(authorname)%(color:reset) (%(color:green)%(committerdate:relative)%(color:reset))'
     dl = diff HEAD~1 HEAD
-    wt = "!git worktree list --porcelain | awk -v y=$(tput setaf 3) -v r=$(tput setaf 1) -v b=$(tput setaf 4) -v x=$(tput sgr0) '/^worktree /{w=$2} /^HEAD /{s=substr($2,1,8)} /^branch /{n=$2; sub(/refs.heads./,\"\",n)} /^detached/{n=\"(detached)\"} /^$/{printf \"%s%-45s%s %s%s%s %s%s%s\\n\", y,w,x, r,s,x, b,n,x}'"
+    # wt is ~/.local/bin/git-wt, not an alias — git runs any git-* on PATH.
 [init]
     defaultBranch = main
 [protocol "file"]

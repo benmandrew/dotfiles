@@ -1,0 +1,76 @@
+#!/bin/sh
+# List this repository's worktrees, as `git wt` (git finds any git-* on PATH).
+#
+#     ~/projects/
+#     wayfare                              e215256c main
+#     wayfare/.claude/worktrees/query-spec cebf336c feat/query-spec
+#
+# `git worktree list` prints every path in full, so a repository with several
+# worktrees repeats the same long prefix on every line and pushes the part that
+# differs off to the right. Strip the directory prefix that every path shares,
+# print it once as a header, and size the path column to the longest path that
+# is left — a fixed column width misaligns as soon as one path outgrows it.
+
+if [ -t 1 ]; then
+    colour() { tput "$@" 2>/dev/null || true; }
+else
+    colour() { :; }
+fi
+
+path_colour=$(colour setaf 3)
+head_colour=$(colour setaf 1)
+name_colour=$(colour setaf 4)
+dim=$(colour setaf 8)
+reset=$(colour sgr0)
+
+list=$(git worktree list --porcelain) || exit $?
+
+printf '%s\n' "$list" | awk \
+    -v y="$path_colour" \
+    -v r="$head_colour" \
+    -v b="$name_colour" \
+    -v d="$dim" \
+    -v x="$reset" '
+/^worktree / { path[++n] = substr($0, 10) }   # not $2: paths may hold spaces
+/^HEAD /     { head[n] = substr($2, 1, 8) }
+/^branch /   { ref = $2; sub(/^refs\/heads\//, "", ref); name[n] = ref }
+/^detached$/ { name[n] = "(detached)" }
+/^bare$/     { name[n] = "(bare)" }
+
+END {
+    if (!n) exit
+
+    # Longest run of leading path components every worktree has in common.
+    # Component 1 is empty, because each path starts with "/", so a run of 1
+    # means the paths share nothing but the root and there is no prefix worth
+    # hoisting into a header.
+    shared = split(path[1], first, "/") - 1
+    for (i = 2; i <= n; i++) {
+        count = split(path[i], part, "/") - 1
+        if (count < shared) shared = count
+        for (j = 1; j <= shared; j++)
+            if (part[j] != first[j]) { shared = j - 1; break }
+    }
+
+    prefix = ""
+    if (shared > 1)
+        for (j = 1; j <= shared; j++) prefix = prefix first[j] "/"
+
+    width = 0
+    for (i = 1; i <= n; i++) {
+        path[i] = substr(path[i], length(prefix) + 1)
+        if (length(path[i]) > width) width = length(path[i])
+    }
+
+    if (prefix != "") {
+        home = ENVIRON["HOME"]
+        if (home != "" && index(prefix, home "/") == 1)
+            prefix = "~" substr(prefix, length(home) + 1)
+        printf "%s%s%s\n", d, prefix, x
+    }
+
+    row = sprintf("%%s%%-%ds%%s %%s%%s%%s %%s%%s%%s\n", width)
+    for (i = 1; i <= n; i++)
+        printf row, y, path[i], x, r, head[i], x, b, name[i], x
+}
+'
