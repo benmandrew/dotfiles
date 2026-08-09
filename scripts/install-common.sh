@@ -635,6 +635,61 @@ install_gh() {
     sudo apt install -y gh
 }
 
+# Both gh-stack steps hit the GitHub API — to resolve the extension's release
+# and to read the skill's contents — so both need an authenticated gh. Nothing
+# in these scripts runs `gh auth login`, and it cannot be automated, so on a
+# freshly provisioned box the credential simply is not there yet. Skip with a
+# warning rather than failing the run; the next install after the user has
+# authenticated picks both up.
+gh_authenticated() {
+    command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1
+}
+
+install_gh_stack() {
+    if ! gh_authenticated; then
+        log "gh is not authenticated; skipping gh-stack extension (run 'gh auth login', then re-run)"
+        return
+    fi
+    # Match on the source repo rather than the extension name, so a same-named
+    # extension from another owner is replaced rather than mistaken for this one.
+    local extensions
+    extensions="$(gh extension list 2>/dev/null)"
+    if grep -q "github/gh-stack" <<<"${extensions}"; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "gh-stack extension already installed; skipping"
+            return
+        fi
+        log "Upgrading gh-stack extension"
+        gh extension upgrade gh-stack
+        return
+    fi
+    log "Installing gh-stack extension"
+    gh extension install github/gh-stack
+}
+
+install_gh_stack_skill() {
+    if ! gh_authenticated; then
+        log "gh is not authenticated; skipping gh-stack skill (run 'gh auth login', then re-run)"
+        return
+    fi
+    # User scope, so the skill applies in every repo instead of only whichever
+    # one the install happened to run from. It lands in ~/.claude/skills/gh-stack,
+    # which chezmoi does not manage: nothing under home/dot_claude/ claims it.
+    local skills
+    skills="$(gh skill list --agent claude-code --scope user --json skillName --jq '.[].skillName' 2>/dev/null)"
+    if grep -qx "gh-stack" <<<"${skills}"; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "gh-stack skill already installed; skipping"
+            return
+        fi
+        log "Upgrading gh-stack skill"
+        gh skill update gh-stack --all
+        return
+    fi
+    log "Installing gh-stack skill for Claude Code"
+    gh skill install github/gh-stack gh-stack --agent claude-code --scope user --force
+}
+
 install_zoxide() { install_cargo_tool zoxide; }
 
 install_fzf() {

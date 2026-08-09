@@ -80,6 +80,32 @@ check_cmd fzf
 check_cmd gh
 check_cmd tailscale
 
+# Neither of these is a binary on PATH, and both are skipped by the install
+# when gh is unauthenticated — which it is on any box that has not had
+# `gh auth login` run by hand — so absence is a warning, not a failure.
+check_optional() {
+    local name="$1"
+    shift
+    if "$@" >/dev/null 2>&1; then
+        printf "\033[1;32m[ok]\033[0m   %s\n" "${name}"
+        ((ok++)) || true
+    else
+        printf "\033[1;33m[warn]\033[0m %s (optional, not installed)\n" "${name}"
+    fi
+}
+
+has_gh_stack_ext() {
+    gh extension list 2>/dev/null | grep -q "github/gh-stack"
+}
+
+has_gh_stack_skill() {
+    gh skill list --agent claude-code --scope user --json skillName \
+        --jq '.[].skillName' 2>/dev/null | grep -qx "gh-stack"
+}
+
+check_optional "gh-stack extension" has_gh_stack_ext
+check_optional "gh-stack skill" has_gh_stack_skill
+
 headless_linux=false
 os_name="$(uname -s)"
 if [[ "${os_name}" == "Linux" ]] && [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
