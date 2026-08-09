@@ -115,6 +115,37 @@ export PAGER="moor --wrap --tab-size=4 --quit-if-one-screen"
 export MANPAGER="$PAGER"
 alias less=moor
 
+# `watch` runs its command through sh, which knows nothing of this shell's
+# aliases, so `watch gwt` reports "gwt: command not found". Expand the command
+# word here instead. An alias ending in a space would expand the word after it
+# and nothing more, which breaks the moment a flag comes between the two, as in
+# `watch -n1 gwt`; the command word is the first one that is neither a flag nor
+# the argument of one.
+#
+# --color, with the force flag beside it, keeps the colour these listings drop
+# as soon as they see a pipe rather than a terminal.
+unalias watch 2>/dev/null || true
+watch() {
+  local -a args
+  local arg seen="" value=""
+  for arg in "$@"; do
+    if [[ -z $seen && -z $value && $arg != -* ]]; then
+      seen=1
+      # (z) splits the alias body into words the way the parser would.
+      # shellcheck disable=SC2296  # zsh flag syntax, read as bash by the linter
+      args+=(${(z)${aliases[$arg]:-$arg}})
+    else
+      args+=("$arg")
+      # -n takes the interval as a separate word, which would otherwise look
+      # like the command; every other flag carries its argument attached.
+      # Spelt out rather than as the glob (-n|--interval), which shellcheck
+      # reads as bash and rejects.
+      if [[ $arg == -n || $arg == --interval ]]; then value=1; else value=""; fi
+    fi
+  done
+  GIT_WT_FORCE_COLOUR=1 command watch --color "${args[@]}"
+}
+
 # Function (not alias) so piping still works: eza's --long forces its table
 # format even when stdout isn't a tty, which breaks idioms like `ls | xargs`.
 # unalias first: zsh refuses to define a function over an existing alias
