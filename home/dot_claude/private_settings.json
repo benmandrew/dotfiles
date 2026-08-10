@@ -13,6 +13,7 @@
     ]
   },
   "model": "claude-opus-5",
+  "outputStyle": "voice",
   "hooks": {
     "PreToolUse": [
       {
