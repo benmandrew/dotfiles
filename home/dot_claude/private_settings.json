@@ -42,11 +42,20 @@
     "type": "command",
     "command": "input=$(cat); pct=$(echo \"$input\" | jq -r '.context_window.remaining_percentage // empty'); [ -n \"$pct\" ] && printf 'ctx %.0f%%' \"$pct\" || echo 'ctx -'"
   },
+  "extraKnownMarketplaces": {
+    "isaaccorley-skills": {
+      "source": {
+        "source": "github",
+        "repo": "isaaccorley/skills"
+      }
+    }
+  },
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": false,
     "clangd-lsp@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
-    "lua-lsp@claude-plugins-official": true
+    "lua-lsp@claude-plugins-official": true,
+    "bib-audit@isaaccorley-skills": true
   },
   "effortLevel": "high",
   "theme": "dark",
