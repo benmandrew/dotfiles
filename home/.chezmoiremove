@@ -1,0 +1,5 @@
+# Targets to delete from the destination. Renames leave the old name behind
+# otherwise, since chezmoi only ever writes what the source tree still contains.
+
+# renamed to claude-pane-session, which also resolves the agent name
+.local/bin/claude-pane-cwd

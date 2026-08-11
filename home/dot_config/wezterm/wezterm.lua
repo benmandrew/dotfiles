@@ -67,8 +67,58 @@ config.tab_bar_at_bottom = false
 -- otherwise.
 config.hide_tab_bar_if_only_one_tab = false
 
--- Tab title: remote hostname when SSH'd elsewhere, else focused directory's
--- name, unless manually renamed.
+-- Claude Code registers every live session in ~/.claude/sessions/<pid>.json,
+-- recording both the agent identifier it is known by (`gwt` lists agents under
+-- these names) and the cwd it is actually working in. The cwd diverges from the
+-- pane's once claude moves workspace — entering a worktree, say — because claude
+-- chdir()s its own process while zsh, suspended behind it, never redraws a
+-- prompt to emit a fresh OSC 7. Since OSC 7 wins over process introspection once
+-- it has been seen, WezTerm otherwise keeps handing new panes the directory the
+-- shell reported before claude started.
+local claude_sessions = wezterm.home_dir .. "/.claude/sessions"
+
+local function read_session(pid)
+    local f = io.open(claude_sessions .. "/" .. pid .. ".json", "r")
+    if not f then
+        return nil
+    end
+    local body = f:read("*a")
+    f:close()
+    local ok, session = pcall(wezterm.json_parse, body)
+    if ok and type(session) == "table" then
+        return session
+    end
+    return nil
+end
+
+-- claude is normally the pane's foreground process outright, but it can have a
+-- child in front of it (a tool call, a pager), so search the subtree too.
+local function claude_session(pane)
+    local ok, proc = pcall(pane.get_foreground_process_info, pane)
+    if not ok or not proc then
+        return nil
+    end
+    local queue = { proc }
+    while #queue > 0 do
+        local node = table.remove(queue, 1)
+        local session = read_session(node.pid)
+        if session then
+            return session
+        end
+        for _, child in pairs(node.children or {}) do
+            table.insert(queue, child)
+        end
+    end
+    return nil
+end
+
+local function claude_cwd(pane)
+    local session = claude_session(pane)
+    return session and session.cwd or nil
+end
+
+-- Tab title: the claude agent running in the tab, else the remote hostname when
+-- SSH'd elsewhere, else the focused directory's name, unless manually renamed.
 local TAB_TITLE_MAX_WIDTH = 24
 -- Room for the " [" / "] " decoration around the truncated title above
 config.tab_max_width = TAB_TITLE_MAX_WIDTH + 4
@@ -157,37 +207,59 @@ local function ssh_host(tab)
     return nil
 end
 
--- format-tab-title runs on every status tick (100ms, see status_update_interval)
--- and ssh_host walks process state, so memoise it per tab. os.time only has
--- whole-second resolution, which is precisely the recompute rate we want: this
--- keeps the lookup at ~1/sec regardless of how often the tab bar repaints.
-local SSH_HOST_TTL_SECONDS = 1
-local ssh_host_cache = {}
-
-local function ssh_host_cached(tab)
-    local now = os.time()
-    -- Expire as we go, which also stops closed tabs' entries accumulating.
-    -- A negative age means the wall clock stepped back; treat it as expired.
-    for id, entry in pairs(ssh_host_cache) do
-        local age = now - entry.at
-        if age < 0 or age >= SSH_HOST_TTL_SECONDS then
-            ssh_host_cache[id] = nil
-        end
-    end
-
-    local hit = ssh_host_cache[tab.tab_id]
-    if hit then
-        return hit.host or nil
-    end
-    -- nil is both the common answer (any local tab) and a full-price lookup,
-    -- so cache it too, as false — the misses are what we're paying for.
-    local host = ssh_host(tab)
-    ssh_host_cache[tab.tab_id] = { host = host or false, at = now }
-    return host
+-- The agent identifier claude registers for the tab's session ("counter-fe"),
+-- which is what `gwt` lists agents under, so a tab can be read straight off
+-- that listing.
+local function claude_name(tab)
+    local pane = active_mux_pane(tab)
+    local session = pane and claude_session(pane)
+    return session and session.name or nil
 end
+
+-- format-tab-title runs on every status tick (100ms, see status_update_interval)
+-- and both lookups above walk process state, so memoise them per tab. os.time
+-- only has whole-second resolution, which is precisely the recompute rate we
+-- want: this keeps each lookup at ~1/sec regardless of how often the tab bar
+-- repaints.
+local TAB_LOOKUP_TTL_SECONDS = 1
+
+local function per_tab_cached(lookup)
+    local cache = {}
+    return function(tab)
+        local now = os.time()
+        -- Expire as we go, which also stops closed tabs' entries accumulating.
+        -- A negative age means the wall clock stepped back; treat it as expired.
+        for id, entry in pairs(cache) do
+            local age = now - entry.at
+            if age < 0 or age >= TAB_LOOKUP_TTL_SECONDS then
+                cache[id] = nil
+            end
+        end
+
+        local hit = cache[tab.tab_id]
+        if hit then
+            return hit.value or nil
+        end
+        -- nil is both a common answer and a full-price lookup, so cache it too,
+        -- as false — the misses are what we're paying for.
+        local value = lookup(tab)
+        cache[tab.tab_id] = { value = value or false, at = now }
+        return value
+    end
+end
+
+local ssh_host_cached = per_tab_cached(ssh_host)
+local claude_name_cached = per_tab_cached(claude_name)
 
 wezterm.on("format-tab-title", function(tab)
     local title = tab.tab_title
+    if not (title and #title > 0) then
+        -- A claude session anywhere in the pane's process subtree names the tab
+        -- after the agent. Checked before the host and cwd fallbacks because it
+        -- is the more specific answer: several agents often share one project
+        -- directory, and their cwds would all render identically.
+        title = claude_name_cached(tab)
+    end
     if not (title and #title > 0) then
         local cwd = tab.active_pane.current_working_dir
         local host = cwd and short_host(cwd.host)
@@ -497,50 +569,6 @@ end
 -- via the plain "copied" event (no selection read to race against).
 local function complete_selection_and_flash(dest)
     return act.Multiple({ act.CompleteSelection(dest), act.EmitEvent("copied") })
-end
-
--- Claude Code registers every live session in ~/.claude/sessions/<pid>.json,
--- recording the cwd it is actually working in. That diverges from the pane's cwd
--- once claude moves workspace — entering a worktree, say — because claude
--- chdir()s its own process while zsh, suspended behind it, never redraws a
--- prompt to emit a fresh OSC 7. Since OSC 7 wins over process introspection once
--- it has been seen, WezTerm otherwise keeps handing new panes the directory the
--- shell reported before claude started.
-local claude_sessions = wezterm.home_dir .. "/.claude/sessions"
-
-local function session_cwd(pid)
-    local f = io.open(claude_sessions .. "/" .. pid .. ".json", "r")
-    if not f then
-        return nil
-    end
-    local body = f:read("*a")
-    f:close()
-    local ok, session = pcall(wezterm.json_parse, body)
-    if ok and type(session) == "table" then
-        return session.cwd
-    end
-    return nil
-end
-
--- claude is normally the pane's foreground process outright, but it can have a
--- child in front of it (a tool call, a pager), so search the subtree too.
-local function claude_cwd(pane)
-    local ok, proc = pcall(pane.get_foreground_process_info, pane)
-    if not ok or not proc then
-        return nil
-    end
-    local queue = { proc }
-    while #queue > 0 do
-        local node = table.remove(queue, 1)
-        local cwd = session_cwd(node.pid)
-        if cwd then
-            return cwd
-        end
-        for _, child in pairs(node.children or {}) do
-            table.insert(queue, child)
-        end
-    end
-    return nil
 end
 
 -- `variant` names a spawn action taking a SpawnCommand: SplitHorizontal,

@@ -6,7 +6,20 @@ set -euo pipefail
 
 input="$(cat)"
 cwd="$(echo "$input" | jq -r '.cwd // empty')"
-label="$(basename "${cwd:-$PWD}")"
+session_id="$(echo "$input" | jq -r '.session_id // empty')"
+
+# Prefer the agent identifier claude registers for this session ("counter-fe"),
+# matching what `gwt` lists and what the WezTerm tab already shows, so the
+# notification names the agent rather than a directory several agents share.
+# The session files are keyed by pid, so find ours by its recorded sessionId.
+sessions="${HOME}/.claude/sessions"
+name=""
+if [ -n "$session_id" ] && [ -d "$sessions" ]; then
+	name="$(jq -r --arg id "$session_id" 'select(.sessionId == $id) | .name // empty' \
+		"$sessions"/*.json 2>/dev/null | head -n1 || true)"
+fi
+
+label="${name:-$(basename "${cwd:-$PWD}")}"
 
 case "$(uname -s)" in
 Darwin)

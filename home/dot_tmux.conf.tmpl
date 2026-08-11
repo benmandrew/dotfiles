@@ -25,13 +25,13 @@ bind r source-file ~/.tmux.conf
 set -sg escape-time 0
 
 # mirror WezTerm split/navigation bindings. New panes and windows inherit the
-# pane's directory, but resolve it through claude-pane-cwd first: a pane running
-# claude hands over the directory claude is actually working in, which diverges
-# from #{pane_current_path} once claude moves workspace (into a worktree, say),
-# because only the suspended shell's cwd is visible to tmux.
-bind v run-shell -b 'tmux split-window -h -t "#{pane_id}" -c "$(~/.local/bin/claude-pane-cwd "#{pane_pid}" "#{pane_current_path}")"'
-bind s run-shell -b 'tmux split-window -v -t "#{pane_id}" -c "$(~/.local/bin/claude-pane-cwd "#{pane_pid}" "#{pane_current_path}")"'
-bind c run-shell -b 'tmux new-window -c "$(~/.local/bin/claude-pane-cwd "#{pane_pid}" "#{pane_current_path}")"'
+# pane's directory, but resolve it through claude-pane-session first: a pane
+# running claude hands over the directory claude is actually working in, which
+# diverges from #{pane_current_path} once claude moves workspace (into a
+# worktree, say), because only the suspended shell's cwd is visible to tmux.
+bind v run-shell -b 'tmux split-window -h -t "#{pane_id}" -c "$(~/.local/bin/claude-pane-session cwd "#{pane_pid}" "#{pane_current_path}")"'
+bind s run-shell -b 'tmux split-window -v -t "#{pane_id}" -c "$(~/.local/bin/claude-pane-session cwd "#{pane_pid}" "#{pane_current_path}")"'
+bind c run-shell -b 'tmux new-window -c "$(~/.local/bin/claude-pane-session cwd "#{pane_pid}" "#{pane_current_path}")"'
 bind h select-pane -L
 bind j select-pane -D
 bind k select-pane -U
@@ -47,8 +47,13 @@ set -g default-terminal "tmux-256color"
 set -g status-style bg=#141414,fg=#c9c9c9
 set -g window-status-style bg=#191918,fg=#c9c9c9
 set -g window-status-current-style bg=#c75a22,fg=#141414,bold
-set -g window-status-format " #I  #{window_name} "
-set -g window-status-current-format " #I  #{window_name} "
+# A window running claude is named after the agent ("counter-fe"), the same
+# identifier `gwt` lists and the WezTerm tab shows, so a window can be matched to
+# a row of that listing; #{window_name} is only "claude" for every agent alike.
+# Anything else keeps the name tmux picked. tmux expands #() per window, with
+# that window's own #{pane_pid}, and caches each job by command string.
+set -g window-status-format ' #I  #(~/.local/bin/claude-pane-session name "#{pane_pid}" "#{window_name}") '
+set -g window-status-current-format ' #I  #(~/.local/bin/claude-pane-session name "#{pane_pid}" "#{window_name}") '
 set -g window-status-separator ""
 
 # Pane borders: active uses Hacktober orange to match WezTerm focus highlight
@@ -56,7 +61,11 @@ set -g pane-active-border-style fg=#c75a22
 set -g pane-border-style fg=#464444
 
 set -g status-position top
-set -g status-left ''
+# Single writer for the session cache the per-window name lookups read. tmux
+# expands status-left once per tick, against N times for the window list, so
+# putting the one ps snapshot and jq pass here keeps each window's lookup down to
+# an awk over the cache. It prints nothing.
+set -g status-left '#(~/.local/bin/claude-pane-session refresh)'
 set -g status-right-length 120
 set -g status-interval 5
 set -g status-right "#[bg=#191918,fg=#c9c9c9] 󰒋 #{host_short}  󰍛 #(~/.config/tmux/cpu.sh)%%   #(~/.config/tmux/ram.sh)  󰥔 #(~/.config/tmux/uptime.sh) "

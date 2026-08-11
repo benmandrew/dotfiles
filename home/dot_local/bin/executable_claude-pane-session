@@ -1,0 +1,119 @@
+#!/bin/sh
+# Print one field of the Claude Code session running inside a tmux pane, or a
+# fallback when the pane holds no session.
+#
+# Claude Code registers every live session in ~/.claude/sessions/<pid>.json,
+# recording the agent identifier it is known by (`gwt` lists agents under these
+# names) and the cwd it is actually working in. tmux sees only the shell, so it
+# knows neither: #{pane_current_path} goes stale once claude chdir()s into a
+# worktree while zsh sits suspended behind it, and #{window_name} follows the
+# foreground command, which is "claude" for every agent alike. Look for a
+# registered session inside the pane's process subtree and read the field off
+# it; otherwise pass through whatever tmux already knew.
+#
+# Usage: claude-pane-session cwd|name <pane-pid> <fallback>
+#        claude-pane-session refresh
+set -u
+
+sessions="${HOME}/.claude/sessions"
+# Per-user by construction on both platforms: XDG_RUNTIME_DIR is /run/user/<uid>
+# on Linux, and TMPDIR is a private per-user directory on macOS.
+cache="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/claude-pane-session.tsv"
+
+field=${1:-}
+pane_pid=${2:-}
+fallback=${3:-}
+
+emit_fallback() {
+    printf '%s\n' "$fallback"
+    exit 0
+}
+
+# One process-table snapshot plus one jq pass over every session file, written
+# atomically so a concurrent reader never sees a half-built file. Both kinds of
+# line are tab-separated: "P <pid> <ppid>" for the parent map, "S <pid> <name>
+# <cwd>" for the sessions.
+build_cache() {
+    tmp="$cache.$$"
+    {
+        ps -axo pid=,ppid= 2>/dev/null | awk '{ print "P\t" $1 "\t" $2 }'
+        # Newest first: claude rewrites the file on every status change, so a
+        # pane holding more than one session resolves to the most recently
+        # active one. Filenames are "<pid>.json", so no globbing hazard here.
+        set --
+        # shellcheck disable=SC2012
+        for pid in $(ls -t "$sessions" 2>/dev/null | sed -n 's/^\([0-9][0-9]*\)\.json$/\1/p'); do
+            set -- "$@" "$sessions/$pid.json"
+        done
+        [ $# -eq 0 ] || jq -r '["S", (.pid | tostring), (.name // ""), (.cwd // "")] | @tsv' "$@" 2>/dev/null
+    } >"$tmp" 2>/dev/null || {
+        rm -f "$tmp"
+        return 1
+    }
+    mv -f "$tmp" "$cache" 2>/dev/null || {
+        rm -f "$tmp"
+        return 1
+    }
+}
+
+# Walk each session's parent chain looking for the pane's own process. The hop
+# cap is a guard against a cycle in a torn snapshot, not a real depth limit.
+lookup() {
+    awk -F '\t' -v root="$pane_pid" -v want="$field" '
+        $1 == "P" { parent[$2 + 0] = $3 + 0 }
+        $1 == "S" { n++; spid[n] = $2 + 0; sname[n] = $3; scwd[n] = $4 }
+        END {
+            target = root + 0
+            for (i = 1; i <= n; i++) {
+                p = spid[i]
+                for (hops = 0; p > 1 && hops < 64; hops++) {
+                    if (p == target) {
+                        print (want == "cwd" ? scwd[i] : sname[i])
+                        exit
+                    }
+                    if (!(p in parent)) break
+                    p = parent[p]
+                }
+            }
+        }
+    ' "$cache" 2>/dev/null
+}
+
+# The status line refreshes the cache once per tick (see status-left in
+# dot_tmux.conf), which is what keeps the per-window `name` lookups cheap: one
+# ps and one jq for the whole tick instead of one of each per window.
+if [ "$field" = refresh ]; then
+    if [ -d "$sessions" ] && command -v jq >/dev/null 2>&1; then
+        build_cache || true
+    fi
+    exit 0
+fi
+
+case $field in
+    cwd | name) ;;
+    *) emit_fallback ;;
+esac
+case $pane_pid in
+    '' | *[!0-9]*) emit_fallback ;;
+esac
+[ -d "$sessions" ] || emit_fallback
+command -v jq >/dev/null 2>&1 || emit_fallback
+
+if [ "$field" = cwd ]; then
+    # Asked for once, on the keypress that opens a split or window, where a
+    # stale answer sends the new pane somewhere wrong. Always work from a fresh
+    # snapshot; nothing is polling this, so the cost lands on one keypress.
+    build_cache || emit_fallback
+elif [ -z "$(find "$cache" -mmin -1 2>/dev/null)" ]; then
+    # Polled per window per tick, so this reads what the status line built. The
+    # rebuild here is a safety net for a tmux without that status-left entry --
+    # in steady state the cache is seconds old and no window ever pays for it.
+    build_cache || emit_fallback
+fi
+
+value=$(lookup)
+[ -n "$value" ] || emit_fallback
+# A cwd is about to be handed to `tmux -c`, which fails outright on a stale one.
+[ "$field" != cwd ] || [ -d "$value" ] || emit_fallback
+
+printf '%s\n' "$value"
