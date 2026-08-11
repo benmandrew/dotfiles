@@ -16,3 +16,11 @@ set synctex true
 # It is not fixable from here: a pty wrapper only speeds the `code` process exit,
 # not the visible reveal, and focus/flags/activation-tokens don't move it either.
 set synctex-editor-command "code --reuse-window --goto %{input}:%{line}"
+
+# Start in inverted colours; Ctrl+R toggles it per-document.
+set recolor true
+# recolor-lightcolor and default-bg both default to #000000, so a recoloured
+# page is invisible against the space around it. Lift the page off the
+# background and widen the 1px default gap.
+set recolor-lightcolor "#1C1C1C"
+set page-padding 6
