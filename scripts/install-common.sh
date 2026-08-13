@@ -278,6 +278,24 @@ install_zinit() {
     git clone https://github.com/zdharma-continuum/zinit.git "${zinit_home}"
 }
 
+install_fzf_tab() {
+    local fzf_tab_home="${XDG_DATA_HOME:-${HOME}/.local/share}/fzf-tab"
+    if [[ -d "${fzf_tab_home}/.git" ]]; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "fzf-tab already installed; skipping"
+            return
+        fi
+        log "Upgrading fzf-tab"
+        ensure_user_owns "${fzf_tab_home}"
+        safe_git "${fzf_tab_home}" fetch origin
+        safe_git "${fzf_tab_home}" reset --hard origin/master
+        return
+    fi
+    log "Installing fzf-tab"
+    mkdir -p "$(dirname "${fzf_tab_home}")"
+    git clone --depth 1 https://github.com/Aloxaf/fzf-tab.git "${fzf_tab_home}"
+}
+
 install_rust() {
     load_cargo_env
     if command -v cargo >/dev/null 2>&1 && command -v rustup >/dev/null 2>&1; then

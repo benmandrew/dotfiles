@@ -1,0 +1,42 @@
+#!/bin/sh
+# Print the recipe body of a single make target, for the fzf-tab preview pane
+# wired up in ~/.zshrc. Lives on PATH rather than as a shell function because
+# fzf-tab evaluates previews in a separate `zsh -c`, which inherits no functions.
+#
+# The recipe is read straight out of the makefile with awk. `make -n` would
+# resolve variables for us, but it also evaluates $(shell ...) at parse time —
+# not something a preview firing on every keystroke should be doing.
+set -eu
+
+target=${1:?usage: make-target-recipe TARGET}
+
+makefile=
+for f in GNUmakefile makefile Makefile; do
+    if [ -f "${f}" ]; then
+        makefile=${f}
+        break
+    fi
+done
+[ -n "${makefile}" ] || exit 0
+
+# A target line is one starting in column 0 whose text before the first colon
+# is exactly the target. The recipe is the tab-indented run that follows, and
+# ends at the next line that is neither indented nor blank.
+awk -v t="${target}" '
+  !p && substr($0, 1, 1) != "\t" {
+    ci = index($0, ":")
+    if (ci > 1) {
+      n = substr($0, 1, ci - 1)
+      gsub(/[ \t]+$/, "", n)
+      if (n == t) { p = 1; print; next }
+    }
+  }
+  p && substr($0, 1, 1) == "\t" { sub(/^\t/, "  "); print; next }
+  p && NF { exit }
+' "${makefile}" | {
+    if command -v bat >/dev/null 2>&1; then
+        bat --language=make --color=always --style=plain --paging=never
+    else
+        cat
+    fi
+}

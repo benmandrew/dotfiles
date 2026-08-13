@@ -22,7 +22,19 @@ else
 fi
 # Case-insensitive, then partial-word (_/-), then substring matching.
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
-zstyle ':completion:*' menu select
+# fzf-tab draws the menu itself, and needs zsh's own one off to capture the
+# unambiguous prefix. Without `menu no` both fire and the list flickers.
+zstyle ':completion:*' menu no
+# Split matches into their tag groups (files vs. directories vs. aliases)
+# instead of one flat list, and label each group. fzf-tab reads the label to
+# build its group headers, so the `format` line is what turns groups on there
+# — plain text only, it discards escape sequences.
+zstyle ':completion:*' group-name ''
+zstyle ':completion:*:descriptions' format '[%d]'
+zstyle ':completion:*:warnings' format 'no matches: %d'
+# Reuse the ls palette so completed paths carry the same colours as `ls`.
+# shellcheck disable=SC2296  # zsh flag syntax, read as bash by the linter
+zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 # Cache completions that shell out (apt, brew, ...).
 zstyle ':completion:*' use-cache on
 zstyle ':completion:*' cache-path "${ZDOTDIR:-$HOME}/.zcompcache"
@@ -243,6 +255,35 @@ export DIRENV_LOG_FORMAT=
 _cache_eval direnv hook zsh
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+# fzf-tab replaces the completion menu with an fzf picker, so every match list
+# becomes fuzzy-searchable and can carry a preview pane. It reads the same
+# zstyles as the built-in menu, so the matcher-list and tag-order rules above
+# still apply. Sourced after ~/.fzf.zsh because it must be the last thing to
+# bind ^I, and before anything that wraps ZLE widgets.
+if [[ -f "$HOME/.local/share/fzf-tab/fzf-tab.plugin.zsh" ]]; then
+  source "$HOME/.local/share/fzf-tab/fzf-tab.plugin.zsh"
+
+  # Group headers only become navigable with a key to cycle them.
+  zstyle ':fzf-tab:*' switch-group '<' '>'
+  # Accept the match and immediately complete the next word, so a path can be
+  # walked one directory per <tab> without restarting the picker.
+  zstyle ':fzf-tab:*' continuous-trigger '/'
+  zstyle ':fzf-tab:*' fzf-flags --height=60% --layout=reverse --border --info=inline
+
+  # Recipe body of the make target under the cursor. A script on PATH, not a
+  # function: previews run in a separate `zsh -c` that inherits no functions.
+  zstyle ':fzf-tab:complete:make:*' fzf-preview 'make-target-recipe $word'
+
+  zstyle ':fzf-tab:complete:cd:*' fzf-preview \
+    'eza --oneline --colour=always --group-directories-first $realpath'
+  zstyle ':fzf-tab:complete:*:*' fzf-preview \
+    '[[ -d $realpath ]] && eza --oneline --colour=always --group-directories-first $realpath ||
+     { [[ -f $realpath ]] && bat --color=always --style=numbers --line-range=:200 $realpath; }'
+  # git checkout/switch: show the commits the ref points at.
+  zstyle ':fzf-tab:complete:git-(checkout|switch|rebase|merge):*' fzf-preview \
+    'git log --oneline --graph --color=always -20 $word 2>/dev/null'
+fi
 
 # Self-removing shim: only pay for sourcing opam-init on the first call,
 # then unfunction so later invocations hit the real opam binary directly.

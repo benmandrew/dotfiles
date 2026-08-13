@@ -51,6 +51,7 @@ check_cmd entr
 check_cmd_optional perf
 
 check_dir "zinit" "${HOME}/.local/share/zinit/zinit.git"
+check_dir "fzf-tab" "${HOME}/.local/share/fzf-tab"
 
 check_cmd rustup
 check_cmd cargo
