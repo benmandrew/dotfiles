@@ -1,0 +1,11 @@
+# Global attributes, wired up by core.attributesFile in ~/.gitconfig.
+# A repository's own .gitattributes overrides anything here.
+
+# Diff these one sentence per line — see ~/.local/bin/git-prose-split.
+*.md       diff=prose
+*.markdown diff=prose
+*.mdx      diff=prose
+*.tex      diff=prose
+*.txt      diff=prose
+*.rst      diff=prose
+*.org      diff=prose

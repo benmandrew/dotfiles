@@ -24,7 +24,13 @@
     template = {{ .chezmoi.homeDir }}/.config/git/.gitmessage
 [core]
     excludesfile = {{ .chezmoi.homeDir }}/.config/git/.gitignore_global
+    attributesFile = {{ .chezmoi.homeDir }}/.config/git/attributes
     editor = nvim
+[diff "prose"]
+    # One sentence per line, so a one-word edit in a paragraph-per-line file
+    # stops reading as the whole paragraph replaced. Display only — git turns
+    # textconv off wherever the diff has to stay applicable.
+    textconv = {{ .chezmoi.homeDir }}/.local/bin/git-prose-split
 {{ if eq .chezmoi.os "darwin" }}
     # --paging=never stops delta spawning its own pager, which would nest
     # a second pager inside moor instead of streaming straight into it

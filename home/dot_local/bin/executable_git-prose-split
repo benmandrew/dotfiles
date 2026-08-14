@@ -1,0 +1,69 @@
+#!/bin/sh
+# Split prose into one sentence per line, for git's `diff=prose` textconv driver.
+#
+# Prose is often written with a whole paragraph on one line, so git's line-based
+# diff reports a one-word edit as a 300-character line removed and a
+# 300-character line added. Splitting sentences apart for the diff drops the
+# untouched ones out of the hunk entirely, and delta then highlights the changed
+# words inside the sentences that did move.
+#
+# This is a display-only conversion: git never writes the split form back, and
+# it disables textconv for the commands whose output has to stay applicable
+# (`git add -p`, `format-patch`, `diff --binary`). No `cachetextconv` — that
+# cache is keyed on the blob rather than on this script, so it would serve
+# stale splits after every edit here, and an awk pass over prose is cheap.
+
+# Abbreviations whose full stop ends a word rather than a sentence. Matched
+# against the whole preceding word, so `al` covers `et al.` and `No` covers
+# `No. 4` without also matching the word "no".
+abbreviations='e.g i.e cf vs etc al Fig Figs Eq Eqs Sec Secs Ch No Vol pp Ref
+Refs Dr Mr Mrs Ms Prof St Jr Sr Inc Ltd approx resp'
+
+awk -v abbreviations="$abbreviations" '
+BEGIN {
+    n = split(abbreviations, list)
+    for (i = 1; i <= n; i++) abbreviation[list[i]] = 1
+
+    # A sentence ends at .!? plus any closing quotes or brackets, plus the
+    # space separating it from the next. Built as a string because a literal
+    # apostrophe cannot appear inside this single-quoted program, and `]` has
+    # to lead the bracket expression to be read as itself.
+    closers = "[]\"" sprintf("%c", 39) ")}]*"
+    boundary = "[.!?]" closers "[ \t]+"
+}
+
+# Text with no such boundary — a heading, a LaTeX command, a blank line — falls
+# through untouched.
+{
+    rest = $0
+    out = ""
+    while (match(rest, boundary)) {
+        before = substr(rest, 1, RSTART - 1)
+        terminator = substr(rest, RSTART, RLENGTH)
+        rest = substr(rest, RSTART + RLENGTH)
+
+        # The word the terminator is attached to, for the abbreviation test.
+        # Dots count as part of it, so `e.g` survives whole. Read off the end
+        # rather than by stripping the head: gawk fails to match `^.*` against
+        # a trailing negated bracket, and this reads more directly anyway.
+        word = match(before, /[[:alnum:].]+$/) \
+            ? substr(before, RSTART, RLENGTH) : ""
+
+        if (substr(terminator, 1, 1) == "." && is_abbreviation(word))
+            out = out before terminator
+        else {
+            sub(/[ \t]+$/, "", terminator)
+            print out before terminator
+            out = ""
+        }
+    }
+    print out rest
+}
+
+# Initials ("J. R. R. Tolkien") are a single letter; the rest are listed above.
+# Both match case-sensitively, so a sentence closing on the word "no" still
+# splits while the reference "No. 4" does not.
+function is_abbreviation(word) {
+    return word ~ /^[A-Z]$/ || word in abbreviation
+}
+' < "$1"
