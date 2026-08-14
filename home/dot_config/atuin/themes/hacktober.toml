@@ -1,0 +1,36 @@
+## Hacktober, matching the WezTerm and tmux palettes in this repo.
+##
+## atuin themes set foreground colours only, so the background is whatever the
+## terminal already draws — which is the point, since WezTerm is already on
+## #141414. Any meaning left out here inherits from the built-in "default"
+## theme, so this file only needs the ones that should differ.
+##
+## `name` has to equal the filename stem or atuin loads the file and then warns
+## that the two disagree, but only when [theme] debug is on in config.toml. A
+## colour string it cannot parse is silently replaced with the default under the
+## same rule, so turn debug on when editing this.
+
+[theme]
+name = "hacktober"
+
+## Shared with home/dot_config/wezterm/wezterm.lua and dot_tmux.conf.tmpl:
+##   text #c9c9c9   orange #c75a22   hover #464444   selection #3d5278
+## Three colours here are not in that palette. #6b83ab is the selection blue
+## lightened to stay legible as text on #141414, #8a8a8a sits between the text
+## and hover greys, and #c73222 rotates the accent orange to red for errors —
+## Hacktober defines nothing for alerts.
+[colors]
+Base = "#c9c9c9"
+Title = "#c75a22"
+Important = "#c75a22"
+Guidance = "#8a8a8a"
+Annotation = "#6b83ab"
+Muted = "#464444"
+AlertInfo = "#6b83ab"
+AlertWarn = "#c75a22"
+AlertError = "#c73222"
+
+## SyntaxCommand, SyntaxFlag, SyntaxString, SyntaxVariable, SyntaxOperator and
+## SyntaxComment are deliberately unset. atuin maps them to ANSI palette entries
+## rather than to RGB, so they already follow the terminal's own scheme; pinning
+## them here would break that.

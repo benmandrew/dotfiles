@@ -33,7 +33,19 @@ filter_mode = "global"
 ## tmux popup ([tmux] below) is the alternative and is deliberately off.
 style = "compact"
 inline_height = 20
+
+## The preview shows the selected command in full, wrapped, since the results
+## list truncates it to the width left over after the other columns. It renders
+## text atuin already holds — unlike the fzf-tab previews in dot_zshrc.tmpl,
+## nothing is executed to produce it.
 show_preview = true
+
+## Strip the chrome. The numeric shortcuts move as results reorder, the help row
+## repeats what muscle memory already knows, and the tab strip only matters when
+## switching to the inspector, which the keyboard shortcut still reaches.
+show_numeric_shortcuts = false
+show_help = false
+show_tabs = false
 
 ## Escape leaves the line as it was before ^R, so an aborted search costs
 ## nothing.
@@ -76,3 +88,13 @@ enabled = false
 ## whole point of syncing is that a result may have come from another machine,
 ## and without it there is no way to tell which.
 columns = ["duration", "time", "host", "command"]
+
+[theme]
+## themes/hacktober.toml, matching WezTerm and tmux. Loaded only by the
+## interactive TUI, so a broken theme is invisible to every other command.
+name = "hacktober"
+
+## Off by default. Turn it on while editing the theme: without it an
+## unparsable colour falls back to the default silently, and a name that
+## disagrees with the filename is never reported.
+debug = false
