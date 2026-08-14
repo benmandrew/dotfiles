@@ -78,6 +78,7 @@ check_cmd zstd
 check_cmd hyperfine
 check_cmd zoxide
 check_cmd fzf
+check_cmd atuin
 check_cmd gh
 check_cmd tailscale
 

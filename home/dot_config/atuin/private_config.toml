@@ -1,0 +1,78 @@
+## Every key here is set to a non-default, or is a default worth pinning
+## because a future release changing it would be a surprise. `atuin
+## default-config` prints the full annotated set.
+
+## The sync server, reachable only from the tailnet. This name is already public
+## — the https cert comes from Let's Encrypt, so it is in the certificate
+## transparency logs — and it is not what gates access. That is the tailnet ACL:
+## a host without an accepted WireGuard key gets no route, and MagicDNS does not
+## resolve .ts.net for non-members. Do not put this node behind Funnel, which
+## would expose it to the open internet with only atuin's own login in front.
+sync_address = "https://atuin.yattle-vernier.ts.net"
+auto_sync = true
+
+## Only checked when a command runs, so the real interval is at least this.
+sync_frequency = "5m"
+
+## The install scripts own the atuin version — brew on macOS, the release
+## tarball on Linux — so its own check only ever nags about an update that
+## `atuin update` must not apply.
+update_check = false
+
+dialect = "uk"
+
+## Enter puts the command on the prompt rather than running it, so a selection
+## can be read before it executes. Tab does the same. This is atuin's old
+## behaviour; new installs default to enter_accept = true.
+enter_accept = false
+
+search_mode = "fuzzy"
+filter_mode = "global"
+
+## Draw in the bottom rows of the pane rather than taking the whole screen. The
+## tmux popup ([tmux] below) is the alternative and is deliberately off.
+style = "compact"
+inline_height = 20
+show_preview = true
+
+## Escape leaves the line as it was before ^R, so an aborted search costs
+## nothing.
+exit_mode = "return-original"
+
+## Drops commands matching atuin's built-in patterns — AWS key ids, GitHub PATs,
+## Slack tokens and webhooks, Stripe keys — before they are ever written. On by
+## default; pinned because it is the reason this history is safe to sync at all.
+secrets_filter = true
+
+## Commands never recorded, as unanchored regexes. The built-in secrets_filter
+## above catches known token shapes; this is for anything local to these
+## machines that it cannot know about.
+# history_filter = [
+#   "^curl .*-H .*[Aa]uthorization",
+# ]
+
+## Directories whose commands are never recorded, as unanchored regexes.
+# cwd_filter = [
+#   "^/very/secret/area",
+# ]
+
+[search]
+## Show commands from any shell, including entries imported from ~/.zsh_history
+## that predate atuin recording which shell ran them.
+shells = "all"
+
+[tmux]
+## Inline in the pane, matching how fzf's ^R behaves today. A popup would float
+## over the pane instead; flip this to true to try it.
+enabled = false
+
+[daemon]
+## Sync runs from the shell hook, so there is no background process to manage.
+## Enabling this would also want `brew services start atuin` on macOS.
+enabled = false
+
+[ui]
+## `host` is not in the default column set. It earns its place here because the
+## whole point of syncing is that a result may have come from another machine,
+## and without it there is no way to tell which.
+columns = ["duration", "time", "host", "command"]

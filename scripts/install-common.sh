@@ -733,6 +733,77 @@ install_fzf() {
     "${HOME}/.fzf/install" --bin --no-update-rc --no-bash --no-fish
 }
 
+# atuin keeps shell history in its own SQLite database and syncs it one command
+# record at a time, so two machines merge without the conflict a shared
+# ~/.zsh_history file produces — that file only ever appends locally, so git or
+# rsync sees two divergent tails and cannot reconcile them. Sync is end-to-end
+# encrypted with a key held on the machine, so the server stores ciphertext.
+install_atuin() {
+    local os_name
+    os_name="$(uname -s)"
+
+    if [[ "${os_name}" == "Darwin" ]]; then
+        if brew list --formula atuin >/dev/null 2>&1; then
+            if [[ -z "${UPGRADE:-}" ]]; then
+                log "atuin already installed; skipping"
+                return
+            fi
+            log "Upgrading atuin"
+            brew upgrade atuin
+            return
+        fi
+        log "Installing atuin"
+        brew install atuin
+        return
+    fi
+
+    # Linux: official release tarball, which upstream ships for both arches.
+    local tag version
+    tag="$(github_latest_tag atuinsh/atuin)"
+    version="${tag#v}"
+
+    if command -v atuin >/dev/null 2>&1; then
+        # Field 2, not $NF: `atuin --version` prints `atuin 18.19.0 ()`, with a
+        # trailing empty git-hash field that $NF would pick up instead of the
+        # version — making every --upgrade re-download an already-current build.
+        local version_output current
+        version_output="$(atuin --version 2>/dev/null)"
+        current="$(awk '{print $2}' <<<"${version_output}")"
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "atuin ${current} already installed; skipping"
+            return
+        fi
+        if [[ "${current}" == "${version}" ]]; then
+            log "atuin ${current} already at latest; skipping"
+            return
+        fi
+        log "Upgrading atuin to ${version}"
+    else
+        log "Installing atuin ${version}"
+    fi
+
+    local arch triple
+    arch="$(uname -m)"
+    case "${arch}" in
+        x86_64 | amd64) triple="x86_64-unknown-linux-gnu" ;;
+        aarch64 | arm64) triple="aarch64-unknown-linux-gnu" ;;
+        *)
+            log "Unsupported arch ${arch} for atuin install; skipping"
+            return
+            ;;
+    esac
+
+    local tarball="atuin-${triple}.tar.gz"
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
+    curl -fsSL "https://github.com/atuinsh/atuin/releases/download/${tag}/${tarball}" \
+        -o "${tmp_dir}/${tarball}"
+    tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}"
+    mkdir -p "${HOME}/.local/bin"
+    install -m755 "${tmp_dir}/atuin-${triple}/atuin" "${HOME}/.local/bin/atuin"
+}
+
 enable_nix_flakes() {
     local nix_conf="${HOME}/.config/nix/nix.conf"
     if [[ -f "${nix_conf}" ]] && grep -qE '^[[:space:]]*extra-experimental-features.*\bflakes\b|^[[:space:]]*experimental-features.*\bflakes\b' "${nix_conf}"; then

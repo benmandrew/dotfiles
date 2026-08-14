@@ -130,6 +130,7 @@ main() {
     run_step install_zoxide
     run_step install_fzf
     run_step install_fzf_tab
+    run_step install_atuin
     run_step install_gh
     run_step install_gh_stack
     run_step install_gh_stack_skill

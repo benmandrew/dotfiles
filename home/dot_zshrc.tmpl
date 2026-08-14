@@ -285,6 +285,22 @@ if [[ -f "$HOME/.local/share/fzf-tab/fzf-tab.plugin.zsh" ]]; then
     'git log --oneline --graph --color=always -20 $word 2>/dev/null'
 fi
 
+# atuin stores history in its own SQLite db and syncs it per command record, so
+# two machines merge instead of conflicting the way a shared ~/.zsh_history
+# would. HISTFILE above still gets written, and stays the offline fallback.
+#
+# Sourced after ~/.fzf.zsh, which binds ^R to fzf-history-widget: the later
+# binding wins, and the atuin picker is the one wanted.
+#
+# Both --disable flags give a key back. --disable-up-arrow keeps the
+# up-line-or-beginning-search bindings above, which atuin would otherwise
+# replace with its own search on ^[[A. --disable-ai drops its binding of `?` at
+# an empty prompt, which opens a TUI that sends the typed question to a hosted
+# service — the opposite of why the history lives on a private server.
+if command -v atuin >/dev/null 2>&1; then
+  _cache_eval atuin init zsh --disable-up-arrow --disable-ai
+fi
+
 # Self-removing shim: only pay for sourcing opam-init on the first call,
 # then unfunction so later invocations hit the real opam binary directly.
 opam() {
