@@ -514,9 +514,61 @@ local function right_status()
     }) .. metrics_status()
 end
 
+-- Left status: modal state, which no tab title can carry because it belongs to
+-- the window rather than to any one tab. It renders left of the first tab, so a
+-- width change here shifts the tabs rather than the metrics. The leader chip
+-- therefore holds a constant width and signals by colour alone, since it lights
+-- several times a minute; the workspace name is allowed to change the width,
+-- because switching workspace replaces the whole tab set anyway.
+local LEADER_LABEL = utf8.char(0x2303) .. "a" -- U+2303 UP ARROWHEAD, matching config.leader below
+
+-- The workspace you get without ever asking for one, so naming it says nothing.
+-- Anywhere else is somewhere you chose to be, and worth a chip.
+local DEFAULT_WORKSPACE = "default"
+local WORKSPACE_MAX_WIDTH = 16
+
+-- Both accessors are wrapped because the status bar has to keep painting on a
+-- WezTerm that lacks them, the way the process lookups above are wrapped.
+local function window_field(window, method)
+    local ok, value = pcall(function()
+        return window[method](window)
+    end)
+    if ok then
+        return value
+    end
+    return nil
+end
+
+local function left_status(window)
+    local leader = window_field(window, "leader_is_active") == true
+    local elements = {
+        { Attribute = { Intensity = leader and "Bold" or "Normal" } },
+        { Background = { Color = leader and hacktober.orange or hacktober.bg } },
+        { Foreground = { Color = leader and hacktober.bg or hacktober.hover } },
+        { Text = " " .. LEADER_LABEL .. " " },
+    }
+
+    local workspace = window_field(window, "active_workspace")
+    if workspace and workspace ~= "" and workspace ~= DEFAULT_WORKSPACE then
+        table.insert(elements, { Attribute = { Intensity = "Normal" } })
+        table.insert(elements, { Background = { Color = hacktober.surface } })
+        table.insert(elements, { Foreground = { Color = hacktober.text } })
+        table.insert(elements, { Text = " " .. wezterm.truncate_right(workspace, WORKSPACE_MAX_WIDTH) .. " " })
+    end
+
+    -- Return the bar to its own colours, and keep one column between the last
+    -- chip and the first tab.
+    table.insert(elements, { Attribute = { Intensity = "Normal" } })
+    table.insert(elements, { Background = { Color = hacktober.bg } })
+    table.insert(elements, { Foreground = { Color = hacktober.text } })
+    table.insert(elements, { Text = " " })
+    return wezterm.format(elements)
+end
+
 -- Clear the Claude Code notification flag (see dot_claude/executable_wezterm-notify.sh)
 -- once its tab is actually viewed, reverting to the auto cwd-based title, then
--- repaint the right status (metrics, plus the copied flash when active).
+-- repaint both statuses (left: leader and workspace; right: metrics, plus the
+-- copied flash when active).
 wezterm.on("update-status", function(window)
     local tab = window:active_tab()
     if tab then
@@ -525,6 +577,7 @@ wezterm.on("update-status", function(window)
             tab:set_title("")
         end
     end
+    window:set_left_status(left_status(window))
     window:set_right_status(right_status())
 end)
 
