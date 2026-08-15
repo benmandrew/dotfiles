@@ -14,8 +14,11 @@ session_id="$(echo "$input" | jq -r '.session_id // empty')"
 # The session files are keyed by pid, so find ours by its recorded sessionId.
 sessions="${HOME}/.claude/sessions"
 name=""
+pid=""
 if [ -n "$session_id" ] && [ -d "$sessions" ]; then
-	name="$(jq -r --arg id "$session_id" 'select(.sessionId == $id) | .name // empty' \
+	# The pid comes back alongside the name because it keys the tab flag below.
+	IFS=$'\t' read -r pid name <<<"$(jq -r --arg id "$session_id" \
+		'select(.sessionId == $id) | [(.pid | tostring), (.name // "")] | @tsv' \
 		"$sessions"/*.json 2>/dev/null | head -n1 || true)"
 fi
 
@@ -35,6 +38,18 @@ Linux)
 	;;
 esac
 
-if [ -n "${WEZTERM_PANE:-}" ] && command -v wezterm >/dev/null 2>&1; then
-	wezterm cli set-tab-title --pane-id "$WEZTERM_PANE" "🔔 $label"
+# Flag the tab so the notification is visible on an unfocused one. WezTerm
+# colours the tab's status bar from this and drops the flag when the tab is next
+# viewed. A flag file rather than `wezterm cli set-tab-title`, which wrote the
+# state into the title string and so overwrote whatever the tab was called --
+# the task word, the agent identifier or a manual rename.
+bells="${HOME}/.claude/tab-bells"
+if [ -n "$pid" ]; then
+	mkdir -p "$bells"
+	# Drop flags whose session has exited, as claude-tab-title does for titles.
+	for stale in "$bells"/*; do
+		[ -f "$stale" ] || continue
+		[ -f "$sessions/${stale##*/}.json" ] || rm -f "$stale"
+	done
+	: >"$bells/$pid"
 fi

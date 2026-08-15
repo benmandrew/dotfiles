@@ -110,6 +110,25 @@ local function read_tab_title(pid)
     return title
 end
 
+-- The attention flag raised by claude's Notification hook (see
+-- dot_claude/executable_wezterm-notify.sh) and cleared when its tab is next
+-- viewed. A flag file rather than a title string, so a notification no longer
+-- overwrites the task word, the agent identifier or a manual rename.
+local claude_tab_bells = wezterm.home_dir .. "/.claude/tab-bells"
+
+local function read_bell(pid)
+    local f = io.open(claude_tab_bells .. "/" .. pid, "r")
+    if not f then
+        return false
+    end
+    f:close()
+    return true
+end
+
+local function clear_bell(pid)
+    os.remove(claude_tab_bells .. "/" .. pid)
+end
+
 -- claude is normally the pane's foreground process outright, but it can have a
 -- child in front of it (a tool call, a pager), so search the subtree too.
 local function claude_session(pane)
@@ -139,8 +158,30 @@ end
 -- Tab title: the claude agent running in the tab, else the remote hostname when
 -- SSH'd elsewhere, else the focused directory's name, unless manually renamed.
 local TAB_TITLE_MAX_WIDTH = 24
--- Room for the " [" / "] " decoration around the truncated title above
-config.tab_max_width = TAB_TITLE_MAX_WIDTH + 4
+-- Room around the truncated title for the index (" 12 "), the status bar and the
+-- trailing column.
+config.tab_max_width = TAB_TITLE_MAX_WIDTH + 6
+
+-- The tab index is a navigation aid rather than content, so it is painted at
+-- low contrast against whichever chip it sits on. Only the foreground is set,
+-- leaving the active/inactive backgrounds from config.colors.tab_bar in place;
+-- the active value is the midpoint of that chip's orange and the bar's black.
+local TAB_INDEX_FG_ACTIVE = "#6d371b"
+local TAB_INDEX_FG_INACTIVE = hacktober.hover
+
+-- Claude session status, as a bar down the left edge of the chip. U+258E LEFT
+-- ONE QUARTER BLOCK, by codepoint so an editor can't mangle the literal glyph.
+local ICON_TAB_STATUS = utf8.char(0x258E)
+-- Amber for working, blue for wanting you. Both are chosen to read against the
+-- inactive chip, which is the only place they are ever drawn: the active tab is
+-- the one you are looking at, so its own state is on screen already and its bar
+-- stays dim. That also keeps the busy colour off the orange active chip, where
+-- an orange bar would vanish.
+local TAB_STATUS_BUSY = "#e0a33e"
+local TAB_STATUS_ATTENTION = "#6f9ede"
+-- How long a session sits idle before its bar turns to wanting you. Below this
+-- the pause is the gap between two of your own keystrokes.
+local TAB_WAIT_SECONDS = 60
 -- Short (domain-stripped, lowercased) hostname, for comparing the OSC 7 host
 -- reported by the shell against the machine WezTerm is running on.
 local function short_host(h)
@@ -233,18 +274,37 @@ end
 -- ("atuin:d8") so several agents in one project still read apart. An
 -- identifier with no such suffix has been renamed by hand, and a name someone
 -- chose is worth less than the task, so the word stands alone.
-local function claude_name(tab)
-    local pane = active_mux_pane(tab)
-    local session = pane and claude_session(pane)
-    if not session then
-        return nil
-    end
+local function claude_title(session)
     local title = session.pid and read_tab_title(session.pid)
     if not title then
         return session.name
     end
     local suffix = session.name and session.name:match("%-(%w%w)$")
     return suffix and (title .. ":" .. suffix) or title
+end
+
+-- Everything the tab bar draws for a claude tab: what to call it, whether the
+-- session is working, whether it has asked for attention, and how long it has
+-- been idle. Whether the tab is the active one is deliberately left out, since
+-- that changes without the cache below expiring.
+local function claude_tab(tab)
+    local pane = active_mux_pane(tab)
+    local session = pane and claude_session(pane)
+    if not session then
+        return nil
+    end
+    -- statusUpdatedAt is epoch milliseconds; claude rewrites it on every
+    -- busy/idle transition, so this is the age of the current state.
+    local waited = 0
+    if session.statusUpdatedAt then
+        waited = os.time() - math.floor(session.statusUpdatedAt / 1000)
+    end
+    return {
+        title = claude_title(session),
+        busy = session.status == "busy",
+        bell = session.pid ~= nil and read_bell(session.pid),
+        waited = waited,
+    }
 end
 
 -- format-tab-title runs on every status tick (100ms, see status_update_interval)
@@ -280,16 +340,17 @@ local function per_tab_cached(lookup)
 end
 
 local ssh_host_cached = per_tab_cached(ssh_host)
-local claude_name_cached = per_tab_cached(claude_name)
+local claude_tab_cached = per_tab_cached(claude_tab)
 
 wezterm.on("format-tab-title", function(tab)
+    local state = claude_tab_cached(tab)
     local title = tab.tab_title
     if not (title and #title > 0) then
         -- A claude session anywhere in the pane's process subtree names the tab
         -- after the agent. Checked before the host and cwd fallbacks because it
         -- is the more specific answer: several agents often share one project
         -- directory, and their cwds would all render identically.
-        title = claude_name_cached(tab)
+        title = state and state.title
     end
     if not (title and #title > 0) then
         local cwd = tab.active_pane.current_working_dir
@@ -310,7 +371,41 @@ wezterm.on("format-tab-title", function(tab)
             end
         end
     end
-    return " [" .. wezterm.truncate_right(title, TAB_TITLE_MAX_WIDTH) .. "] "
+    -- Returned as format elements rather than a string so the index and the
+    -- status bar can be coloured apart from the title. Only foregrounds are set,
+    -- leaving each chip's background to config.colors.tab_bar; the title's own
+    -- colours have to be restored explicitly afterwards for the same reason.
+    local dim = tab.is_active and TAB_INDEX_FG_ACTIVE or TAB_INDEX_FG_INACTIVE
+    local elements = {
+        { Attribute = { Intensity = "Normal" } },
+        { Foreground = { Color = dim } },
+        { Text = string.format(" %d ", tab.tab_index + 1) },
+    }
+
+    -- The active tab's state is on screen in the pane below it, so its bar stays
+    -- dim and the colours are spent on the tabs you cannot see.
+    local waiting = state and not state.busy and state.waited >= TAB_WAIT_SECONDS
+    if state then
+        local colour, bold = dim, false
+        if not tab.is_active then
+            if state.bell then
+                colour, bold = TAB_STATUS_ATTENTION, true
+            elseif state.busy then
+                colour = TAB_STATUS_BUSY
+            elseif waiting then
+                colour = TAB_STATUS_ATTENTION
+            end
+        end
+        table.insert(elements, { Attribute = { Intensity = bold and "Bold" or "Normal" } })
+        table.insert(elements, { Foreground = { Color = colour } })
+        table.insert(elements, { Text = ICON_TAB_STATUS })
+    end
+
+    table.insert(elements, { Attribute = { Intensity = tab.is_active and "Bold" or "Normal" } })
+    table.insert(elements, { Foreground = { Color = tab.is_active and hacktober.bg or hacktober.text } })
+    table.insert(elements, { Text = wezterm.truncate_right(title, TAB_TITLE_MAX_WIDTH) })
+    table.insert(elements, { Text = " " })
+    return elements
 end)
 
 -- System metrics (CPU / RAM / uptime) in the right status: a local mirror of
@@ -565,18 +660,43 @@ local function left_status(window)
     return wezterm.format(elements)
 end
 
--- Clear the Claude Code notification flag (see dot_claude/executable_wezterm-notify.sh)
--- once its tab is actually viewed, reverting to the auto cwd-based title, then
--- repaint both statuses (left: leader and workspace; right: metrics, plus the
--- copied flash when active).
-wezterm.on("update-status", function(window)
-    local tab = window:active_tab()
-    if tab then
-        local title = tab:get_title()
-        if title and title:find("^🔔") then
-            tab:set_title("")
+-- Drop the attention flag (see dot_claude/executable_wezterm-notify.sh) once its
+-- tab is actually viewed. Finding the session means walking the pane's process
+-- subtree, and update-status runs at 10Hz (see status_update_interval), so this
+-- is held to the same once-a-second cadence as the tab lookups above. The
+-- throttle is per window: one shared timestamp would let a second window's ticks
+-- starve the first of its clear.
+local bell_cleared_at = {}
+
+local function clear_active_bell(window)
+    local id = window_field(window, "window_id") or 0
+    local now = os.time()
+    local age = now - (bell_cleared_at[id] or -1)
+    if age >= 0 and age < 1 then
+        return
+    end
+    bell_cleared_at[id] = now
+    -- Every pane in the tab rather than the focused one alone: typing in a shell
+    -- split beside claude still means you have looked at the tab.
+    local tab = window_field(window, "active_tab")
+    local ok, panes = pcall(function()
+        return tab and tab:panes() or {}
+    end)
+    if not ok then
+        return
+    end
+    for _, pane in ipairs(panes) do
+        local session = claude_session(pane)
+        if session and session.pid then
+            clear_bell(session.pid)
         end
     end
+end
+
+-- Repaint both statuses (left: leader and workspace; right: metrics, plus the
+-- copied flash when active).
+wezterm.on("update-status", function(window)
+    clear_active_bell(window)
     window:set_left_status(left_status(window))
     window:set_right_status(right_status())
 end)
