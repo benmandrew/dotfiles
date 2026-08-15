@@ -22,6 +22,12 @@ When a task calls for prose — PR descriptions, docs, READMEs, blog posts, comm
 
 When writing prose inline instead, read `~/.claude/VOICE.md` first and follow it (it lives at that absolute path, not in the current working directory). It's a voice spec with two modes: **write-up** (first-person project narrative) and **explainer** (impersonal technical exposition). Pick the mode that fits, then apply its rules. Skip `~/.claude/VOICE.md` for pure-code work and short mechanical text.
 
+## Line breaks in prose files
+
+In files that are entirely prose (`.md`, `.txt`, `.tex`), put each paragraph on a single unbroken line. Never hard-wrap at a column width. Some markdown renderers honour those newlines and stop filling the page, so a wrapped paragraph renders with ragged early breaks. Blank lines still separate paragraphs as usual.
+
+This governs the source layout only, and leaves the prose itself to `~/.claude/VOICE.md`. When editing a file that is already hard-wrapped throughout, keep its existing convention unless asked to reflow it.
+
 ## Plan files in the filesystem
 
 Keep plans in a `PLAN.md` or `TODO.md` that gets updated as work progresses. The plan lives on disk, not in context, so a fresh session just reads the file and picks up where it left off.
