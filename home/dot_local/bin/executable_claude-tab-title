@@ -1,0 +1,82 @@
+#!/bin/sh
+# Title the calling Claude Code session's WezTerm tab and tmux window with a
+# word describing what it is working on.
+#
+# Both terminals title a claude pane from the agent identifier in
+# ~/.claude/sessions/<pid>.json ("chezmoi-d8"), which says which agent the tab
+# holds and nothing about what it is doing. This writes an override to
+# ~/.claude/tab-titles/<pid>, which wezterm.lua and claude-pane-session prefer
+# over that identifier, rendering "atuin:d8" -- the task, plus the suffix claude
+# derives names with, so two agents in one project still read apart.
+#
+# The override is a file of its own because Claude Code owns the session file
+# and rewrites it on every status change, so anything written into that file
+# races those writes.
+#
+# Usage: claude-tab-title <word>
+#        claude-tab-title --clear
+set -u
+
+titles="${HOME}/.claude/tab-titles"
+sessions="${HOME}/.claude/sessions"
+
+die() {
+    printf '%s\n' "$*" >&2
+    exit 1
+}
+
+[ $# -eq 1 ] || die "usage: claude-tab-title <word>|--clear"
+
+# The caller is claude's Bash tool, which runs the command in a shell of its
+# own, so claude is a hop or two up rather than the immediate parent. Walk up
+# until a session file names one of them. The hop cap is a guard against a cycle
+# in a torn ps snapshot, not a real depth limit.
+pid=$PPID
+claude_pid=
+hops=0
+while [ "$pid" -gt 1 ] && [ "$hops" -lt 8 ]; do
+    if [ -f "$sessions/$pid.json" ]; then
+        claude_pid=$pid
+        break
+    fi
+    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    case $pid in
+        '' | *[!0-9]*) break ;;
+    esac
+    hops=$((hops + 1))
+done
+[ -n "$claude_pid" ] || die "no claude session in this process's ancestry"
+
+mkdir -p "$titles" || exit 1
+
+# Drop overrides whose session has exited: nothing else prunes them, and a pid
+# the kernel reuses would inherit a stale title. The readers join on a live
+# session so they never show one, making this hygiene rather than correctness.
+# Both writers here name their temporary file with a leading dot, which sh's
+# glob does not match.
+for stale in "$titles"/*; do
+    [ -f "$stale" ] || continue
+    [ -f "$sessions/${stale##*/}.json" ] || rm -f "$stale"
+done
+
+if [ "$1" = --clear ]; then
+    rm -f "$titles/$claude_pid"
+    exit 0
+fi
+
+title=$1
+# One word, because the tab bar is narrow and both readers take the file as a
+# single line. Excluding the tab character in particular keeps the title from
+# splitting the TSV row claude-pane-session builds out of it.
+case $title in
+    '' | *[!A-Za-z0-9._-]*) die "title must be one word of [A-Za-z0-9._-]" ;;
+esac
+[ "${#title}" -le 24 ] || die "title must be 24 characters or fewer"
+
+# Written atomically: the tmux status line reads this once a second.
+tmp="$titles/.$claude_pid.$$"
+printf '%s\n' "$title" >"$tmp" || exit 1
+mv -f "$tmp" "$titles/$claude_pid" || {
+    rm -f "$tmp"
+    exit 1
+}

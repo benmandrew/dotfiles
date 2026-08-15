@@ -91,6 +91,25 @@ local function read_session(pid)
     return nil
 end
 
+-- What the session is working on right now, set by `claude-tab-title` and keyed
+-- by the same pid. It is a file of its own because claude owns the session file
+-- and rewrites it on every status change; see the script for the rest.
+local claude_tab_titles = wezterm.home_dir .. "/.claude/tab-titles"
+
+local function read_tab_title(pid)
+    local f = io.open(claude_tab_titles .. "/" .. pid, "r")
+    if not f then
+        return nil
+    end
+    local title = f:read("*l")
+    f:close()
+    title = title and title:match("^%s*(.-)%s*$")
+    if title == "" then
+        return nil
+    end
+    return title
+end
+
 -- claude is normally the pane's foreground process outright, but it can have a
 -- child in front of it (a tool call, a pager), so search the subtree too.
 local function claude_session(pane)
@@ -209,11 +228,23 @@ end
 
 -- The agent identifier claude registers for the tab's session ("counter-fe"),
 -- which is what `gwt` lists agents under, so a tab can be read straight off
--- that listing.
+-- that listing. A task word set with `claude-tab-title` takes its place,
+-- keeping the two-character suffix claude derives identifiers with
+-- ("atuin:d8") so several agents in one project still read apart. An
+-- identifier with no such suffix has been renamed by hand, and a name someone
+-- chose is worth less than the task, so the word stands alone.
 local function claude_name(tab)
     local pane = active_mux_pane(tab)
     local session = pane and claude_session(pane)
-    return session and session.name or nil
+    if not session then
+        return nil
+    end
+    local title = session.pid and read_tab_title(session.pid)
+    if not title then
+        return session.name
+    end
+    local suffix = session.name and session.name:match("%-(%w%w)$")
+    return suffix and (title .. ":" .. suffix) or title
 end
 
 -- format-tab-title runs on every status tick (100ms, see status_update_interval)

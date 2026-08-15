@@ -16,6 +16,9 @@
 set -u
 
 sessions="${HOME}/.claude/sessions"
+# What each session is working on, set by `claude-tab-title` and keyed by the
+# same pid, which replaces the agent identifier in the window name.
+titles="${HOME}/.claude/tab-titles"
 # Per-user by construction on both platforms: XDG_RUNTIME_DIR is /run/user/<uid>
 # on Linux, and TMPDIR is a private per-user directory on macOS.
 cache="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/claude-pane-session.tsv"
@@ -30,9 +33,9 @@ emit_fallback() {
 }
 
 # One process-table snapshot plus one jq pass over every session file, written
-# atomically so a concurrent reader never sees a half-built file. Both kinds of
-# line are tab-separated: "P <pid> <ppid>" for the parent map, "S <pid> <name>
-# <cwd>" for the sessions.
+# atomically so a concurrent reader never sees a half-built file. All three
+# kinds of line are tab-separated: "P <pid> <ppid>" for the parent map, "S <pid>
+# <name> <cwd>" for the sessions, "T <pid> <title>" for the title overrides.
 build_cache() {
     tmp="$cache.$$"
     {
@@ -46,6 +49,17 @@ build_cache() {
             set -- "$@" "$sessions/$pid.json"
         done
         [ $# -eq 0 ] || jq -r '["S", (.pid | tostring), (.name // ""), (.cwd // "")] | @tsv' "$@" 2>/dev/null
+        # One awk over every override rather than a read apiece, since this runs
+        # on every status tick. The pid is the filename, so FILENAME carries it.
+        set --
+        for f in "$titles"/*; do
+            [ -f "$f" ] || continue
+            set -- "$@" "$f"
+        done
+        [ $# -eq 0 ] || awk 'FNR == 1 && $0 != "" {
+            n = split(FILENAME, path, "/")
+            print "T\t" path[n] "\t" $0
+        }' "$@" 2>/dev/null
     } >"$tmp" 2>/dev/null || {
         rm -f "$tmp"
         return 1
@@ -60,15 +74,29 @@ build_cache() {
 # cap is a guard against a cycle in a torn snapshot, not a real depth limit.
 lookup() {
     awk -F '\t' -v root="$pane_pid" -v want="$field" '
+        # What the window is called: the task the session set with
+        # claude-tab-title, else the agent identifier claude derived. The
+        # identifier keeps its two-character suffix on the front of the task
+        # ("atuin:d8"), so several agents in one project still read apart. An
+        # identifier without one was renamed by hand, and a name someone chose
+        # is worth less than the task, so the task stands alone.
+        function window_name(i,   name, task) {
+            name = sname[i]
+            if (!(spid[i] in title)) return name
+            task = title[spid[i]]
+            if (match(name, /-[0-9A-Za-z][0-9A-Za-z]$/)) return task ":" substr(name, RSTART + 1)
+            return task
+        }
         $1 == "P" { parent[$2 + 0] = $3 + 0 }
         $1 == "S" { n++; spid[n] = $2 + 0; sname[n] = $3; scwd[n] = $4 }
+        $1 == "T" { title[$2 + 0] = $3 }
         END {
             target = root + 0
             for (i = 1; i <= n; i++) {
                 p = spid[i]
                 for (hops = 0; p > 1 && hops < 64; hops++) {
                     if (p == target) {
-                        print (want == "cwd" ? scwd[i] : sname[i])
+                        print (want == "cwd" ? scwd[i] : window_name(i))
                         exit
                     }
                     if (!(p in parent)) break

@@ -8,6 +8,10 @@ A PreToolUse hook transparently rewrites Bash commands through `rtk`, a token-fi
 
 `zotero-cli` is available for working with my Zotero library — searching, reading, and ingesting references (DOI / arXiv / file / BibTeX). Run `zotero-cli --help` to discover commands; `--json` on any command emits machine-readable output.
 
+# Tab titles
+
+Run `claude-tab-title <word>` when you start a distinct task, to title the WezTerm tab and tmux window with what you are working on. One word, lowercase. `claude-tab-title --clear` restores the agent identifier.
+
 # Best Practices
 
 ## CLAUDE.md as persistent memory
