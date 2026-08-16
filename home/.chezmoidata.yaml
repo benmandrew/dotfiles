@@ -1,0 +1,20 @@
+## Data available to every template as top-level keys. Resolved at `chezmoi
+## apply` time, so each machine's rendered files carry only its own values.
+
+atuin:
+  ## Short name recorded against every command, in place of the hostname —
+  ## `mac` rather than `Ben-MacBook.local`. The [ui] host column in
+  ## dot_config/atuin/private_config.toml is narrow, and a synced result is
+  ## only useful if the machine it came from is readable at a glance.
+  ##
+  ## Keyed on `.chezmoi.hostname`, which is the hostname with any domain
+  ## stripped and the case left as the machine reports it. A machine missing
+  ## from this map exports nothing and keeps atuin's own default.
+  hostnames:
+    Ben-MacBook: mac
+    ben-manchester: manc
+    emel: emel
+    fisk: fisk
+    windows: win
+    av2: av2
+    av3: av3

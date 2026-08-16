@@ -298,6 +298,14 @@ fi
 # an empty prompt, which opens a TUI that sends the typed question to a hosted
 # service — the opposite of why the history lives on a private server.
 if command -v atuin >/dev/null 2>&1; then
+{{- $atuinHost := index .atuin.hostnames .chezmoi.hostname | default "" }}
+{{- if $atuinHost }}
+  # The name this machine is recorded under, from atuin.hostnames in
+  # .chezmoidata.yaml. It only applies to commands recorded from here on:
+  # records already written keep the hostname, and `--filter-mode host` treats
+  # the two as different machines.
+  export ATUIN_HOST_NAME="{{ $atuinHost }}"
+{{ end }}
   _cache_eval atuin init zsh --disable-up-arrow --disable-ai
 fi
 

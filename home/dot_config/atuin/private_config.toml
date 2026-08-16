@@ -87,7 +87,15 @@ enabled = false
 ## `host` is not in the default column set. It earns its place here because the
 ## whole point of syncing is that a result may have come from another machine,
 ## and without it there is no way to tell which.
-columns = ["duration", "time", "host", "command"]
+##
+## Width 5 rather than the default 15. The column is a fixed field, not sized to
+## its contents, so the default spends 15 columns on `mac` as readily as on a
+## full hostname. Every name in atuin.hostnames (.chezmoidata.yaml) is four
+## characters or fewer, and the field includes the gap before the command, so 5
+## is the tight fit: 4 of name and 1 of separator. A name that outgrows it is
+## truncated with `…` rather than overflowing, so the only cost of getting this
+## wrong is a shortened host, and widening it is a one-character edit here.
+columns = ["duration", "time", { type = "host", width = 5 }, "command"]
 
 [theme]
 ## themes/hacktober.toml, matching WezTerm and tmux. Loaded only by the
