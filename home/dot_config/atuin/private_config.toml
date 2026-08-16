@@ -51,6 +51,11 @@ show_tabs = false
 ## nothing.
 exit_mode = "return-original"
 
+## Stops the relative-time column animating. It renders `51s ago` and counts up
+## in place, which is the only thing moving on screen while the list is being
+## read. The times still render, they just settle. Also settable as NO_MOTION=1.
+prefers_reduced_motion = true
+
 ## Drops commands matching atuin's built-in patterns — AWS key ids, GitHub PATs,
 ## Slack tokens and webhooks, Stripe keys — before they are ever written. On by
 ## default; pinned because it is the reason this history is safe to sync at all.
@@ -68,10 +73,30 @@ secrets_filter = true
 #   "^/very/secret/area",
 # ]
 
+[keys]
+## Both of these default to true, and both fire while the cursor is being moved
+## through a query that is still being edited — the left arrow at column 0
+## closes the picker, and the right arrow at the end of the line accepts the
+## selection the way Tab does. Off, the arrows only ever move the cursor.
+exit_past_line_start = false
+accept_past_line_end = false
+
+## scroll_exits is left at its default true: up and down past the ends of the
+## list is the deliberate way out, and unlike the two above it is not reachable
+## by accident while editing.
+
 [search]
 ## Show commands from any shell, including entries imported from ~/.zsh_history
 ## that predate atuin recording which shell ran them.
 shells = "all"
+
+## The modes ^R cycles through, in order. The default list has six; `workspace`
+## never appears because `workspaces` is false, `session` and `session-preload`
+## scope to one shell instance, which is rarely what is wanted from a synced
+## history. Trimming the cycle to three makes the `[GLOBAL]` indicator in the
+## bottom-left worth reading. `host` earns its place now that hosts read as
+## `mac` and `fisk` rather than as full hostnames.
+filters = ["global", "host", "directory"]
 
 [tmux]
 ## Inline in the pane, matching how fzf's ^R behaves today. A popup would float
@@ -96,6 +121,12 @@ enabled = false
 ## truncated with `…` rather than overflowing, so the only cost of getting this
 ## wrong is a shortened host, and widening it is a one-character edit here.
 columns = ["duration", "time", { type = "host", width = 5 }, "command"]
+
+## On by default, and pinned because themes/hacktober.toml depends on it: the
+## Syntax* colours it leaves unset are the ones this draws with. It maps to ANSI
+## palette entries rather than to RGB, so a command renders `git` at colour 10
+## and `--short` at colour 6, following the terminal's own scheme.
+syntax_highlight = true
 
 [theme]
 ## themes/hacktober.toml, matching WezTerm and tmux. Loaded only by the
