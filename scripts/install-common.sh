@@ -3,6 +3,14 @@
 UPGRADE=""
 _INSTALL_FAILED=false
 
+# Homebrew 6 has ask mode on by default, so `brew install` and `brew upgrade`
+# stop for a [y/n] confirmation whenever the plan reaches past the packages
+# named on the command line — a dependency bump, a cask's dependants. Nothing
+# here answers those prompts, so an install left to run unattended stalls on the
+# first one. HOMEBREW_NO_ASK is what turns the default back off; the equivalent
+# per-command flags are --no-ask/--yes.
+export HOMEBREW_NO_ASK=1
+
 run_step() {
     if ! "$@"; then
         err "Step failed: $*"
@@ -43,7 +51,11 @@ require_cmd() {
 # rebuilds tmux and re-downloads every toolchain — comfortably outruns it, so
 # the password gets asked for again at each later sudo step. Authenticate once
 # up front and refresh the timestamp from the background for as long as the
-# script runs, so the user is prompted exactly once.
+# script runs, which covers every step whose only problem is outlasting the
+# cache. Some steps still prompt. Homebrew 6 runs `sudo --reset-timestamp` at
+# the start of every brew invocation (Library/Homebrew/brew.sh), wiping the
+# cached credential, so the next privileged step after any brew command asks
+# for the password again.
 _SUDO_KEEPALIVE_PID=""
 
 start_sudo_keepalive() {
@@ -51,7 +63,7 @@ start_sudo_keepalive() {
     if ((EUID == 0)); then
         return
     fi
-    log "Requesting sudo access (prompted for once; refreshed for the rest of the install)"
+    log "Requesting sudo access (refreshed in the background; steps that follow a brew command may re-prompt)"
     if ! sudo -v; then
         err "sudo authentication failed"
         exit 1
@@ -59,11 +71,14 @@ start_sudo_keepalive() {
     local parent=$$
     # `kill -0` bounds the loop to the lifetime of the install even if the EXIT
     # trap never fires (SIGKILL, say), so no stray refresher is left behind.
-    # `sudo -n true` never prompts, so a sudoers config with
-    # timestamp_timeout=0 breaks the loop rather than blocking on a password
-    # read that has no terminal attached.
+    # `sudo -n true` never prompts, so a refresh that fails costs nothing and is
+    # ignored rather than ending the loop: after a brew command has wiped the
+    # timestamp, or under a sudoers config with timestamp_timeout=0, the next
+    # step that authenticates by hand hands the credential back and the loop
+    # carries it forward again. Breaking here instead retired the refresher for
+    # the whole run at the first brew command, which is most of an --upgrade.
     while kill -0 "${parent}" 2>/dev/null; do
-        sudo -n true 2>/dev/null || break
+        sudo -n true 2>/dev/null || true
         sleep 50
     done &
     _SUDO_KEEPALIVE_PID=$!
