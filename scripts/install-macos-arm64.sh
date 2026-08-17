@@ -152,8 +152,8 @@ main() {
     run_step install_nerd_font
 
     run_optional_step obsidian \
-        "Obsidian: notes app. Ships the 'obsidian' CLI, but needs the GUI app running — a dev-machine tool, not a server one." \
-        install_obsidian
+        "Obsidian: notes app, plus obsync and the 15-minute vault sync LaunchAgent it schedules. Ships the 'obsidian' CLI, but needs the GUI app running — a dev-machine tool, not a server one." \
+        install_obsidian_stack
 
     run_optional_step zathura \
         "zathura: keyboard-driven PDF viewer, with SyncTeX inverse search into VS Code. A GUI app — noise on a server." \

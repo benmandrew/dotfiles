@@ -8,7 +8,7 @@ $ ./scripts/install.sh
 
 ### Optional tools
 
-Most tools are installed on every machine. A few only make sense where you actually sit in front of the machine, rather than ssh into it — currently the Obsidian desktop app, which is what provides the `obsidian` CLI. Those are prompted for on first install, and the answer is remembered in `~/.config/dotfiles/optional-tools.conf` so later runs stay non-interactive.
+Most tools are installed on every machine. A few only make sense where you actually sit in front of the machine, rather than ssh into it — currently the Obsidian desktop app, which is what provides the `obsidian` CLI, and alongside it obsync and the 15-minute vault sync it schedules. Those are prompted for on first install, and the answer is remembered in `~/.config/dotfiles/optional-tools.conf` so later runs stay non-interactive.
 
 ```bash
 $ ./scripts/install.sh --all-optional          # take everything, no prompts

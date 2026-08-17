@@ -1758,6 +1758,180 @@ print_obsidian_cli_hint() {
     log "  and follow the prompt to register it (installs the 'obsidian' command)"
 }
 
+# Sharing Obsidian config across machines is really this clone plus its
+# schedule: the vault is a git repository and `.obsidian/` lives inside it, so
+# settings, hotkeys, appearance, snippets and community-plugin code all ride
+# along with the notes. Only `.obsidian/workspace.json` is gitignored. Nothing
+# here belongs in chezmoi — obsync commits whatever Obsidian writes every 15
+# minutes, so a chezmoi-managed copy would fight it for the same files.
+#
+# Three pieces have to line up and none is discoverable from the app: the
+# obsync checkout, a vault clone whose remote is named `personal`, and the
+# periodic invocation. This step owns the first and the third. The vault clone
+# stays manual, because its URL is a private self-hosted forge and this
+# repository is public — see scripts/CLAUDE.md for the reasoning.
+OBSYNC_DIR="${HOME}/projects/obsync"
+OBSYNC_REPO="https://github.com/benmandrew/obsync.git"
+OBSYNC_VAULT_DIR="${HOME}/projects/obsidian-vault"
+OBSYNC_VAULT_REMOTE="personal"
+OBSYNC_LOG="${HOME}/.local/share/obsync/cron.log"
+OBSYNC_INTERVAL_MIN=15
+OBSYNC_CRON_MARKER="# obsync: managed by dotfiles install"
+OBSYNC_LAUNCHD_LABEL="com.benmandrew.obsync"
+
+install_obsync() {
+    # obsync itself is public, so it clones over https and needs no key.
+    if [[ -d "${OBSYNC_DIR}/.git" ]]; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "obsync already cloned; skipping"
+        else
+            log "Upgrading obsync"
+            ensure_user_owns "${OBSYNC_DIR}"
+            safe_git "${OBSYNC_DIR}" fetch origin
+            safe_git "${OBSYNC_DIR}" reset --hard origin/main
+        fi
+    else
+        log "Cloning obsync"
+        mkdir -p "$(dirname "${OBSYNC_DIR}")"
+        git clone "${OBSYNC_REPO}" "${OBSYNC_DIR}"
+    fi
+
+    # No vault means nothing to schedule against, and obsync.sh exits 1 on a
+    # missing directory — which the cron job would then alert about every 15
+    # minutes.
+    if ! ensure_obsidian_vault; then
+        return 0
+    fi
+
+    mkdir -p "$(dirname "${OBSYNC_LOG}")"
+    schedule_obsync
+}
+
+# Both conditions gate the schedule, since obsync fails on either and a cron
+# job would report that failure every 15 minutes. Neither is repairable from
+# here: cloning the vault and naming its remote both need the forge URL, which
+# is deliberately not in this repository. So this detects and explains.
+#
+# The remote name is the one worth explaining. obsync.sh hardcodes
+# PRIMARY_REMOTE=personal, so a vault cloned the usual way — which gets
+# `origin` — fails at `rev-parse personal/main` on every run, and the EXIT trap
+# reports it as a bare exit status with no indication of the cause.
+ensure_obsidian_vault() {
+    if [[ ! -d "${OBSYNC_VAULT_DIR}/.git" ]]; then
+        log "obsync: no vault at ${OBSYNC_VAULT_DIR}; skipping schedule"
+        log "  clone it there first, naming the remote '${OBSYNC_VAULT_REMOTE}':"
+        log "    git clone -o ${OBSYNC_VAULT_REMOTE} <vault-url> ${OBSYNC_VAULT_DIR}"
+        return 1
+    fi
+
+    local url
+    url="$(safe_git "${OBSYNC_VAULT_DIR}" remote get-url "${OBSYNC_VAULT_REMOTE}" 2>/dev/null || true)"
+    if [[ -z "${url}" ]]; then
+        log "obsync: vault has no '${OBSYNC_VAULT_REMOTE}' remote; skipping schedule"
+        log "  git -C ${OBSYNC_VAULT_DIR} remote add ${OBSYNC_VAULT_REMOTE} <vault-url>"
+        return 1
+    fi
+
+    return 0
+}
+
+schedule_obsync() {
+    local os_name
+    os_name="$(uname -s)"
+    case "${os_name}" in
+        Darwin) schedule_obsync_launchd ;;
+        *) schedule_obsync_cron ;;
+    esac
+}
+
+schedule_obsync_cron() {
+    if ! command -v crontab >/dev/null 2>&1; then
+        log "obsync: no crontab command; skipping schedule"
+        return
+    fi
+
+    # The redirect merges stderr into the log. Without it obsync's failure
+    # output goes to cron's local mail, which nothing on these machines reads.
+    local line
+    line="*/${OBSYNC_INTERVAL_MIN} * * * * cd ${OBSYNC_DIR} && /bin/bash obsync.sh ${OBSYNC_VAULT_DIR} >> ${OBSYNC_LOG} 2>&1"
+
+    local existing
+    existing="$(crontab -l 2>/dev/null || true)"
+    if [[ "${existing}" == *"${line}"* ]]; then
+        log "obsync cron entry already installed; skipping"
+        return
+    fi
+
+    # Drop any earlier entry before appending, so re-running does not stack up
+    # duplicate schedules. Matching on obsync.sh as well as the marker catches
+    # hand-written entries that predate it. Everything else is passed through.
+    local kept
+    kept="$(printf '%s\n' "${existing}" | grep -vF "${OBSYNC_CRON_MARKER}" | grep -vF 'obsync.sh' || true)"
+
+    # Assemble first, pipe second. Anything but printf on the left of
+    # `crontab -` has its exit status masked by the pipeline, so a failure
+    # there would install a truncated crontab instead of stopping.
+    local payload="${OBSYNC_CRON_MARKER}"$'\n'"${line}"
+    if [[ -n "${kept//[[:space:]]/}" ]]; then
+        payload="${kept}"$'\n'"${payload}"
+    fi
+
+    log "Installing obsync cron entry (every ${OBSYNC_INTERVAL_MIN} minutes)"
+    printf '%s\n' "${payload}" | crontab -
+}
+
+# macOS still has cron, but it runs under a sandbox that needs Full Disk Access
+# granted to /usr/sbin/cron by hand, and inherits a PATH with no Homebrew on it,
+# so git is absent. A LaunchAgent avoids both.
+schedule_obsync_launchd() {
+    local plist="${HOME}/Library/LaunchAgents/${OBSYNC_LAUNCHD_LABEL}.plist"
+    local interval=$((OBSYNC_INTERVAL_MIN * 60))
+
+    mkdir -p "$(dirname "${plist}")"
+    log "Installing obsync LaunchAgent (every ${OBSYNC_INTERVAL_MIN} minutes)"
+    cat >"${plist}" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>${OBSYNC_LAUNCHD_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>${OBSYNC_DIR}/obsync.sh</string>
+        <string>${OBSYNC_VAULT_DIR}</string>
+    </array>
+    <key>WorkingDirectory</key><string>${OBSYNC_DIR}</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>StartInterval</key><integer>${interval}</integer>
+    <key>StandardOutPath</key><string>${OBSYNC_LOG}</string>
+    <key>StandardErrorPath</key><string>${OBSYNC_LOG}</string>
+</dict>
+</plist>
+EOF
+
+    local domain
+    domain="gui/$(id -u)"
+    # bootout first so a changed plist is picked up; it fails when nothing is
+    # loaded, which is the normal first-install case.
+    launchctl bootout "${domain}/${OBSYNC_LAUNCHD_LABEL}" >/dev/null 2>&1 || true
+    launchctl bootstrap "${domain}" "${plist}"
+}
+
+# Both halves run under the one `obsidian` opt-in. install_obsidian returns
+# early on several paths — already installed, headless, unsupported arch — so
+# the two are sequenced here rather than chained inside it, and a failure in
+# one still lets the other run.
+install_obsidian_stack() {
+    local rc=0
+    install_obsidian || rc=1
+    install_obsync || rc=1
+    return "${rc}"
+}
+
 # zathura is a keyboard-driven PDF viewer. The managed zathurarc wires up SyncTeX
 # inverse search into VS Code, so the build has to have SyncTeX support: Debian's
 # package does, but the macOS formula makes it an :optional dependency, hence
