@@ -12,7 +12,7 @@ atuin:
   ## from this map exports nothing and keeps atuin's own default.
   hostnames:
     Ben-MacBook: mac
-    ben-manchester: manc
+    ben: manc
     emel: emel
     fisk: fisk
     windows: win
