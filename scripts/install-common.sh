@@ -823,29 +823,43 @@ install_atuin() {
 
     if command -v atuin >/dev/null 2>&1; then
         # Field 2, not $NF: `atuin --version` prints `atuin 18.19.0 ()`, with a
-        # trailing empty git-hash field that $NF would pick up instead of the
-        # version — making every --upgrade re-download an already-current build.
+        # trailing git-hash field — empty on some builds, the commit on others —
+        # that $NF would pick up instead of the version, making every --upgrade
+        # re-download an already-current build.
         local version_output current
-        version_output="$(atuin --version 2>/dev/null)"
+        version_output="$(atuin --version 2>/dev/null)" || version_output=""
         current="$(awk '{print $2}' <<<"${version_output}")"
-        if [[ -z "${UPGRADE:-}" ]]; then
+        if [[ -z "${current}" ]]; then
+            # An atuin that will not report its version is a broken install, not
+            # a present one — the gnu tarball this step used to fetch dies at the
+            # dynamic linker on any distro whose glibc predates the build host's.
+            # Reinstall over it, since treating it as installed leaves the
+            # machine skipping the step and the binary broken for ever.
+            log "atuin present but not runnable; reinstalling ${version}"
+        elif [[ -z "${UPGRADE:-}" ]]; then
             log "atuin ${current} already installed; skipping"
             return
-        fi
-        if [[ "${current}" == "${version}" ]]; then
+        elif [[ "${current}" == "${version}" ]]; then
             log "atuin ${current} already at latest; skipping"
             return
+        else
+            log "Upgrading atuin to ${version}"
         fi
-        log "Upgrading atuin to ${version}"
     else
         log "Installing atuin ${version}"
     fi
 
+    # musl, not gnu. Upstream builds the gnu tarballs on a newer glibc than the
+    # oldest target distro here ships — 18.19 needs GLIBC_2.38/2.39, jammy has
+    # 2.35 — so the gnu binary exits at the dynamic linker with a `version
+    # GLIBC_2.38 not found` before main() ever runs. The musl builds are static,
+    # so they run on any of these machines; atuin's work is SQLite and a sync
+    # request, neither of which the musl allocator is a bottleneck for.
     local arch triple
     arch="$(uname -m)"
     case "${arch}" in
-        x86_64 | amd64) triple="x86_64-unknown-linux-gnu" ;;
-        aarch64 | arm64) triple="aarch64-unknown-linux-gnu" ;;
+        x86_64 | amd64) triple="x86_64-unknown-linux-musl" ;;
+        aarch64 | arm64) triple="aarch64-unknown-linux-musl" ;;
         *)
             log "Unsupported arch ${arch} for atuin install; skipping"
             return
