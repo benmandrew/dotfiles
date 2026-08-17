@@ -81,6 +81,10 @@ The skill goes in at *user scope*. `gh skill install` defaults to `--scope proje
 The CLI also requires the app to be **running** — the first command launches it if it is not. That is what makes this a dev-machine tool rather than a server one, and why it is gated behind a prompt.
 
 On Linux ARM64 the unpacked launcher is symlinked to `~/.local/bin/obsidian-app`, deliberately *not* `obsidian`: that name belongs to the CLI that registration installs, and clobbering it would break the CLI. The same branch also `chown root:root` + `chmod 4755`es the bundled `chrome-sandbox`, since Electron refuses to start without a setuid sandbox helper — the `.deb` does this itself, an unpacked tarball cannot. It is best-effort, and logs a `--no-sandbox` hint if it fails.
+The source comes from `git clone --quiet --depth 1 --branch v${version} https://github.com/aristocratos/btop.git`, not the `https://github.com/aristocratos/btop/archive/refs/tags/v${version}.tar.gz` this step used to download.
+codeload.github.com, the host every `/archive/refs/tags/` URL redirects to, rate-limits by source address, and on 17 August 2026 it answered 429 to all six attempts from this machine while api.github.com, GitHub release-asset downloads and git-over-https all served the same machine normally in the same minute.
+The pinned-version check matches `[0-9]+\.[0-9]+\.[0-9]+` out of the whole `btop --version` output with a bash regex rather than taking the last field, since that output wraps the number in a bold ANSI escape, prints two further lines of compiler and make flags, and — from a clone build — appends the commit it was built from, `1.4.4+0f398ab`, where the old tarball build had no `.git` to produce one.
+The field-splitting read therefore never matched the pinned version, so `--upgrade` rebuilt btop every run.
 
 For syncing a vault from a server with no desktop app, upstream publishes a separate npm package, `obsidian-headless` (binary `ob`, Node >= 22, proprietary). It is Sync-only, not the CLI, and is not installed here.
 
@@ -138,4 +142,21 @@ Checks that all expected commands and directories exist after installation. Run 
 `obsidian` and `zathura` are checked with `check_cmd_optional`, so they warn rather than fail. Both are optional per machine. `obsidian` additionally only exists after the app's manual GUI registration step, and `zathura` is skipped outright on headless Linux — a hard check would fail on a correctly-installed machine in either case.
 
 The gh-stack extension and skill go through `check_optional`, which takes a label plus a command instead of a binary name, since neither of them puts anything on PATH. Both warn for the same reason as above: the install skips them whenever gh is unauthenticated, so a hard check would fail on a machine that is set up correctly and merely has not run `gh auth login`.
+
+### Every download goes through one helper, and every call site checks it
+
+Every `curl ...
+-o <file>` in `install-common.sh`, `install-linux.sh` and `install-macos-arm64.sh` goes through `download <url> <dest>`, which applies `_CURL_RETRY_OPTS` and reports a failed fetch by URL.
+Those options are `--retry 5 --retry-connrefused --retry-max-time 120`.
+curl retries transient HTTP status on its own — 408, 429 and the 5xx family, honouring `Retry-After` when the server sends one — with an exponential backoff from 1s, so five attempts span about 30s.
+`--retry-connrefused` adds the connection-level refusal that a bare `--retry` ignores.
+`--retry-all-errors` is deliberately left off: it would retry a 404 as well, so a release asset renamed upstream burns the full backoff before reporting the obvious.
+`github_api_curl` carries the same options.
+
+Every call site is followed by `|| return 1`, because bash disables `errexit` for the whole `if !
+...` condition, and that is how `run_step` invokes every step.
+Before this, a failed download carried straight on into `tar`, `make` and `install` against a file that was never fetched.
+On 17 August 2026 a btop install got HTTP 429, then printed `tar: Cannot open`, `make: *** No such file or directory.
+Stop.` and two `install: cannot stat`.
+One failure produced four errors.
 

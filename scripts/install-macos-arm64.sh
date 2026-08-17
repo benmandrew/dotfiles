@@ -73,7 +73,7 @@ install_homebrew() {
     log "Installing Homebrew"
     local script_path
     script_path="$(mktemp)"
-    curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o "${script_path}"
+    download https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh "${script_path}" || return 1
     /bin/bash "${script_path}"
     rm -f "${script_path}"
     if [[ -x /opt/homebrew/bin/brew ]]; then

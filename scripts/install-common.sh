@@ -46,6 +46,28 @@ require_cmd() {
     fi
 }
 
+# Every fetch here goes to a third-party host that rate-limits, and one bad
+# minute takes a whole step down — a GitHub codeload 429 is what prompted this.
+# curl retries transient HTTP status on its own (408, 429 and the 5xx family,
+# honouring Retry-After when the server sends one) with an exponential backoff
+# from 1s, so five attempts span about 30s. --retry-connrefused adds the
+# connection-level case, which a bare --retry ignores. Deliberately not
+# --retry-all-errors: that retries a 404 too, so a release asset renamed
+# upstream would burn the full backoff before reporting the obvious.
+_CURL_RETRY_OPTS=(--retry 5 --retry-connrefused --retry-max-time 120)
+
+# Fetch a URL to a path. Failure is reported and returned, never ignored:
+# errexit does not apply inside a function called from run_step (bash disables
+# it for the whole `if ! ...` condition), so a step whose download failed would
+# otherwise carry on and unpack, build and install a file that is not there.
+download() {
+    local url="$1" dest="$2"
+    if ! curl -fsSL --proto '=https' --tlsv1.2 "${_CURL_RETRY_OPTS[@]}" "${url}" -o "${dest}"; then
+        err "Download failed: ${url}"
+        return 1
+    fi
+}
+
 # sudo caches credentials for a short window (15 minutes by default, less on
 # some configs) and a full install — especially the --upgrade path, which
 # rebuilds tmux and re-downloads every toolchain — comfortably outruns it, so
@@ -210,9 +232,9 @@ npm_install_g() {
 # to avoid unauthenticated rate limits (60 req/hr) on shared CI runner IPs.
 github_api_curl() {
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-        curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" "$@"
+        curl -fsSL "${_CURL_RETRY_OPTS[@]}" -H "Authorization: Bearer ${GITHUB_TOKEN}" "$@"
     else
-        curl -fsSL "$@"
+        curl -fsSL "${_CURL_RETRY_OPTS[@]}" "$@"
     fi
 }
 
@@ -325,7 +347,7 @@ install_rust() {
     log "Installing Rust"
     local script_path
     script_path="$(mktemp)"
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o "${script_path}"
+    download https://sh.rustup.rs "${script_path}" || return 1
     sh "${script_path}" -y
     rm -f "${script_path}"
 
@@ -388,9 +410,20 @@ install_btop() {
     fi
 
     if command -v btop >/dev/null 2>&1; then
+        # Matched out of the output rather than cut from a field, because
+        # `btop --version` wraps the number in bold (`btop version: ^[[1m1.4.4`),
+        # prints two more lines of compiler and make flags after it, and — built
+        # from the clone below — appends the commit it was built from,
+        # `1.4.4+0f398ab`, which the tarball builds this step used to make had no
+        # .git to produce. A field-splitting read picks up the escape and the
+        # suffix, so `--upgrade` never matched the pinned version and rebuilt
+        # every run.
         local current raw
         raw="$(btop --version 2>/dev/null)" || raw=""
-        current="$(awk '{print $NF}' <<<"${raw}")"
+        current=""
+        if [[ "${raw}" =~ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            current="${BASH_REMATCH[1]}"
+        fi
         if [[ -z "${UPGRADE:-}" ]]; then
             log "btop ${current} already installed; skipping"
             return
@@ -404,25 +437,36 @@ install_btop() {
         log "Installing btop ${version}"
     fi
 
-    local tmp_dir
+    local tmp_dir src_dir
     tmp_dir="$(mktemp -d)"
+    src_dir="${tmp_dir}/btop"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    curl -fsSL "https://github.com/aristocratos/btop/archive/refs/tags/v${version}.tar.gz" \
-        -o "${tmp_dir}/btop.tar.gz"
-    tar -C "${tmp_dir}" -xf "${tmp_dir}/btop.tar.gz"
+    # A shallow clone of the tag, rather than the release tarball this used to
+    # fetch. codeload.github.com — the host every /archive/refs/tags/ URL
+    # redirects to — rate-limits by source address and answers 429 to
+    # unauthenticated requests from a busy or NAT'd one; a 17 August 2026 install
+    # got 429 on all six attempts while api.github.com, release assets and git
+    # itself were all serving this machine normally. Cloning takes the git
+    # endpoint instead, which is not on that budget, and --depth 1 fetches the
+    # same one commit the tarball held.
+    if ! git clone --quiet --depth 1 --branch "v${version}" \
+        https://github.com/aristocratos/btop.git "${src_dir}"; then
+        err "Failed to clone btop v${version}"
+        return 1
+    fi
     # Build with a pruned PATH and an explicit CXX. If nix is on PATH its
     # binutils/glibc get picked up alongside the system g++, and the link fails
     # on __isoc23_* symbols that the older system glibc does not export.
     local jobs
     jobs="$(nproc)"
     env PATH=/usr/local/bin:/usr/bin:/bin CXX=/usr/bin/g++ \
-        make -C "${tmp_dir}/btop-${version}" -j"${jobs}"
+        make -C "${src_dir}" -j"${jobs}" || return 1
     mkdir -p "${HOME}/.local/bin"
-    install -m755 "${tmp_dir}/btop-${version}/bin/btop" "${HOME}/.local/bin/btop"
+    install -m755 "${src_dir}/bin/btop" "${HOME}/.local/bin/btop"
     # The apt package supplied themes via /usr/share/btop/themes, which the purge
     # above removes; ship them to the user theme dir so theme selection still works.
     mkdir -p "${HOME}/.config/btop/themes"
-    install -m644 "${tmp_dir}/btop-${version}"/themes/*.theme "${HOME}/.config/btop/themes/"
+    install -m644 "${src_dir}"/themes/*.theme "${HOME}/.config/btop/themes/"
 }
 
 install_jq() {
@@ -582,8 +626,8 @@ install_cmake() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    curl -fsSL "https://github.com/Kitware/CMake/releases/download/v${install_version}/${installer}" \
-        -o "${tmp_dir}/${installer}"
+    download "https://github.com/Kitware/CMake/releases/download/v${install_version}/${installer}" \
+        "${tmp_dir}/${installer}" || return 1
     chmod +x "${tmp_dir}/${installer}"
     sudo sh "${tmp_dir}/${installer}" --prefix=/usr/local --skip-license
 }
@@ -656,7 +700,7 @@ install_gh() {
     sudo mkdir -p -m 755 /etc/apt/keyrings
     local tmp
     tmp="$(mktemp)"
-    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o "${tmp}"
+    download https://cli.github.com/packages/githubcli-archive-keyring.gpg "${tmp}" || return 1
     sudo install -m 644 "${tmp}" /etc/apt/keyrings/githubcli-archive-keyring.gpg
     rm -f "${tmp}"
     sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
@@ -812,8 +856,8 @@ install_atuin() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    curl -fsSL "https://github.com/atuinsh/atuin/releases/download/${tag}/${tarball}" \
-        -o "${tmp_dir}/${tarball}"
+    download "https://github.com/atuinsh/atuin/releases/download/${tag}/${tarball}" \
+        "${tmp_dir}/${tarball}" || return 1
     tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}"
     mkdir -p "${HOME}/.local/bin"
     install -m755 "${tmp_dir}/atuin-${triple}/atuin" "${HOME}/.local/bin/atuin"
@@ -880,7 +924,7 @@ install_nix() {
     log "Installing Nix"
     local script_path
     script_path="$(mktemp)"
-    curl --proto '=https' --tlsv1.2 -L https://nixos.org/nix/install -o "${script_path}"
+    download https://nixos.org/nix/install "${script_path}" || return 1
     sh "${script_path}" --daemon --yes
     rm -f "${script_path}"
 
@@ -903,7 +947,7 @@ install_direnv() {
     mkdir -p "${HOME}/.local/bin"
     local script_path
     script_path="$(mktemp)"
-    curl -fsSL https://direnv.net/install.sh -o "${script_path}"
+    download https://direnv.net/install.sh "${script_path}" || return 1
     bin_path="${HOME}/.local/bin" bash "${script_path}"
     rm -f "${script_path}"
 }
@@ -972,7 +1016,7 @@ install_starship() {
     fi
     local script_path
     script_path="$(mktemp)"
-    curl -sS https://starship.rs/install.sh -o "${script_path}"
+    download https://starship.rs/install.sh "${script_path}" || return 1
     sh "${script_path}" -y
     rm -f "${script_path}"
 }
@@ -992,7 +1036,7 @@ install_claude_code() {
     log "Installing Claude Code"
     local script_path
     script_path="$(mktemp)"
-    curl -fsSL https://claude.ai/install.sh -o "${script_path}"
+    download https://claude.ai/install.sh "${script_path}" || return 1
     bash "${script_path}"
     rm -f "${script_path}"
 }
@@ -1009,7 +1053,7 @@ install_rtk() {
     fi
     local script_path
     script_path="$(mktemp)"
-    curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh -o "${script_path}"
+    download https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh "${script_path}" || return 1
     sh "${script_path}"
     rm -f "${script_path}"
 }
@@ -1027,7 +1071,7 @@ install_uv() {
     log "Installing uv"
     local script_path
     script_path="$(mktemp)"
-    curl -LsSf https://astral.sh/uv/install.sh -o "${script_path}"
+    download https://astral.sh/uv/install.sh "${script_path}" || return 1
     sh "${script_path}"
     rm -f "${script_path}"
     export PATH="${HOME}/.local/bin:${PATH}"
@@ -1093,8 +1137,8 @@ install_tmux_from_source() {
     local build_dir
     build_dir="$(mktemp -d)"
     trap 'rm -rf "${build_dir}"; trap - RETURN' RETURN
-    curl -fsSL "https://github.com/tmux/tmux/releases/download/${build_version}/${tarball}" \
-        -o "${build_dir}/${tarball}"
+    download "https://github.com/tmux/tmux/releases/download/${build_version}/${tarball}" \
+        "${build_dir}/${tarball}" || return 1
     tar -C "${build_dir}" -xf "${build_dir}/${tarball}"
     local cpu_count
     cpu_count="$(nproc)"
@@ -1186,8 +1230,8 @@ install_wezterm() {
         fi
     fi
     local deb="wezterm-${tag}.Ubuntu${ubuntu_version}.deb"
-    curl -fsSL "https://github.com/wez/wezterm/releases/download/${tag}/${deb}" \
-        -o "${tmp_dir}/${deb}"
+    download "https://github.com/wez/wezterm/releases/download/${tag}/${deb}" \
+        "${tmp_dir}/${deb}" || return 1
     sudo apt-get install -y "${tmp_dir}/${deb}"
 }
 
@@ -1241,8 +1285,8 @@ install_nerd_font() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    curl -fsSL "https://github.com/ryanoasis/nerd-fonts/releases/download/${tag}/CodeNewRoman.zip" \
-        -o "${tmp_dir}/CodeNewRoman.zip"
+    download "https://github.com/ryanoasis/nerd-fonts/releases/download/${tag}/CodeNewRoman.zip" \
+        "${tmp_dir}/CodeNewRoman.zip" || return 1
     mkdir -p "${font_dir}"
     unzip -oq "${tmp_dir}/CodeNewRoman.zip" -d "${font_dir}"
     echo "${tag}" >"${version_file}"
@@ -1279,7 +1323,7 @@ install_tailscale() {
     fi
     local script_path
     script_path="$(mktemp)"
-    curl -fsSL https://tailscale.com/install.sh -o "${script_path}"
+    download https://tailscale.com/install.sh "${script_path}" || return 1
     sh "${script_path}"
     rm -f "${script_path}"
 }
@@ -1335,8 +1379,8 @@ install_lua_ls() {
     local archive="lua-language-server-${tag}-${lua_arch}.tar.gz"
     local install_dir="${HOME}/.local/opt/lua-language-server"
     mkdir -p "${install_dir}"
-    curl -fsSL "https://github.com/LuaLS/lua-language-server/releases/download/${tag}/${archive}" \
-        -o "${tmp_dir}/${archive}"
+    download "https://github.com/LuaLS/lua-language-server/releases/download/${tag}/${archive}" \
+        "${tmp_dir}/${archive}" || return 1
     tar -xf "${tmp_dir}/${archive}" -C "${install_dir}"
     ln -sf "${install_dir}/bin/lua-language-server" "${HOME}/.local/bin/lua-language-server"
 }
@@ -1372,8 +1416,8 @@ install_opam() {
         binary="opam-${version}-${opam_arch}-linux"
         install_dir="${HOME}/.local/bin"
         mkdir -p "${install_dir}"
-        curl -fsSL "https://github.com/ocaml/opam/releases/download/${tag}/${binary}" \
-            -o "${install_dir}/opam"
+        download "https://github.com/ocaml/opam/releases/download/${tag}/${binary}" \
+            "${install_dir}/opam" || return 1
         chmod +x "${install_dir}/opam"
     }
 
@@ -1452,13 +1496,13 @@ install_go() {
     esac
 
     local latest version_output
-    version_output="$(curl -fsSL 'https://go.dev/VERSION?m=text')"
+    version_output="$(curl -fsSL "${_CURL_RETRY_OPTS[@]}" 'https://go.dev/VERSION?m=text')"
     latest="$(printf '%s' "${version_output}" | head -1)" # e.g. go1.24.2
     local tarball="${latest}.linux-${go_arch}.tar.gz"
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    curl -fsSL "https://go.dev/dl/${tarball}" -o "${tmp_dir}/${tarball}"
+    download "https://go.dev/dl/${tarball}" "${tmp_dir}/${tarball}" || return 1
     sudo rm -rf /usr/local/go
     sudo tar -C /usr/local -xf "${tmp_dir}/${tarball}"
     export PATH="/usr/local/go/bin:${PATH}"
@@ -1511,8 +1555,8 @@ install_moor() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    curl -fsSL "https://github.com/walles/moor/releases/download/${tag}/moor-${tag}-linux-amd64" \
-        -o "${tmp_dir}/moor"
+    download "https://github.com/walles/moor/releases/download/${tag}/moor-${tag}-linux-amd64" \
+        "${tmp_dir}/moor" || return 1
     install -m755 "${tmp_dir}/moor" "${HOME}/.local/bin/moor"
 }
 
@@ -1564,8 +1608,8 @@ install_glow() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    curl -fsSL "https://github.com/charmbracelet/glow/releases/download/${tag}/${dir_name}.tar.gz" \
-        -o "${tmp_dir}/glow.tar.gz"
+    download "https://github.com/charmbracelet/glow/releases/download/${tag}/${dir_name}.tar.gz" \
+        "${tmp_dir}/glow.tar.gz" || return 1
     tar -C "${tmp_dir}" -xf "${tmp_dir}/glow.tar.gz"
     mkdir -p "${HOME}/.local/bin"
     install -m755 "${tmp_dir}/${dir_name}/glow" "${HOME}/.local/bin/glow"
@@ -1618,8 +1662,8 @@ install_treehouse() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    curl -fsSL "https://github.com/kunchenguid/treehouse/releases/download/${tag}/${tarball}" \
-        -o "${tmp_dir}/${tarball}"
+    download "https://github.com/kunchenguid/treehouse/releases/download/${tag}/${tarball}" \
+        "${tmp_dir}/${tarball}" || return 1
     tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}"
     mkdir -p "${HOME}/.local/bin"
     install -m755 "${tmp_dir}/treehouse" "${HOME}/.local/bin/treehouse"
@@ -1688,8 +1732,8 @@ install_obsidian() {
             local tmp_dir
             tmp_dir="$(mktemp -d)"
             trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-            curl -fsSL "https://github.com/obsidianmd/obsidian-releases/releases/download/${tag}/${deb}" \
-                -o "${tmp_dir}/${deb}"
+            download "https://github.com/obsidianmd/obsidian-releases/releases/download/${tag}/${deb}" \
+                "${tmp_dir}/${deb}" || return 1
             sudo apt-get install -y "${tmp_dir}/${deb}"
             ;;
         aarch64 | arm64)
@@ -1718,8 +1762,8 @@ install_obsidian() {
             local tmp_dir
             tmp_dir="$(mktemp -d)"
             trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-            curl -fsSL "https://github.com/obsidianmd/obsidian-releases/releases/download/${tag}/${tarball}" \
-                -o "${tmp_dir}/${tarball}"
+            download "https://github.com/obsidianmd/obsidian-releases/releases/download/${tag}/${tarball}" \
+                "${tmp_dir}/${tarball}" || return 1
             tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}"
             local unpacked="${tmp_dir}/obsidian-${version}-arm64"
             if [[ ! -x "${unpacked}/obsidian" ]]; then

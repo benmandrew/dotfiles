@@ -93,7 +93,7 @@ install_node() {
     remove_conflicting_libnode_dev
     local setup_path
     setup_path="$(mktemp)"
-    curl -fsSL https://deb.nodesource.com/setup_lts.x -o "${setup_path}"
+    download https://deb.nodesource.com/setup_lts.x "${setup_path}" || return 1
     sudo -E bash "${setup_path}"
     rm -f "${setup_path}"
     sudo apt install -y nodejs
@@ -121,8 +121,8 @@ install_neovim_if_missing() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    curl -fsSL "https://github.com/neovim/neovim/releases/latest/download/${nvim_dir}.tar.gz" \
-        -o "${tmp_dir}/${nvim_dir}.tar.gz"
+    download "https://github.com/neovim/neovim/releases/latest/download/${nvim_dir}.tar.gz" \
+        "${tmp_dir}/${nvim_dir}.tar.gz" || return 1
     sudo rm -rf "/opt/${nvim_dir}"
     sudo tar -C /opt -xf "${tmp_dir}/${nvim_dir}.tar.gz"
 }
