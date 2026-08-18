@@ -64,6 +64,7 @@ check_cmd_optional perf
 
 check_dir "zinit" "${HOME}/.local/share/zinit/zinit.git"
 check_dir "fzf-tab" "${HOME}/.local/share/fzf-tab"
+check_dir "zsh-autosuggestions" "${HOME}/.local/share/zsh-autosuggestions"
 # install_zsh_completions generates this one on every platform: no package
 # ships a _delta, and zsh's bundled _sccs claims the command name, so its
 # absence means git-delta is completing SCCS flags.

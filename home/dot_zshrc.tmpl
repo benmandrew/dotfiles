@@ -355,6 +355,27 @@ if command -v atuin >/dev/null 2>&1; then
   _cache_eval atuin init zsh --disable-up-arrow --disable-ai
 fi
 
+# zsh-autosuggestions greys the rest of the most recent matching command after
+# the cursor, accepted with the right arrow. Cloned to ~/.local/share by
+# install_zsh_autosuggestions.
+#
+# Sourced last of the line-editor plugins, because it wraps every ZLE widget
+# that exists when it loads and has to see fzf-tab's and atuin's. Order matters
+# for a second reason: `atuin init zsh` above sets ZSH_AUTOSUGGEST_STRATEGY to
+# its own `atuin` strategy, which draws the suggestion from the synced database
+# rather than this machine's $HISTFILE, and it only takes effect when atuin
+# runs first. Nothing here sets the strategy, so that assignment stands.
+_zsh_autosuggestions="${XDG_DATA_HOME:-$HOME/.local/share}/zsh-autosuggestions/zsh-autosuggestions.zsh"
+if [[ -f "$_zsh_autosuggestions" ]]; then
+  # Grey against the Hacktober background; the default 8 is invisible on it.
+  ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#6c6c6c'
+  # Do not suggest against a paste or a very long line — the widget rescans the
+  # history on every keystroke and this is the case where that gets noticeable.
+  ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=80
+  source "$_zsh_autosuggestions"
+fi
+unset _zsh_autosuggestions
+
 # Self-removing shim: only pay for sourcing opam-init on the first call,
 # then unfunction so later invocations hit the real opam binary directly.
 opam() {

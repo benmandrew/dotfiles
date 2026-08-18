@@ -333,6 +333,24 @@ install_fzf_tab() {
     git clone --depth 1 https://github.com/Aloxaf/fzf-tab.git "${fzf_tab_home}"
 }
 
+install_zsh_autosuggestions() {
+    local autosuggest_home="${XDG_DATA_HOME:-${HOME}/.local/share}/zsh-autosuggestions"
+    if [[ -d "${autosuggest_home}/.git" ]]; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "zsh-autosuggestions already installed; skipping"
+            return
+        fi
+        log "Upgrading zsh-autosuggestions"
+        ensure_user_owns "${autosuggest_home}"
+        safe_git "${autosuggest_home}" fetch origin
+        safe_git "${autosuggest_home}" reset --hard origin/master
+        return
+    fi
+    log "Installing zsh-autosuggestions"
+    mkdir -p "$(dirname "${autosuggest_home}")"
+    git clone --depth 1 https://github.com/zsh-users/zsh-autosuggestions.git "${autosuggest_home}"
+}
+
 # True when some package already put a completion function for $1 somewhere
 # zsh looks by default. Homebrew links one for most of its formulae; the same
 # tool installed from a release tarball on Linux comes with nothing.
