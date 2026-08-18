@@ -192,6 +192,9 @@ main() {
 
     run_step install_neovim_if_missing
 
+    # After every other step: it runs each tool to get its completion script.
+    run_step install_zsh_completions
+
     print_chezmoi_init_hint
     check_failed
 }

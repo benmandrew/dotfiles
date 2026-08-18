@@ -333,6 +333,73 @@ install_fzf_tab() {
     git clone --depth 1 https://github.com/Aloxaf/fzf-tab.git "${fzf_tab_home}"
 }
 
+# True when some package already put a completion function for $1 somewhere
+# zsh looks by default. Homebrew links one for most of its formulae; the same
+# tool installed from a release tarball on Linux comes with nothing.
+_zsh_completion_installed() {
+    local dir
+    for dir in /opt/homebrew/share/zsh/site-functions \
+        /usr/local/share/zsh/site-functions \
+        /usr/share/zsh/site-functions \
+        /usr/share/zsh/vendor-completions; do
+        [[ -e "${dir}/_$1" ]] && return 0
+    done
+    return 1
+}
+
+# Generate zsh completions for the tools that can print their own but ship it
+# nowhere useful. Runs after every other install step, since it invokes each
+# binary. The output goes to the user site-functions directory that
+# home/dot_zshrc.tmpl prepends to fpath.
+#
+# A tool whose completion is already installed system-wide is skipped rather
+# than shadowed, so a later `brew upgrade` keeps ownership of it. delta is the
+# exception that motivated this: nothing ships a _delta, and zsh's bundled
+# _sccs registers the name `delta` for SCCS, so without a generated one
+# git-delta completes SCCS flags.
+install_zsh_completions() {
+    local comp_dir="${XDG_DATA_HOME:-${HOME}/.local/share}/zsh/site-functions"
+    local spec cmd args out generated=0
+
+    mkdir -p "${comp_dir}"
+
+    # "<command>|<arguments that print a zsh completion script>"
+    for spec in \
+        "uv|generate-shell-completion zsh" \
+        "uvx|--generate-shell-completion zsh" \
+        "fd|--gen-completions zsh" \
+        "delta|--generate-completion zsh" \
+        "rustup|completions zsh" \
+        "atuin|gen-completions --shell zsh" \
+        "chezmoi|completion zsh"; do
+        cmd="${spec%%|*}"
+        args="${spec#*|}"
+
+        command -v "${cmd}" >/dev/null 2>&1 || continue
+        _zsh_completion_installed "${cmd}" && continue
+
+        # Via a temporary file: a generator that fails half way would otherwise
+        # leave a truncated function that breaks completion for that command
+        # until the next run.
+        out="${comp_dir}/_${cmd}"
+        # shellcheck disable=SC2086  # args is a deliberate word-split argv
+        if "${cmd}" ${args} >"${out}.tmp" 2>/dev/null && [[ -s "${out}.tmp" ]]; then
+            mv -f "${out}.tmp" "${out}"
+            generated=$((generated + 1))
+        else
+            rm -f "${out}.tmp"
+            log "Could not generate zsh completion for ${cmd}; skipping"
+        fi
+    done
+
+    log "Generated ${generated} zsh completion function(s) in ${comp_dir}"
+
+    # compinit caches the command-to-function map in the dump and rereads fpath
+    # only when the dump is stale. Drop it so the next shell picks the new
+    # functions up instead of waiting out the 24-hour timer in .zshrc.
+    rm -f "${ZDOTDIR:-${HOME}}/.zcompdump" "${ZDOTDIR:-${HOME}}/.zcompdump.zwc"
+}
+
 install_rust() {
     load_cargo_env
     if command -v cargo >/dev/null 2>&1 && command -v rustup >/dev/null 2>&1; then

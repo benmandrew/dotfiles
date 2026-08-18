@@ -30,6 +30,18 @@ check_dir() {
     fi
 }
 
+check_file() {
+    local name="$1"
+    local path="$2"
+    if [[ -f "${path}" ]]; then
+        printf "\033[1;32m[ok]\033[0m   %s\n" "${name}"
+        ((ok++)) || true
+    else
+        printf "\033[1;31m[FAIL]\033[0m %s (%s)\n" "${name}" "${path}" >&2
+        ((fail++)) || true
+    fi
+}
+
 # perf (linux-tools-generic) depends on an exact-version kernel-tools package
 # that isn't always available on cloud/CI kernels, so its absence is a
 # warning rather than a failure.
@@ -52,6 +64,10 @@ check_cmd_optional perf
 
 check_dir "zinit" "${HOME}/.local/share/zinit/zinit.git"
 check_dir "fzf-tab" "${HOME}/.local/share/fzf-tab"
+# install_zsh_completions generates this one on every platform: no package
+# ships a _delta, and zsh's bundled _sccs claims the command name, so its
+# absence means git-delta is completing SCCS flags.
+check_file "zsh completions" "${HOME}/.local/share/zsh/site-functions/_delta"
 
 check_cmd rustup
 check_cmd cargo

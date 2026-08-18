@@ -10,16 +10,41 @@ fi
 [[ -f "$_zsh_nvm_plugin" ]] && source "$_zsh_nvm_plugin"
 unset _zsh_nvm_plugin
 
+# Both prepends run before compinit, which reads fpath once and never looks at
+# it again.
+#
+# rustup keeps _cargo and _rustup inside the active toolchain rather than
+# installing them anywhere on fpath. (N) drops the entry on a machine without
+# rust instead of leaving compinit a directory that does not exist. The glob
+# can match more than one toolchain — a cross-compilation target installs its
+# own — and they carry the same functions, so first match wins and the rest
+# cost compinit one directory scan a day.
+# shellcheck disable=SC1036  # zsh glob qualifier, read as bash by the linter
+fpath=($HOME/.rustup/toolchains/stable-*/share/zsh/site-functions(N) $fpath)
+# Completion functions no package manager puts on fpath: the ones
+# scripts/install-common.sh generates out of the tool itself (uv, fd, delta and
+# the rest of install_zsh_completions) plus anything hand-written. On Linux this
+# is the only source of them, since those tools arrive as bare binaries in
+# ~/.local/bin with no site-functions directory alongside. Prepended last, so it
+# sits at fpath[1] and a generated function beats a system one claiming the same
+# command name — which is what points `delta` away from zsh's _sccs.
+fpath=("${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions" $fpath)
+
 autoload -Uz compinit
 # Only rebuild the completion cache once a day (1440 min); -C on other
-# startups skips compinit's expensive rescan of $fpath entirely.
-if [[ -z "$(find "${ZDOTDIR:-$HOME}/.zcompdump" -mmin -1440 2>/dev/null)" ]]; then
+# startups skips compinit's expensive rescan of $fpath entirely. (N.mh-24) is
+# zsh's own mtime test — the `find` this replaced forked a process on every
+# single shell startup to answer the same question.
+# shellcheck disable=SC1036  # zsh glob qualifier, read as bash by the linter
+_zcompdump_fresh=("${ZDOTDIR:-$HOME}"/.zcompdump(N.mh-24))
+if (( ! $#_zcompdump_fresh )); then
   compinit
   # Compile dump in background; subsequent startups source the faster .zwc
   (zcompile "${ZDOTDIR:-$HOME}/.zcompdump" &)
 else
   compinit -C
 fi
+unset _zcompdump_fresh
 # Case-insensitive, then partial-word (_/-), then substring matching.
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
 # fzf-tab draws the menu itself, and needs zsh's own one off to capture the
@@ -40,6 +65,23 @@ zstyle ':completion:*' use-cache on
 zstyle ':completion:*' cache-path "${ZDOTDIR:-$HOME}/.zcompcache"
 # make: complete only Makefile targets, not directory files
 zstyle ':completion:*:*:make:*' tag-order 'targets'
+# Describe each option beside its flag instead of listing bare flag names.
+# fzf-tab's picker is 60% of the terminal height and has the room for it.
+zstyle ':completion:*' verbose yes
+zstyle ':completion:*:options' description 'yes'
+# Offer . and .. as matches, so `cd ../<TAB>` walks upwards.
+zstyle ':completion:*' special-dirs true
+# Notice a binary installed since the shell started, without a manual `rehash`.
+zstyle ':completion:*' rehash true
+
+# zsh's bundled _sccs claims the command name `delta` — SCCS has a subcommand
+# called that — so git-delta completed SCCS flags. install_zsh_completions
+# generates a real _delta from `delta --generate-completion zsh`; point the
+# name at it whenever that file made it onto fpath.
+# shellcheck disable=SC1036,SC1072,SC1073  # zsh glob qualifier and rc-expansion
+if [[ -n ${^fpath}/_delta(N[1]) ]]; then
+  compdef _delta delta
+fi
 
 setopt COMPLETE_IN_WORD    # complete from the cursor, not just word end
 setopt ALWAYS_TO_END       # move cursor to word end after completing
@@ -269,7 +311,11 @@ if [[ -f "$HOME/.local/share/fzf-tab/fzf-tab.plugin.zsh" ]]; then
   # Accept the match and immediately complete the next word, so a path can be
   # walked one directory per <tab> without restarting the picker.
   zstyle ':fzf-tab:*' continuous-trigger '/'
-  zstyle ':fzf-tab:*' fzf-flags --height=60% --layout=reverse --border --info=inline
+  # -i forces case-insensitive matching. fzf is smart-case by default, and
+  # fzf-tab seeds the query with the word already typed, so a typed capital
+  # (`Dow`) made fzf drop the lowercase candidates zsh's matcher-list had just
+  # generated (`dowager`, `downstream`) and the picker read as case-sensitive.
+  zstyle ':fzf-tab:*' fzf-flags -i --height=60% --layout=reverse --border --info=inline
 
   # Recipe body of the make target under the cursor. A script on PATH, not a
   # function: previews run in a separate `zsh -c` that inherits no functions.
