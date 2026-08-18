@@ -169,6 +169,12 @@ export PAGER="moor --wrap --tab-size=4 --quit-if-one-screen"
 export MANPAGER="$PAGER"
 alias less=moor
 
+# glow looks for glow.yml under ~/Library/Preferences on macOS and under
+# $XDG_CONFIG_HOME on Linux, so the chezmoi-managed ~/.config/glow/glow.yml,
+# which sets `pager: true`, applied on Linux alone. GLOW_CONFIG_HOME names the
+# directory holding glow.yml outright, and glow honours it on both platforms.
+export GLOW_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}/glow"
+
 # `watch` runs its command through sh, which knows nothing of this shell's
 # aliases, so `watch gwt` reports "gwt: command not found". Expand the command
 # word here instead. An alias ending in a space would expand the word after it
