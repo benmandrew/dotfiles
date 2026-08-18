@@ -120,7 +120,37 @@ enabled = false
 ## is the tight fit: 4 of name and 1 of separator. A name that outgrows it is
 ## truncated with `…` rather than overflowing, so the only cost of getting this
 ## wrong is a shortened host, and widening it is a one-character edit here.
-columns = ["duration", "time", { type = "host", width = 5 }, "command"]
+##
+## `duration` is dropped, which the default set includes, so this list diverges
+## from the default by a removal as well as by the addition above. The width it
+## frees goes to `command`, the column with expand = true, which is the same
+## trade the host width of 5 was made for. What goes with it is the only
+## exit-status signal in the set. Each column's colour is fixed in atuin's code,
+## the theme deciding only what each meaning renders as, and duration drew
+## Annotation blue except when the command exited non-zero, where it drew
+## AlertError red — a `make watch` row that exited 130 drew red while every blue
+## duration in the same frame had exited 0. Time draws Guidance grey and host
+## draws Annotation blue whatever the exit code, so nothing marks a failed
+## command now. An `exit` column would restore the signal.
+##
+## `time` takes an explicit width of 5, against a default of 9. atuin's own
+## embedded documentation says the default is 8, which is wrong: an explicit
+## `width = 8` renders one column narrower than leaving it out. The longest
+## string the column ever produces is 8 characters, `11mo ago`. Months set
+## that worst case, since years cap at `10y ago` and days reach only
+## `29d ago` before months take over. Minutes, hours and seconds cap at 7.
+## Truncation keeps width - 1 characters and appends `…`, so width 5 renders
+## `11mo…` and width 4 renders `11m…`, where `mo` has been cut to `m` and
+## reads as minutes. 5 is the floor. The ` ago` suffix cannot be dropped. A
+## column is specified by type, width and expand alone, and the single
+## ` ago` literal in the binary comes from the chrono_humanize formatter
+## with nothing routing around it. The 4 columns freed go to `command`, the
+## same trade as the host width above and the duration removal. The selection
+## indicator to the left of the first column is a fixed 4 characters with no
+## setting at all — atuin's documentation calls it implicit and the binary's
+## config key list has no entry for it, so those 4 columns of left margin are
+## not recoverable by any column tuning.
+columns = [{ type = "time", width = 5 }, { type = "host", width = 5 }, "command"]
 
 ## On by default, and pinned because themes/hacktober.toml depends on it: the
 ## Syntax* colours it leaves unset are the ones this draws with. It maps to ANSI
