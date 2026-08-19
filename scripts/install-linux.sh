@@ -6,11 +6,16 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/install-common.sh"
 
+# A step's output is held in a file while it runs, so a debconf dialog would be
+# both invisible and unanswerable. noninteractive is the frontend that never
+# opens one, taking each package's default instead.
+export DEBIAN_FRONTEND=noninteractive
+
 install_apt_packages_if_missing() {
     if [[ -n "${UPGRADE:-}" ]]; then
         log "Upgrading base packages: $*"
-        sudo apt update
-        sudo apt install -y "$@"
+        sudo apt-get update
+        sudo apt-get install -y "$@"
         return
     fi
     local missing_packages=()
@@ -25,7 +30,7 @@ install_apt_packages_if_missing() {
         return
     fi
     log "Installing missing base packages: ${missing_packages[*]}"
-    sudo apt install -y "${missing_packages[@]}"
+    sudo apt-get install -y "${missing_packages[@]}"
 }
 
 install_perf() {
@@ -38,7 +43,7 @@ install_perf() {
     # package. Cloud/CI runners often run a custom kernel with no matching
     # package in the archive, so this install is best-effort: warn and
     # continue rather than failing the whole script.
-    if ! sudo apt install -y linux-tools-generic; then
+    if ! sudo apt-get install -y linux-tools-generic; then
         log "WARNING: failed to install linux-tools-generic (perf); skipping, this is expected on some cloud kernels"
     fi
 }
@@ -67,7 +72,7 @@ remove_conflicting_libnode_dev() {
     # nodejs while libnode-dev is still installed.
     if dpkg -s libnode-dev >/dev/null 2>&1; then
         log "Removing distro libnode-dev (conflicts with NodeSource nodejs package)"
-        sudo apt remove -y libnode-dev
+        sudo apt-get remove -y libnode-dev
     fi
 }
 
@@ -81,9 +86,9 @@ install_node() {
                 return
             fi
             log "Upgrading Node.js LTS"
-            sudo apt update
+            sudo apt-get update
             remove_conflicting_libnode_dev
-            sudo apt install -y nodejs
+            sudo apt-get install -y nodejs
             return
         fi
         log "Node.js ${node_major} < 20; upgrading to LTS"
@@ -96,7 +101,7 @@ install_node() {
     download https://deb.nodesource.com/setup_lts.x "${setup_path}" || return 1
     sudo -E bash "${setup_path}"
     rm -f "${setup_path}"
-    sudo apt install -y nodejs
+    sudo apt-get install -y nodejs
 }
 
 install_neovim_if_missing() {
@@ -135,8 +140,11 @@ main() {
     require_cmd dpkg
     require_cmd apt
     start_sudo_keepalive
-    install_apt_packages_if_missing git curl build-essential zsh entr libevent-dev libncurses-dev pkg-config bubblewrap bison autoconf unzip
-    install_perf
+    # Prerequisites, deliberately outside run_step: the rest of the install is
+    # built on these, so a failure here aborts under errexit rather than being
+    # collected and reported at the end.
+    quiet install_apt_packages_if_missing git curl build-essential zsh entr libevent-dev libncurses-dev pkg-config bubblewrap bison autoconf unzip
+    quiet install_perf
     run_step install_inotify_limits
     run_step install_tmux_from_source
     run_step install_cmake

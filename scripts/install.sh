@@ -24,6 +24,8 @@ case "${OS}" in
         ;;
 esac
 
-echo "Detected platform: ${OS}-${ARCH}"
-echo "Running: ${SCRIPT}"
+# On stderr, like everything else the installer says: the platform scripts drop
+# each step's stdout, so stdout is where a step's own output goes under --verbose.
+echo "Detected platform: ${OS}-${ARCH}" >&2
+echo "Running: ${SCRIPT}" >&2
 exec bash "${SCRIPT}" "$@"

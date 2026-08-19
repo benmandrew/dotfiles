@@ -1,7 +1,24 @@
 #!/bin/bash
 
 UPGRADE=""
+VERBOSE=""
 _INSTALL_FAILED=false
+_FAILED_STEPS=()
+
+# fd 3 is the terminal, held aside so log and err still reach it from inside a
+# step whose own output is being redirected to a file. Everything this script
+# says for itself goes through those two functions and so writes to fd 3; a
+# step's stdout and stderr both go to its log.
+exec 3>&2
+
+# A step's output is held in a file rather than printed as it goes. Live stderr
+# is not the same as quiet stderr: curl writes its progress meter there, nix and
+# the direnv installer narrate there, and apt's progress bar leaves the cursor
+# mid-line, so the next [install] line starts wherever the bar ended. The log of
+# a step that succeeds is deleted, and the tail of one that fails is printed
+# where it failed, with the path to the whole thing.
+_STEP_LOG_DIR=""
+_STEP_LOG_LINES=50
 
 # Homebrew 6 has ask mode on by default, so `brew install` and `brew upgrade`
 # stop for a [y/n] confirmation whenever the plan reaches past the packages
@@ -11,32 +28,106 @@ _INSTALL_FAILED=false
 # per-command flags are --no-ask/--yes.
 export HOMEBREW_NO_ASK=1
 
+# Drop a command's stdout, keeping stderr. Package managers and build systems
+# narrate their whole run on stdout, so an apt install, a brew upgrade and a
+# make between them bury the one line that matters. All of them report failure
+# on stderr, which passes through. Everything this script says for itself goes
+# through log/err, which write to stderr for that reason, so a step's own
+# progress survives the drop. --verbose puts stdout back for a step that has to
+# be watched.
+#
+# Two guards come with holding a step's output, because a step that has lost the
+# screen has not lost the terminal. Its stdin is /dev/null, so a program testing
+# whether it is interactive decides it is not, and prints rather than prompting
+# or drawing a TUI that nobody can see. And the terminal's line settings are
+# saved before the step and restored after, so one that puts the tty in raw mode
+# and dies before restoring it cannot leave the shell behind it unusable. An
+# --upgrade run on 19 August 2026 did that: the shell it ran from was left at
+# `-isig -opost`, so ^C and ^Z did nothing and every line of output started where
+# the last one ended. Which step it was went unidentified, which is the argument
+# for guarding all of them rather than the suspects.
+#
+# Steps that must prompt therefore cannot go through here. The two that do —
+# `install_xcode_clt` and `install_homebrew` — are called directly instead.
+#
+# Failure propagates: a bare `quiet foo` under errexit still aborts, since the
+# status is returned unchanged, and `if ! quiet foo` suppresses errexit exactly
+# as `if ! foo` did.
+quiet() {
+    local tty_state=""
+    if { : </dev/tty; } 2>/dev/null; then
+        tty_state="$(stty -g </dev/tty 2>/dev/null || true)"
+    fi
+
+    local status=0 log_file=""
+    if [[ -n "${VERBOSE}" ]]; then
+        "$@" </dev/null || status=$?
+    else
+        if [[ -z "${_STEP_LOG_DIR}" ]]; then
+            _STEP_LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-install.XXXXXX")"
+        fi
+        log_file="${_STEP_LOG_DIR}/$1.log"
+        "$@" </dev/null >"${log_file}" 2>&1 || status=$?
+    fi
+
+    if [[ -n "${tty_state}" ]]; then
+        stty "${tty_state}" </dev/tty 2>/dev/null || true
+    fi
+
+    if [[ -n "${log_file}" ]]; then
+        if ((status == 0)); then
+            rm -f "${log_file}"
+        else
+            err "Output of $1, last ${_STEP_LOG_LINES} lines (all of it: ${log_file}):"
+            tail -n "${_STEP_LOG_LINES}" "${log_file}" >&3
+        fi
+    fi
+    return "${status}"
+}
+
 run_step() {
-    if ! "$@"; then
+    if ! quiet "$@"; then
         err "Step failed: $*"
         _INSTALL_FAILED=true
+        _FAILED_STEPS+=("$*")
     fi
 }
 
+# Name the failed steps again at the end. A full install runs 49 steps on Linux
+# and 45 on macOS, printing a screen or two of stderr past the one that broke, so
+# the report at the point of failure has scrolled away by the time it ends.
 check_failed() {
+    # Empty once every step that passed has had its log deleted, so this removes
+    # it; a run with a failure leaves the directory and the logs in it.
+    if [[ -n "${_STEP_LOG_DIR}" ]]; then
+        rmdir "${_STEP_LOG_DIR}" 2>/dev/null || true
+    fi
     if [[ "${_INSTALL_FAILED}" == "true" ]]; then
-        err "One or more install steps failed; see errors above"
+        local count="${#_FAILED_STEPS[@]}" noun="steps"
+        if ((count == 1)); then
+            noun="step"
+        fi
+        err "${count} ${noun} failed:"
+        local step
+        for step in "${_FAILED_STEPS[@]}"; do
+            printf "\033[1;31m[install]\033[0m   %s\n" "${step}" >&3
+        done
         exit 1
     fi
 }
 
 log() {
     if [[ "$*" == *"skipping"* ]]; then
-        printf "\033[1;33m[install]\033[0m %s\n" "$*"
+        printf "\033[1;33m[install]\033[0m %s\n" "$*" >&3
     elif [[ "$*" == *"pgrading"* ]]; then
-        printf "\033[1;36m[install]\033[0m %s\n" "$*"
+        printf "\033[1;36m[install]\033[0m %s\n" "$*" >&3
     else
-        printf "\033[1;32m[install]\033[0m %s\n" "$*"
+        printf "\033[1;32m[install]\033[0m %s\n" "$*" >&3
     fi
 }
 
 err() {
-    printf "\033[1;31m[install]\033[0m ERROR: %s\n" "$*" >&2
+    printf "\033[1;31m[install]\033[0m ERROR: %s\n" "$*" >&3
 }
 
 require_cmd() {
@@ -126,8 +217,9 @@ parse_args() {
             --all-optional) OPTIONAL_MODE=all ;;
             --no-optional) OPTIONAL_MODE=none ;;
             --reconfigure-optional) OPTIONAL_RECONFIGURE=true ;;
+            --verbose) VERBOSE=true ;;
             *)
-                err "Unknown argument: ${arg}. Usage: $0 [--upgrade] [--all-optional|--no-optional] [--reconfigure-optional]"
+                err "Unknown argument: ${arg}. Usage: $0 [--upgrade] [--all-optional|--no-optional] [--reconfigure-optional] [--verbose]"
                 exit 1
                 ;;
         esac
@@ -180,7 +272,7 @@ optional_enabled() {
             return 1
         fi
         local reply=""
-        printf "\033[1;35m[install]\033[0m %s\n" "${description}"
+        printf "\033[1;35m[install]\033[0m %s\n" "${description}" >&3
         if [[ "${tty_ok}" == true ]]; then
             read -r -p "[install] Install ${name}? [y/N] " reply </dev/tty
         else
@@ -491,7 +583,7 @@ install_btop() {
     # would shadow the binary installed below.
     if dpkg -s btop >/dev/null 2>&1; then
         log "Removing apt btop (predates GPU support, and shadows ~/.local/bin)"
-        sudo apt purge -y btop
+        sudo apt-get purge -y btop
     fi
 
     if command -v btop >/dev/null 2>&1; then
@@ -566,7 +658,7 @@ install_jq() {
         if [[ "${os_name}" == "Darwin" ]]; then
             brew upgrade jq
         else
-            sudo apt install -y jq
+            sudo apt-get install -y jq
         fi
         return
     fi
@@ -576,7 +668,7 @@ install_jq() {
     if [[ "${os_name}" == "Darwin" ]]; then
         brew install jq
     else
-        sudo apt install -y jq
+        sudo apt-get install -y jq
     fi
 }
 
@@ -611,7 +703,7 @@ install_zstd() {
     else
         log "Installing zstd"
     fi
-    sudo apt install -y zstd libzstd-dev
+    sudo apt-get install -y zstd libzstd-dev
 }
 
 install_clangd() {
@@ -626,7 +718,7 @@ install_clangd() {
         if [[ "${os_name}" == "Darwin" ]]; then
             brew upgrade llvm
         else
-            sudo apt install -y clangd
+            sudo apt-get install -y clangd
         fi
         return
     fi
@@ -636,7 +728,7 @@ install_clangd() {
     if [[ "${os_name}" == "Darwin" ]]; then
         brew install llvm
     else
-        sudo apt install -y clangd
+        sudo apt-get install -y clangd
     fi
 }
 
@@ -793,8 +885,8 @@ install_gh() {
     arch="$(dpkg --print-architecture)"
     echo "deb [arch=${arch} signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" |
         sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
-    sudo apt update
-    sudo apt install -y gh
+    sudo apt-get update
+    sudo apt-get install -y gh
 }
 
 # Both gh-stack steps hit the GitHub API — to resolve the extension's release
@@ -2178,7 +2270,7 @@ install_zathura() {
     else
         log "Installing zathura"
     fi
-    sudo apt install -y zathura zathura-pdf-poppler
+    sudo apt-get install -y zathura zathura-pdf-poppler
 }
 
 link_zathura_pdf_plugin() {
