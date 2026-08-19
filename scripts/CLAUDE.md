@@ -34,6 +34,20 @@ A failing step reports itself where it fails too, but a long install prints a sc
 
 `--verbose` turns the whole mechanism off: every step's output streams live, and nothing is held or deleted.
 
+### Failures inside a step have to be returned
+
+errexit does not apply inside a function called from `run_step`. bash turns it off for any command on the left of a `||`, and `quiet` runs each step as `"$@" >"${log_file}" 2>&1 || status=$?`, so a command failing halfway through a step does not stop it. The function runs on to its end and reports the status of its *last* command, which is routinely an `rm -f` of a temp file, an `export`, or a hint printed through `log`. Those succeed, so the step passes with nothing installed.
+
+A sweep on 19 August 2026 found 19 such sites, in five shapes:
+
+- Seven downloaded installers — rust, starship, Claude Code, rtk, uv, nix and Tailscale — each followed by `rm -f "${script_path}"`, which is what the step's status came from.
+- `install_go`'s `sudo tar -C /usr/local`, masked by the `export PATH` after it. That one follows `sudo rm -rf /usr/local/go`, so a failed extraction reported success having left the machine with no Go at all.
+- btop's `install -m755` of the binary, masked by the theme install that follows it.
+- Four actions in `install_obsidian` (the `.deb` install, and the tar, `mv` and `ln -sf` on the ARM64 path), all masked by `print_obsidian_cli_hint`.
+- Six `safe_git` calls on `--upgrade` paths — the `fetch` in zinit, fzf-tab, zsh-autosuggestions, tpm and obsync, plus fzf's `pull` — each masked by the `reset --hard` that follows. A failed fetch reset onto the stale ref and reported a successful upgrade.
+
+All nineteen now carry `|| return 1`, which is the rule for anything added later: a command whose failure should fail the step needs it, unless it is the last command in the function. Verified against a stub installer exiting 1, which passed the step and exited 0 before the change and is reported and exits 1 after it.
+
 ## Optional tools
 
 Almost everything here is installed unconditionally, on the assumption that every machine wants it. A few tools are not like that — they only earn their place on a machine that is actually sat in front of, and are noise on a box that only ever gets ssh'd into. Those go through `optional_enabled`, which asks once and remembers.

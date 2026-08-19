@@ -398,7 +398,7 @@ install_zinit() {
         fi
         log "Upgrading zinit"
         ensure_user_owns "${zinit_home}"
-        safe_git "${zinit_home}" fetch origin
+        safe_git "${zinit_home}" fetch origin || return 1
         safe_git "${zinit_home}" reset --hard origin/main
         return
     fi
@@ -416,7 +416,7 @@ install_fzf_tab() {
         fi
         log "Upgrading fzf-tab"
         ensure_user_owns "${fzf_tab_home}"
-        safe_git "${fzf_tab_home}" fetch origin
+        safe_git "${fzf_tab_home}" fetch origin || return 1
         safe_git "${fzf_tab_home}" reset --hard origin/master
         return
     fi
@@ -434,7 +434,7 @@ install_zsh_autosuggestions() {
         fi
         log "Upgrading zsh-autosuggestions"
         ensure_user_owns "${autosuggest_home}"
-        safe_git "${autosuggest_home}" fetch origin
+        safe_git "${autosuggest_home}" fetch origin || return 1
         safe_git "${autosuggest_home}" reset --hard origin/master
         return
     fi
@@ -525,7 +525,7 @@ install_rust() {
     local script_path
     script_path="$(mktemp)"
     download https://sh.rustup.rs "${script_path}" || return 1
-    sh "${script_path}" -y
+    sh "${script_path}" -y || return 1
     rm -f "${script_path}"
 
     load_cargo_env
@@ -639,7 +639,7 @@ install_btop() {
     env PATH=/usr/local/bin:/usr/bin:/bin CXX=/usr/bin/g++ \
         make -C "${src_dir}" -j"${jobs}" || return 1
     mkdir -p "${HOME}/.local/bin"
-    install -m755 "${src_dir}/bin/btop" "${HOME}/.local/bin/btop"
+    install -m755 "${src_dir}/bin/btop" "${HOME}/.local/bin/btop" || return 1
     # The apt package supplied themes via /usr/share/btop/themes, which the purge
     # above removes; ship them to the user theme dir so theme selection still works.
     mkdir -p "${HOME}/.config/btop/themes"
@@ -967,7 +967,7 @@ install_fzf() {
         log "Upgrading fzf"
         if [[ -d "${HOME}/.fzf" ]]; then
             ensure_user_owns "${HOME}/.fzf"
-            safe_git "${HOME}/.fzf" pull
+            safe_git "${HOME}/.fzf" pull || return 1
             "${HOME}/.fzf/install" --bin --no-update-rc --no-bash --no-fish
         fi
         return
@@ -1128,7 +1128,7 @@ install_nix() {
     local script_path
     script_path="$(mktemp)"
     download https://nixos.org/nix/install "${script_path}" || return 1
-    sh "${script_path}" --daemon --yes
+    sh "${script_path}" --daemon --yes || return 1
     rm -f "${script_path}"
 
     source_nix_profile
@@ -1220,7 +1220,7 @@ install_starship() {
     local script_path
     script_path="$(mktemp)"
     download https://starship.rs/install.sh "${script_path}" || return 1
-    sh "${script_path}" -y
+    sh "${script_path}" -y || return 1
     rm -f "${script_path}"
 }
 
@@ -1240,7 +1240,7 @@ install_claude_code() {
     local script_path
     script_path="$(mktemp)"
     download https://claude.ai/install.sh "${script_path}" || return 1
-    bash "${script_path}"
+    bash "${script_path}" || return 1
     rm -f "${script_path}"
 }
 
@@ -1257,7 +1257,7 @@ install_rtk() {
     local script_path
     script_path="$(mktemp)"
     download https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh "${script_path}" || return 1
-    sh "${script_path}"
+    sh "${script_path}" || return 1
     rm -f "${script_path}"
 }
 
@@ -1275,7 +1275,7 @@ install_uv() {
     local script_path
     script_path="$(mktemp)"
     download https://astral.sh/uv/install.sh "${script_path}" || return 1
-    sh "${script_path}"
+    sh "${script_path}" || return 1
     rm -f "${script_path}"
     export PATH="${HOME}/.local/bin:${PATH}"
 }
@@ -1369,7 +1369,7 @@ install_tmux_plugins() {
         if [[ -n "${UPGRADE:-}" ]]; then
             log "Upgrading tmux plugin manager (tpm)"
             ensure_user_owns "${tpm_dir}"
-            safe_git "${tpm_dir}" fetch origin
+            safe_git "${tpm_dir}" fetch origin || return 1
             safe_git "${tpm_dir}" reset --hard origin/master
         else
             log "tmux plugin manager (tpm) already installed; skipping"
@@ -1541,7 +1541,7 @@ install_tailscale() {
     local script_path
     script_path="$(mktemp)"
     download https://tailscale.com/install.sh "${script_path}" || return 1
-    sh "${script_path}"
+    sh "${script_path}" || return 1
     rm -f "${script_path}"
 }
 
@@ -1721,7 +1721,7 @@ install_go() {
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
     download "https://go.dev/dl/${tarball}" "${tmp_dir}/${tarball}" || return 1
     sudo rm -rf /usr/local/go
-    sudo tar -C /usr/local -xf "${tmp_dir}/${tarball}"
+    sudo tar -C /usr/local -xf "${tmp_dir}/${tarball}" || return 1
     export PATH="/usr/local/go/bin:${PATH}"
 }
 
@@ -1951,7 +1951,7 @@ install_obsidian() {
             trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
             download "https://github.com/obsidianmd/obsidian-releases/releases/download/${tag}/${deb}" \
                 "${tmp_dir}/${deb}" || return 1
-            sudo apt-get install -y "${tmp_dir}/${deb}"
+            sudo apt-get install -y "${tmp_dir}/${deb}" || return 1
             ;;
         aarch64 | arm64)
             # Upstream publishes no arm64 .deb, only a tarball, so unpack it
@@ -1981,7 +1981,7 @@ install_obsidian() {
             trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
             download "https://github.com/obsidianmd/obsidian-releases/releases/download/${tag}/${tarball}" \
                 "${tmp_dir}/${tarball}" || return 1
-            tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}"
+            tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}" || return 1
             local unpacked="${tmp_dir}/obsidian-${version}-arm64"
             if [[ ! -x "${unpacked}/obsidian" ]]; then
                 err "Obsidian: no 'obsidian' binary at ${unpacked}; upstream layout changed"
@@ -1989,7 +1989,7 @@ install_obsidian() {
             fi
             rm -rf "${dest}"
             mkdir -p "$(dirname "${dest}")"
-            mv "${unpacked}" "${dest}"
+            mv "${unpacked}" "${dest}" || return 1
             printf '%s\n' "${version}" >"${version_file}"
             # Electron refuses to start if its setuid sandbox helper is not
             # root-owned and mode 4755. The .deb arranges that; an unpacked
@@ -2002,7 +2002,7 @@ install_obsidian() {
                 fi
             fi
             mkdir -p "${HOME}/.local/bin"
-            ln -sf "${dest}/obsidian" "${HOME}/.local/bin/obsidian-app"
+            ln -sf "${dest}/obsidian" "${HOME}/.local/bin/obsidian-app" || return 1
             ;;
         *)
             log "Unsupported arch ${os_arch} for Obsidian install; skipping"
@@ -2048,7 +2048,7 @@ install_obsync() {
         else
             log "Upgrading obsync"
             ensure_user_owns "${OBSYNC_DIR}"
-            safe_git "${OBSYNC_DIR}" fetch origin
+            safe_git "${OBSYNC_DIR}" fetch origin || return 1
             safe_git "${OBSYNC_DIR}" reset --hard origin/main
         fi
     else
