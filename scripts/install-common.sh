@@ -1241,7 +1241,21 @@ install_tmux_from_source() {
     tar -C "${build_dir}" -xf "${build_dir}/${tarball}"
     local cpu_count
     cpu_count="$(nproc)"
-    (cd "${build_dir}/tmux-${build_version}" && ./configure && make -j"${cpu_count}" && sudo make install)
+    # configure and make run with a pruned PATH and an explicit CC, for the same
+    # reason install_btop does. direnv activates this repo's own flake for anyone
+    # running the installer from a shell sat in it, and pkgs.mkShell puts
+    # stdenv's gcc wrapper on PATH ahead of /usr/bin. That wrapper searches
+    # /nix/store alone for headers, so the header check fails against a
+    # /usr/include/event2/event.h it cannot see and configure stops at "libevent
+    # not found" — one line after /usr/bin/pkg-config reported libevent_core
+    # present, since pkg-config is the system one and needs no -I for it.
+    local build_env=(env PATH=/usr/local/bin:/usr/bin:/bin CC=/usr/bin/gcc)
+    (
+        cd "${build_dir}/tmux-${build_version}" &&
+            "${build_env[@]}" ./configure &&
+            "${build_env[@]}" make -j"${cpu_count}" &&
+            sudo make install
+    )
 }
 
 install_tmux_plugins() {

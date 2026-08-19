@@ -139,6 +139,14 @@ Every call site is followed by `|| return 1`, because bash disables `errexit` fo
 
 Release archives are extracted with `tar -xf`, never `-xzf`: tar picks the decompressor from the archive's magic bytes, so an upstream that switches from `.tar.gz` to `.tar.zst` needs no script change. GNU tar shells out to the `zstd` binary to do it, which `install_zstd` guarantees is present.
 
+### Source builds pin the system toolchain
+
+Two steps compile from source, `install_btop` and `install_tmux_from_source`, and both link against Debian libraries. Each invokes the compiler through `env PATH=/usr/local/bin:/usr/bin:/bin`, with `CXX=/usr/bin/g++` and `CC=/usr/bin/gcc` respectively. The cause is direnv: this repository carries a `flake.nix`, so a shell sat in it activates the devShell, and `pkgs.mkShell` puts stdenv's gcc *wrapper* on `PATH` ahead of `/usr/bin` even though nothing in the package list asks for a compiler. That wrapper searches the nix store alone for headers. `echo | gcc -E -Wp,-v -` inside the shell lists five include directories, every one under `/nix/store` and none of them `/usr/include`.
+
+tmux failed in a way that hid the cause. `configure` printed `checking for libevent_core >= 2... yes`, since pkg-config is the system one at `/usr/bin/pkg-config` and the Debian library needs no `-I`. The next two checks compile against `event2/event.h` and `event.h`, both missed, and the run stopped at `configure: error: "libevent not found"` on a machine with `libevent-dev` installed and `/usr/include/event2/event.h` present. btop failed later, at link time on `__isoc23_*` symbols, once nix binutils and glibc were mixed into a system `g++` link. The fix is one env prefix.
+
+An installer run from a directory with no flake never sees any of this, which is why both failures waited for a run launched from inside the checkout.
+
 ## `scripts/verify-install.sh`
 
 Checks that all expected commands and directories exist after installation. Run after an install script to confirm nothing is missing. Exits non-zero if any check fails.
