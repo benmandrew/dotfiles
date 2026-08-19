@@ -98,6 +98,14 @@ Shared functions called by both platform scripts. Only the ones with a non-obvio
 
 No install step registers MCP servers — that is left to `claude mcp add` by hand.
 
+### Cargo tools are installed --locked
+
+`install_cargo_tool` backs `install_eza`, `install_fd`, `install_bat`, `install_ripgrep`, `install_git_delta` and `install_hyperfine`, and passes `--locked`, so each crate builds against the dependency versions it was published with rather than the newest semver-compatible ones.
+
+eza is why. It pins `palette = "=0.7.5"`, palette takes `palette_derive = "0.7"`, and an unlocked resolve pairs the 0.7.5 library with the 0.7.7 derive macro, which generates references to `crate::lms` and `xyz::meta` — modules that first appear in 0.7.6. The build stops with 34 `error[E0433]`s, reproduced locally on rustc 1.97.1 as well as on the runner, and it is the sole cause of the CI install job failing on all five runs between 13 and 18 August 2026. eza's shipped lockfile pairs palette 0.7.5 with palette_derive 0.7.6, so `cargo install eza --locked` builds in 43s.
+
+No flag can move eza to palette 0.7.7, since `=0.7.5` is an exact requirement rather than a lower bound. The alternative was the release binary, which upstream publishes for Linux only (x86_64 gnu and musl, aarch64 gnu, armhf) and not for macOS on either arch, so it would have put macOS back on brew. That is worth remembering if the compile becomes a problem again: brew's eza matched upstream at 0.23.5 on 19 August 2026, but tracking upstream through source is the reason this repo builds these six rather than installing them from a package manager. All six ship a `Cargo.lock`, which `--locked` requires.
+
 ### Both gh-stack steps need an authenticated gh
 
 `install_gh_stack` and `install_gh_stack_skill` both hit the GitHub API — one to resolve the extension's release, the other to read the skill's contents — so both need a gh that has already logged in. Nothing in these scripts authenticates it. `gh auth login` is interactive and cannot be automated, so on a freshly provisioned box the credential is simply absent. The shared guard is `gh_authenticated`; when it fails, each step logs a warning and returns rather than failing the run, and the next install after the user has authenticated picks both up.

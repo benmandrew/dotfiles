@@ -822,7 +822,19 @@ install_cargo_tool() {
     fi
     load_cargo_env
     require_cmd cargo
-    cargo install "${crate}"
+    # --locked builds against the dependency versions the crate was published
+    # with, taken from the Cargo.lock it ships, rather than re-resolving every
+    # dependency to the newest semver-compatible release. eza is what made this
+    # necessary. It pins `palette = "=0.7.5"`, palette itself takes
+    # `palette_derive = "0.7"`, and an unlocked resolve therefore pairs the 0.7.5
+    # library with the 0.7.7 derive macro. That macro generates references to
+    # `crate::lms` and `xyz::meta`, modules which only exist from 0.7.6, so the
+    # build dies with 34 E0433s and takes the step with it. Every CI install job
+    # between 13 and 18 August 2026 failed there. The shipped lockfile pairs
+    # 0.7.5 with palette_derive 0.7.6, and `cargo install eza --locked` then
+    # builds in 43s. All six crates installed through here ship a Cargo.lock,
+    # which is what --locked needs.
+    cargo install --locked "${crate}"
 }
 
 install_pyright() {
