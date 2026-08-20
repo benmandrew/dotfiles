@@ -16,8 +16,14 @@
 # Abbreviations whose full stop ends a word rather than a sentence. Matched
 # against the whole preceding word, so `al` covers `et al.` and `No` covers
 # `No. 4` without also matching the word "no".
-abbreviations='e.g i.e cf vs etc al Fig Figs Eq Eqs Sec Secs Ch No Vol pp Ref
-Refs Dr Mr Mrs Ms Prof St Jr Sr Inc Ltd approx resp'
+#
+# The list is concatenated rather than wrapped across two lines. one-true-awk,
+# the awk macOS ships, rejects a literal newline inside a -v assignment with
+# `newline in string ... at source line 1` and exits before reading the file,
+# so every diff through this driver failed. gawk accepts the newline, which is
+# why the wrapped form worked elsewhere.
+abbreviations='e.g i.e cf vs etc al Fig Figs Eq Eqs Sec Secs Ch No Vol pp Ref '
+abbreviations=$abbreviations'Refs Dr Mr Mrs Ms Prof St Jr Sr Inc Ltd approx resp'
 
 awk -v abbreviations="$abbreviations" '
 BEGIN {
