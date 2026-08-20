@@ -12,6 +12,7 @@
 # it; otherwise pass through whatever tmux already knew.
 #
 # Usage: claude-pane-session cwd|name <pane-pid> <fallback>
+#        claude-pane-session status|status-current <pane-pid>
 #        claude-pane-session refresh
 set -u
 
@@ -19,6 +20,10 @@ sessions="${HOME}/.claude/sessions"
 # What each session is working on, set by `claude-tab-title` and keyed by the
 # same pid, which replaces the agent identifier in the window name.
 titles="${HOME}/.claude/tab-titles"
+# Sessions asking to be looked at, written by wezterm-notify.sh and removed once
+# the tab is focused. The file's existence is the whole signal; its name is the
+# same pid again.
+bells="${HOME}/.claude/tab-bells"
 # Per-user by construction on both platforms: XDG_RUNTIME_DIR is /run/user/<uid>
 # on Linux, and TMPDIR is a private per-user directory on macOS.
 cache="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/claude-pane-session.tsv"
@@ -33,9 +38,10 @@ emit_fallback() {
 }
 
 # One process-table snapshot plus one jq pass over every session file, written
-# atomically so a concurrent reader never sees a half-built file. All three
-# kinds of line are tab-separated: "P <pid> <ppid>" for the parent map, "S <pid>
-# <name> <cwd>" for the sessions, "T <pid> <title>" for the title overrides.
+# atomically so a concurrent reader never sees a half-built file. All four kinds
+# of line are tab-separated: "P <pid> <ppid>" for the parent map, "S <pid> <name>
+# <cwd> <status> <status-changed-at>" for the sessions, "T <pid> <title>" for the
+# title overrides and "B <pid>" for the sessions asking to be looked at.
 build_cache() {
     tmp="$cache.$$"
     {
@@ -48,7 +54,8 @@ build_cache() {
         for pid in $(ls -t "$sessions" 2>/dev/null | sed -n 's/^\([0-9][0-9]*\)\.json$/\1/p'); do
             set -- "$@" "$sessions/$pid.json"
         done
-        [ $# -eq 0 ] || jq -r '["S", (.pid | tostring), (.name // ""), (.cwd // "")] | @tsv' "$@" 2>/dev/null
+        [ $# -eq 0 ] || jq -r '["S", (.pid | tostring), (.name // ""), (.cwd // ""),
+                                (.status // ""), (.statusUpdatedAt // 0 | tostring)] | @tsv' "$@" 2>/dev/null
         # One awk over every override rather than a read apiece, since this runs
         # on every status tick. The pid is the filename, so FILENAME carries it.
         set --
@@ -60,6 +67,12 @@ build_cache() {
             n = split(FILENAME, path, "/")
             print "T\t" path[n] "\t" $0
         }' "$@" 2>/dev/null
+        # A bell carries nothing but its own existence, so the filename is the
+        # whole record and there is no file to read.
+        for f in "$bells"/*; do
+            [ -f "$f" ] || continue
+            printf 'B\t%s\n' "${f##*/}"
+        done
     } >"$tmp" 2>/dev/null || {
         rm -f "$tmp"
         return 1
@@ -70,10 +83,33 @@ build_cache() {
     }
 }
 
+# The tab bar WezTerm draws, in tmux: " <index> <bar><title> ", where the bar is
+# U+258E LEFT ONE QUARTER BLOCK down the left edge of the chip, coloured by what
+# the session is doing. Written by codepoint so an editor cannot mangle it.
+BAR=$(printf '\342\226\216')
+# Amber for working, blue for wanting you. Both are chosen to read against a
+# window that is not the current one, which is the only place they are ever
+# drawn: the current window's state is on screen in the pane below it, so its bar
+# stays dim. Its dim is the midpoint of the current chip's orange and the bar's
+# black; the other is the tab bar's own hover grey.
+STATUS_BUSY='#e0a33e'
+STATUS_ATTENTION='#6f9ede'
+STATUS_DIM_CURRENT='#6d371b'
+STATUS_DIM='#464444'
+# How long a session sits idle before its bar turns to wanting you. Below this
+# the pause is the gap between two of your own keystrokes.
+WAIT_SECONDS=60
+# Only the bar is answered against the clock, so only the bar pays for reading
+# it; `name` is asked once per window per tick and should not fork for nothing.
+now=0
+
 # Walk each session's parent chain looking for the pane's own process. The hop
 # cap is a guard against a cycle in a torn snapshot, not a real depth limit.
 lookup() {
-    awk -F '\t' -v root="$pane_pid" -v want="$field" '
+    awk -F '\t' -v root="$pane_pid" -v want="$field" \
+        -v now="$now" -v bar="$BAR" -v busy="$STATUS_BUSY" \
+        -v attention="$STATUS_ATTENTION" -v dim_current="$STATUS_DIM_CURRENT" \
+        -v dim="$STATUS_DIM" -v wait_seconds="$WAIT_SECONDS" '
         # What the window is called: the task the session set with
         # claude-tab-title, else the agent identifier claude derived. The
         # identifier keeps its two-character suffix on the front of the task
@@ -87,16 +123,43 @@ lookup() {
             if (match(name, /-[0-9A-Za-z][0-9A-Za-z]$/)) return task ":" substr(name, RSTART + 1)
             return task
         }
+        # The bar down the chip, as a tmux style plus the glyph. The current
+        # window always gets the dim one, since the only reason to colour a bar
+        # is a window you cannot see. statusUpdatedAt is epoch milliseconds and
+        # claude rewrites it on every busy/idle transition, so the difference
+        # from now is the age of the state the session is in.
+        function window_status(i,   colour, weight, waited) {
+            colour = dim
+            weight = "nobold"
+            if (want == "status-current") {
+                colour = dim_current
+            } else if (spid[i] in bell) {
+                colour = attention
+                weight = "bold"
+            } else if (sstatus[i] == "busy") {
+                colour = busy
+            } else {
+                waited = supdated[i] > 0 ? now - int(supdated[i] / 1000) : 0
+                if (waited >= wait_seconds) colour = attention
+            }
+            return "#[fg=" colour "," weight "]" bar
+        }
         $1 == "P" { parent[$2 + 0] = $3 + 0 }
-        $1 == "S" { n++; spid[n] = $2 + 0; sname[n] = $3; scwd[n] = $4 }
+        $1 == "S" {
+            n++; spid[n] = $2 + 0; sname[n] = $3; scwd[n] = $4
+            sstatus[n] = $5; supdated[n] = $6 + 0
+        }
         $1 == "T" { title[$2 + 0] = $3 }
+        $1 == "B" { bell[$2 + 0] = 1 }
         END {
             target = root + 0
             for (i = 1; i <= n; i++) {
                 p = spid[i]
                 for (hops = 0; p > 1 && hops < 64; hops++) {
                     if (p == target) {
-                        print (want == "cwd" ? scwd[i] : window_name(i))
+                        if (want == "cwd") print scwd[i]
+                        else if (want == "name") print window_name(i)
+                        else print window_status(i)
                         exit
                     }
                     if (!(p in parent)) break
@@ -118,6 +181,12 @@ if [ "$field" = refresh ]; then
 fi
 
 case $field in
+    # A window with no claude session in it gets no bar at all, matching the
+    # WezTerm tab, so the empty fallback is the answer rather than a miss.
+    status | status-current)
+        fallback=''
+        now=$(date +%s)
+        ;;
     cwd | name) ;;
     *) emit_fallback ;;
 esac
