@@ -16,7 +16,7 @@ Including a hash of a dependency in the script header causes chezmoi to re-run i
 
 - **Neovim config** — `home/dot_config/nvim/` — `home/dot_vimrc` is for real vim only; nvim never reads it.
 - **Install scripts** — `scripts/` — see `scripts/CLAUDE.md` for the per-function breakdown
-- **Tmux** — `home/dot_tmux.conf.tmpl` — Hacktober theme, kept in sync with WezTerm's
+- **Tmux** — `home/dot_tmux.conf.tmpl` — Hacktober theme, kept in sync with WezTerm's. `status-left` shows the armed `C-a` prefix as a ` ⌃a ` chip mirroring WezTerm's, driven by `#{?client_prefix,…}` rather than by polling, since tmux repaints the status line as soon as the prefix state changes. The chip is constant-width and signals by colour alone, so arming the prefix does not shift the window list.
 - **claude-aware panes** — `~/.claude/sessions/<pid>.json` records each live session's `cwd` and its agent identifier (`counter-fe`, the name `gwt` lists). Both terminals walk the pane's process subtree for a registered session and read the two off it, falling back to their old behaviour when there is none.
   - *cwd* — new tabs/panes open where claude is *actually* working, not where the shell is. The two diverge once claude chdir()s (entering a worktree, say) while the shell sits suspended and never re-emits OSC 7.
   - *name* — tabs and windows are titled by agent, since `#{pane_current_command}` is `claude` for all of them alike. `wezterm-notify.sh` names its OS notification with it too, matching by `sessionId`.

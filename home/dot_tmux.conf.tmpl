@@ -75,8 +75,21 @@ set -g status-position top
 # Single writer for the session cache the per-window name lookups read. tmux
 # expands status-left once per tick, against N times for the window list, so
 # putting the one ps snapshot and jq pass here keeps each window's lookup down to
-# an awk over the cache. It prints nothing.
-set -g status-left '#(~/.local/bin/claude-pane-session refresh)'
+# an awk over the cache. It prints nothing, and the leader chip follows it.
+#
+# The leader chip mirrors WezTerm's, rendering ⌃a (U+2303 UP ARROWHEAD, matching
+# the C-a prefix set at the top of this file). #{?client_prefix,…} picks the
+# style: orange #c75a22 on #141414 and bold while the prefix is armed, the tab
+# bar's hover grey #464444 on the bar's own #141414 otherwise. The chip holds a
+# constant width in both states and signals by colour alone, so arming the
+# prefix does not shift the window list sideways. tmux repaints the status line
+# as soon as the prefix state changes, so this needs no polling and does not
+# depend on status-interval — verified by attaching a client over a
+# pseudo-terminal, writing \x01 to it and decoding the SGR codes off the status
+# line before and after. Commas inside the #{?…} branches are escaped as #,
+# since a bare comma there would end the branch.
+set -g status-left-length 20
+set -g status-left '#(~/.local/bin/claude-pane-session refresh)#{?client_prefix,#[bg=#c75a22#,fg=#141414#,bold],#[bg=#141414#,fg=#464444#,nobold]} ⌃a #[bg=#141414,fg=#c9c9c9,nobold] '
 set -g status-right-length 120
 set -g status-interval 5
 set -g status-right "#[bg=#191918,fg=#c9c9c9] 󰒋 #{host_short}  󰍛 #(~/.config/tmux/cpu.sh)%%  󰾲 #(~/.config/tmux/ram.sh)  󰥔 #(~/.config/tmux/uptime.sh) "
