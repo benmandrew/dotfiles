@@ -3,9 +3,8 @@ local act = wezterm.action
 local config = wezterm.config_builder()
 
 -- Font: JetBrains Mono for text, with a fully-patched Nerd Font as fallback so
--- icon glyphs outside WezTerm's built-in symbol coverage (e.g. the Font Awesome
--- RAM glyph in the status bar) still resolve. CodeNewRoman is installed by our
--- install scripts on every non-headless machine.
+-- icon glyphs outside WezTerm's built-in symbol coverage still resolve.
+-- CodeNewRoman is installed by our install scripts on every non-headless machine.
 config.font = wezterm.font_with_fallback({ "JetBrains Mono", "CodeNewRoman Nerd Font Mono" })
 config.font_size = 13.0
 
@@ -416,11 +415,19 @@ end)
 local IS_MACOS = wezterm.target_triple:find("apple%-darwin") ~= nil
 
 -- Status icons, by codepoint so an editor can't mangle the literal glyphs.
--- CPU is the MDI chip; RAM is the Font Awesome DIMM (needs the patched-font
--- fallback on config.font); uptime is the MDI clock. All three are ~55% em
--- height so the row stays visually even (the tmux hourglass is an outlier at 82%).
+-- CPU is the MDI chip, RAM the MDI memory stick, uptime the MDI clock. All three
+-- are ~55% em height so the row stays visually even (the tmux hourglass is an
+-- outlier at 82%).
+--
+-- All three sit in the Material Design Icons range (U+F0001-U+F1AF0), which on a
+-- Linux desktop only Nerd Fonts claim. RAM was nf-fa-memory at U+EFC5 and rendered
+-- as an unrelated bracket, because that codepoint is in the Basic Multilingual
+-- Plane's private use area, where the 35 URW/Nimbus PostScript fonts shipped with
+-- Ghostscript park their spare glyphs under names like uniEFC5. 54 installed fonts
+-- claimed U+EFC5 against CodeNewRoman's one, and fontconfig handed Nimbus Sans over
+-- first. Nothing outside the Nerd Fonts claims the MDI range, so it has no such race.
 local ICON_CPU = utf8.char(0xF035B) -- nf-md-memory
-local ICON_RAM = utf8.char(0x0EFC5) -- nf-fa-memory
+local ICON_RAM = utf8.char(0xF0FB2) -- nf-md-expansion-card-variant
 local ICON_UPTIME = utf8.char(0xF0954) -- nf-md-clock
 
 -- Seconds -> compact "3d 4h" / "5h 12m" / "42m".
