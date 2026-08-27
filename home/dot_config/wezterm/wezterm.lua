@@ -766,6 +766,17 @@ config.scrollback_lines = 10000
 config.audible_bell = "Disabled"
 config.enable_kitty_keyboard = true
 
+-- Under Wayland, WezTerm speaks text-input-v3 to ibus itself where GTK and Qt
+-- terminals go through their toolkit's input module, and 20240203 drops the
+-- shift level on some punctuation: shift+/ commits `/`, shift+; commits `;`.
+-- Letters and the digit row are unaffected, which is why it reads as two
+-- broken keys rather than a broken shift. Turning the IME off routes the keys
+-- through WezTerm's own xkb handling. Nothing is lost, since ibus preloads
+-- only xkb:gb::eng. macOS keeps the IME, which composes option-key sequences.
+if not IS_MACOS then
+    config.use_ime = false
+end
+
 -- Leader (mirrors tmux C-a prefix)
 config.leader = { key = "a", mods = "CTRL", timeout_milliseconds = 1000 }
 
