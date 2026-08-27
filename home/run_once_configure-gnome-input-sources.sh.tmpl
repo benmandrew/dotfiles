@@ -3,22 +3,47 @@
 set -euo pipefail
 
 {{ if eq .chezmoi.os "linux" -}}
+# gsettings ships with glib, so it exists on any Linux box and its presence is
+# not evidence of a desktop. Two things then go wrong on a headless server.
+# Without a session bus every write fails to commit to dconf, and the ibus
+# schemas are not installed at all, which makes `gsettings set` exit non-zero
+# and -- under `set -e` -- fail the whole chezmoi run. That is not hypothetical:
+# it broke a provisioning run on a server whose only fault was having glib.
 if ! command -v gsettings >/dev/null 2>&1; then
     exit 0
 fi
+
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] &&
+    [ -z "${DISPLAY:-}" ] &&
+    [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    exit 0
+fi
+
+# A schema is present only if something installed it, so check rather than
+# assume: a GNOME box without ibus is a normal configuration, not an error.
+has_schema() {
+    gsettings list-schemas 2>/dev/null | grep -qx "$1"
+}
 
 # UK layout on every Linux box. GNOME already had the right source list while
 # the live keymap was US, because ibus picks its engine from engines-order and
 # that key was empty -- an empty list falls back to ibus's built-in default of
 # xkb:us::eng, and the X11/XWayland keymap follows whatever engine ibus holds.
 # So the source list alone is not enough; engines-order has to name gb too.
-gsettings set org.gnome.desktop.input-sources sources "[('xkb', 'gb')]"
-gsettings set org.freedesktop.ibus.general preload-engines "['xkb:gb::eng']"
-gsettings set org.freedesktop.ibus.general engines-order "['xkb:gb::eng']"
+if has_schema org.gnome.desktop.input-sources; then
+    gsettings set org.gnome.desktop.input-sources sources "[('xkb', 'gb')]"
+fi
+
+if has_schema org.freedesktop.ibus.general; then
+    gsettings set org.freedesktop.ibus.general preload-engines "['xkb:gb::eng']"
+    gsettings set org.freedesktop.ibus.general engines-order "['xkb:gb::eng']"
+fi
 
 # Right Alt as the level-3 shift, which is what reaches the gb layout's
 # dead-key columns and the currency symbols above them.
-gsettings set org.gnome.desktop.input-sources xkb-options "['lv3:ralt_switch']"
+if has_schema org.gnome.desktop.input-sources; then
+    gsettings set org.gnome.desktop.input-sources xkb-options "['lv3:ralt_switch']"
+fi
 
 # Correct a session that has already drifted. Provisioning runs before ibus in
 # some orders, so a failure here is not one worth stopping the run for.
