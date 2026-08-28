@@ -1333,11 +1333,11 @@ install_starship() {
     remove_shadowing_starship
 }
 
-# /usr/local/bin sits ahead of ~/.local/bin on the rendered PATH, so a copy left
-# in the old location by a previous run keeps winning `command -v` and never
-# gets upgraded again — the managed binary would be installed and then ignored,
-# silently, for as long as the old one existed. Remove it once the new one is
-# in place, and only then.
+# A copy left in the old location is dead weight at best. ~/.local/bin now leads
+# /usr/local/bin in the rendered zshrc, but only for shells started since that
+# change, and anything reading the system PATH still finds the stale one first —
+# so the managed binary gets installed and then ignored, silently, for as long
+# as the old one exists. Remove it once the new one is in place, and only then.
 remove_shadowing_starship() {
     local stale="/usr/local/bin/starship"
     if [[ ! -e "${stale}" ]]; then
@@ -1346,9 +1346,9 @@ remove_shadowing_starship() {
     if [[ ! -x "${STARSHIP_BIN_DIR}/starship" ]]; then
         return 0
     fi
-    log "Removing ${stale}, which would shadow ${STARSHIP_BIN_DIR}/starship"
+    log "Removing stale ${stale}, superseded by ${STARSHIP_BIN_DIR}/starship"
     sudo rm -f "${stale}" ||
-        log "Could not remove ${stale}; it will keep shadowing the managed copy"
+        log "Could not remove ${stale}; it may still shadow the managed copy"
 }
 
 install_claude_code() {

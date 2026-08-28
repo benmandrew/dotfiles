@@ -93,20 +93,40 @@ if [ -z "$SSH_AUTH_SOCK" ]; then
   [[ -o interactive ]] && grep -slR "PRIVATE" $HOME/.ssh/ | xargs ssh-add > /dev/null 2>&1
 fi
 
+# zsh keeps `path` and `PATH` tied to one another, and -U makes `path` a unique
+# array: an entry already present is not added twice, and the first occurrence
+# is the one kept. Without it the blocks below appended a second copy of
+# themselves in every nested interactive shell — a tmux pane inside a shell
+# inside `exec zsh` — and PATH grew without bound. It had reached 77 entries,
+# with every line of the macOS block present twice.
+typeset -U path PATH
 {{ if eq .chezmoi.os "darwin" }}
 
 export HOMEBREW_BASE="/opt/homebrew/opt"
 export CC=clang
 export CXX=clang++
 
-export PATH="$PATH:$HOME/Library/Python/3.10/bin"
-export PATH="$PATH:$HOME/bin"
-export PATH="$PATH:$HOME/.local/bin"
-export PATH="$PATH:$HOMEBREW_BASE/openjdk/bin"
-export PATH="$PATH:$HOMEBREW_BASE/llvm/bin"
-export PATH="$PATH:${GOPATH:-$HOME/go}/bin"
-export PATH="$PATH:$HOMEBREW_BASE/coreutils/libexec/gnubin:/usr/local/bin"
-export PATH="$PATH:/Applications/Docker.app/Contents/Resources/bin"
+# Ahead of the system directories. These hold the binaries the install scripts
+# manage, and a same-named copy under /usr/bin or /usr/local/bin must not win.
+# Appending put them behind both, so a stale system binary shadowed the managed
+# one in silence: a /usr/local/bin/starship left by an older run kept being
+# used while ~/.local/bin/starship sat there unread. Highest priority first.
+path=(
+  "$HOME/.local/bin"
+  "$HOME/bin"
+  "$HOME/Library/Python/3.10/bin"
+  "${GOPATH:-$HOME/go}/bin"
+  $path
+)
+
+# Behind the system directories, for things that supplement it rather than
+# replace it. llvm stays here on purpose, so `clang` is still Xcode's and CC
+# above keeps meaning what it has always meant.
+path+=(
+  "$HOMEBREW_BASE/openjdk/bin"
+  "$HOMEBREW_BASE/llvm/bin"
+  "/Applications/Docker.app/Contents/Resources/bin"
+)
 
 export JAVA_DIR="$HOMEBREW_BASE/openjdk"
 export JAVA_HOME="$HOMEBREW_BASE/openjdk/bin/java"
@@ -115,13 +135,21 @@ export LIBRARY_PATH="$LIBRARY_PATH:${HOMEBREW_BASE%/opt}/lib"
 
 {{ else if eq .chezmoi.os "linux" }}
 
-export PATH="$PATH:/usr/local/bin"
-export PATH="$PATH:$HOME/.local/bin"
-export PATH="$PATH:$HOME/usr/bin"
-export PATH="$PATH:/usr/local/go/bin"
-export PATH="$PATH:${GOPATH:-$HOME/go}/bin"
-export PATH="$PATH:$HOME/.cargo/bin"
-export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
+# Same split as the macOS branch above: user-managed binaries in front of the
+# system ones, everything else behind. /usr/local/bin is dropped rather than
+# re-added, since the system login PATH already carries it.
+path=(
+  "$HOME/.local/bin"
+  "$HOME/usr/bin"
+  "$HOME/.cargo/bin"
+  "${GOPATH:-$HOME/go}/bin"
+  $path
+)
+
+path+=(
+  /usr/local/go/bin
+  /opt/nvim-linux-x86_64/bin
+)
 
 {{ end }}
 
