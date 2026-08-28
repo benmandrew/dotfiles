@@ -1887,12 +1887,16 @@ install_treehouse() {
 }
 
 # The thing advertised at obsidian.md/cli is not a separately installable
-# binary: it ships inside the desktop app and is registered by a GUI toggle
+# binary: it ships inside the desktop app. On macOS the cask now links it onto
+# PATH itself — a `binary` stanza pointing /opt/homebrew/bin/obsidian at
+# Contents/MacOS/obsidian-cli, added upstream in March 2026 — so a cask install
+# needs no further step. Everywhere else it is registered by a GUI toggle
 # (Settings -> General -> Command line interface), which copies the binary to
 # ~/.local/bin/obsidian on Linux or symlinks /usr/local/bin/obsidian on macOS.
 # It also needs the app to be running — the first command launches it. So the
-# most a script can do is install the app and point at the remaining manual
-# step, which is also why this is optional rather than installed everywhere.
+# most a script can do on those paths is install the app and point at the
+# remaining manual step, which is also why this is optional rather than
+# installed everywhere.
 install_obsidian() {
     local os_name os_arch
     os_name="$(uname -s)"
@@ -1902,16 +1906,50 @@ install_obsidian() {
         if brew list --cask obsidian >/dev/null 2>&1; then
             if [[ -z "${UPGRADE:-}" ]]; then
                 log "Obsidian already installed; skipping"
-                print_obsidian_cli_hint
+                print_obsidian_macos_cli_note
                 return
             fi
+            # The cask sets `auto_updates true`, so this is a no-op unless
+            # --greedy is passed. That is deliberate: Obsidian replaces its own
+            # bundle, and a greedy upgrade only races the app's own updater.
             log "Upgrading Obsidian"
             brew upgrade --cask obsidian || true
-        else
-            log "Installing Obsidian"
-            brew install --cask obsidian
+            print_obsidian_macos_cli_note
+            return
         fi
-        print_obsidian_cli_hint
+
+        # `brew list --cask` only sees what brew put there, so an Obsidian
+        # installed by hand before these scripts existed reads as absent. Left
+        # to fall through, the install below aborts on the existing bundle and
+        # every later run repeats it, which is invisible from the outside
+        # because run_step calls this inside an `if !`, disabling errexit, so
+        # the failure never reaches the step report.
+        if [[ -d "/Applications/Obsidian.app" ]]; then
+            local installed cask_version
+            installed="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+                /Applications/Obsidian.app/Contents/Info.plist 2>/dev/null || true)"
+            cask_version="$(brew info --cask --json=v2 obsidian 2>/dev/null |
+                jq -r '.casks[0].version' 2>/dev/null || true)"
+            # --adopt takes over an existing artifact only when it is identical
+            # to the cask's, so it is worth trying at a matching version and a
+            # wasted download at any other. Compare first rather than let brew
+            # pull ~150MB to discover the same thing.
+            if [[ -n "${installed}" ]] && [[ "${installed}" == "${cask_version}" ]]; then
+                log "Adopting the existing Obsidian ${installed} into brew"
+                if brew install --cask --adopt obsidian; then
+                    print_obsidian_macos_cli_note
+                    return
+                fi
+            fi
+            log "Obsidian ${installed:-(version unknown)} at /Applications was not installed by brew; leaving it alone"
+            log "  to hand it over: rm -rf /Applications/Obsidian.app && brew install --cask obsidian"
+            print_obsidian_cli_hint
+            return
+        fi
+
+        log "Installing Obsidian"
+        brew install --cask obsidian || return 1
+        print_obsidian_macos_cli_note
         return
     fi
 
@@ -2011,6 +2049,14 @@ install_obsidian() {
     esac
 
     print_obsidian_cli_hint
+}
+
+# The cask has already linked /opt/homebrew/bin/obsidian, so the GUI toggle the
+# hint below describes is not needed here. The command still cannot do anything
+# with the app closed — it exits with "unable to find Obsidian" — so say that
+# much rather than nothing.
+print_obsidian_macos_cli_note() {
+    log "Obsidian CLI linked as 'obsidian'; it needs the app running to do anything"
 }
 
 print_obsidian_cli_hint() {
