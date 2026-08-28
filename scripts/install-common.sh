@@ -159,16 +159,105 @@ download() {
     fi
 }
 
+# Homebrew 6 runs `sudo --reset-timestamp` as unconditional preamble on every
+# brew invocation (Library/Homebrew/brew.sh), and sudo's default timestamp_type
+# is `tty` — one record per terminal — so each brew command destroys the very
+# record this script authenticated. A background refresher cannot repair that:
+# `sudo -n true` is non-interactive by definition and the record is gone, not
+# stale. That is why an --upgrade run asked for the password four times.
+#
+# An askpass helper is the way out. sudo runs it instead of prompting when given
+# -A, and Homebrew opts in on its own — system_command.rb adds -A whenever
+# SUDO_ASKPASS is set — so reading the password once up front covers both this
+# script's sudo calls and the ones brew makes internally for pkg-based casks.
+#
+# The cost is that the password sits in a file for the length of the run. It
+# goes in a mode-0700 directory under $TMPDIR (per-user on macOS) as a mode-0600
+# file and is removed on EXIT, so it is readable only by this user, who could
+# read it from their own keychain anyway. A run killed with SIGKILL leaves it
+# behind. Set DOTFILES_NO_ASKPASS=1 to skip all of this and take the prompts.
+_SUDO_ASKPASS_DIR=""
+
+start_sudo_askpass() {
+    if [[ -n "${DOTFILES_NO_ASKPASS:-}" ]]; then
+        return 0
+    fi
+    # Already root: nothing to authenticate.
+    if ((EUID == 0)); then
+        return 0
+    fi
+    # Nothing to read a password on (CI, a piped provisioning run): leave sudo
+    # to prompt or fail on its own terms rather than blocking on a dead tty.
+    if ! { : </dev/tty; } 2>/dev/null; then
+        return 0
+    fi
+
+    local password=""
+    log "Reading the sudo password once, so brew's timestamp reset cannot force a re-prompt"
+    IFS= read -r -s -p "[install] Password: " password </dev/tty
+    printf '\n' >&3
+    if [[ -z "${password}" ]]; then
+        log "No password given; falling back to prompting per step"
+        return 0
+    fi
+
+    # Verify now rather than let a typo surface halfway through the run as a
+    # helper quietly feeding the wrong password to every step.
+    if ! printf '%s\n' "${password}" | command sudo -S -v 2>/dev/null; then
+        password=""
+        err "sudo authentication failed"
+        exit 1
+    fi
+
+    _SUDO_ASKPASS_DIR="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-askpass.XXXXXX")"
+    chmod 700 "${_SUDO_ASKPASS_DIR}"
+    local secret="${_SUDO_ASKPASS_DIR}/secret"
+    local helper="${_SUDO_ASKPASS_DIR}/askpass"
+    # Create both empty and lock them down before the password goes near them.
+    : >"${secret}"
+    chmod 600 "${secret}"
+    printf '%s\n' "${password}" >"${secret}"
+    password=""
+    # The password lives in the data file rather than inside the script text, so
+    # no shell quoting has to survive a round trip through it. The path comes
+    # from mktemp and contains nothing needing quoting.
+    : >"${helper}"
+    chmod 700 "${helper}"
+    printf '#!/bin/sh\nexec cat %s\n' "${secret}" >"${helper}"
+    export SUDO_ASKPASS="${helper}"
+    trap stop_sudo_helpers EXIT
+}
+
+stop_sudo_askpass() {
+    if [[ -n "${_SUDO_ASKPASS_DIR}" ]]; then
+        rm -rf "${_SUDO_ASKPASS_DIR}"
+        _SUDO_ASKPASS_DIR=""
+    fi
+    unset SUDO_ASKPASS
+}
+
+# Shadowing sudo for this script only. A function is not inherited by the
+# subprocesses brew and the vendor installers run — brew adds -A itself, and the
+# vendor scripts are handled by not needing sudo at all — so this only has to
+# cover the call sites in this file, and covers them without each one having to
+# know whether a helper is in play. `command sudo` where the flag would be wrong
+# (the keepalive's -n, which must never prompt).
+sudo() {
+    if [[ -n "${SUDO_ASKPASS:-}" ]]; then
+        command sudo -A "$@"
+    else
+        command sudo "$@"
+    fi
+}
+
 # sudo caches credentials for a short window (15 minutes by default, less on
 # some configs) and a full install — especially the --upgrade path, which
 # rebuilds tmux and re-downloads every toolchain — comfortably outruns it, so
 # the password gets asked for again at each later sudo step. Authenticate once
 # up front and refresh the timestamp from the background for as long as the
 # script runs, which covers every step whose only problem is outlasting the
-# cache. Some steps still prompt. Homebrew 6 runs `sudo --reset-timestamp` at
-# the start of every brew invocation (Library/Homebrew/brew.sh), wiping the
-# cached credential, so the next privileged step after any brew command asks
-# for the password again.
+# cache. With an askpass helper in place the refresher is belt and braces: a
+# reset timestamp costs a silent helper call rather than a prompt.
 _SUDO_KEEPALIVE_PID=""
 
 start_sudo_keepalive() {
@@ -176,7 +265,11 @@ start_sudo_keepalive() {
     if ((EUID == 0)); then
         return
     fi
-    log "Requesting sudo access (refreshed in the background; steps that follow a brew command may re-prompt)"
+    if [[ -n "${SUDO_ASKPASS:-}" ]]; then
+        log "Requesting sudo access (refreshed in the background; the askpass helper covers brew's timestamp resets)"
+    else
+        log "Requesting sudo access (refreshed in the background; steps that follow a brew command may re-prompt)"
+    fi
     if ! sudo -v; then
         err "sudo authentication failed"
         exit 1
@@ -191,7 +284,7 @@ start_sudo_keepalive() {
     # carries it forward again. Breaking here instead retired the refresher for
     # the whole run at the first brew command, which is most of an --upgrade.
     while kill -0 "${parent}" 2>/dev/null; do
-        sudo -n true 2>/dev/null || true
+        command sudo -n true 2>/dev/null || true
         sleep 50
     done &
     _SUDO_KEEPALIVE_PID=$!
@@ -200,7 +293,9 @@ start_sudo_keepalive() {
     # never prints one. Best-effort: macOS ships bash 3.2, where `disown` may
     # only accept a %jobspec rather than a bare pid, so failure is ignored.
     disown "${_SUDO_KEEPALIVE_PID}" 2>/dev/null || true
-    trap stop_sudo_keepalive EXIT
+    # One EXIT trap, not two: a second `trap ... EXIT` replaces the first, so
+    # both teardowns have to hang off the same handler.
+    trap stop_sudo_helpers EXIT
 }
 
 stop_sudo_keepalive() {
@@ -208,6 +303,11 @@ stop_sudo_keepalive() {
         kill "${_SUDO_KEEPALIVE_PID}" 2>/dev/null || true
         _SUDO_KEEPALIVE_PID=""
     fi
+}
+
+stop_sudo_helpers() {
+    stop_sudo_keepalive
+    stop_sudo_askpass
 }
 
 parse_args() {
@@ -1207,6 +1307,13 @@ install_nix_direnv() {
     echo "${source_line}" >>"${direnvrc}"
 }
 
+# The vendor installer defaults BIN_DIR to /usr/local/bin, which is root:wheel
+# 0755 on macOS, so its `test_writable` fails and it runs `sudo -v` — a password
+# prompt from a third-party script this one cannot reach into. Every other bare
+# binary these scripts fetch already goes to ~/.local/bin, so send starship there
+# too and the step needs no privileges at all.
+STARSHIP_BIN_DIR="${HOME}/.local/bin"
+
 install_starship() {
     if command -v starship >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then
@@ -1217,11 +1324,31 @@ install_starship() {
     else
         log "Installing Starship"
     fi
+    mkdir -p "${STARSHIP_BIN_DIR}"
     local script_path
     script_path="$(mktemp)"
     download https://starship.rs/install.sh "${script_path}" || return 1
-    sh "${script_path}" -y || return 1
+    sh "${script_path}" -y -b "${STARSHIP_BIN_DIR}" || return 1
     rm -f "${script_path}"
+    remove_shadowing_starship
+}
+
+# /usr/local/bin sits ahead of ~/.local/bin on the rendered PATH, so a copy left
+# in the old location by a previous run keeps winning `command -v` and never
+# gets upgraded again — the managed binary would be installed and then ignored,
+# silently, for as long as the old one existed. Remove it once the new one is
+# in place, and only then.
+remove_shadowing_starship() {
+    local stale="/usr/local/bin/starship"
+    if [[ ! -e "${stale}" ]]; then
+        return 0
+    fi
+    if [[ ! -x "${STARSHIP_BIN_DIR}/starship" ]]; then
+        return 0
+    fi
+    log "Removing ${stale}, which would shadow ${STARSHIP_BIN_DIR}/starship"
+    sudo rm -f "${stale}" ||
+        log "Could not remove ${stale}; it will keep shadowing the managed copy"
 }
 
 install_claude_code() {

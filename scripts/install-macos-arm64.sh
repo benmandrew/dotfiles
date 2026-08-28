@@ -103,15 +103,22 @@ main() {
     require_cmd sudo
     require_cmd curl
     require_cmd ssh-keygen
+    start_sudo_askpass
     start_sudo_keepalive
     install_xcode_clt
+
+    # Ahead of install_homebrew deliberately. Nix needs only curl and sh, and
+    # the first brew command of the run wipes the sudo timestamp, so running it
+    # here lets `sudo -i nix upgrade-nix` use the credential taken moments ago.
+    # This saves a prompt on its own, without the askpass helper.
+    run_step install_nix
+
     install_homebrew
 
     require_cmd brew
 
     run_step install_brew_formulae_if_missing git zsh tmux node entr
     run_step install_cmake
-    run_step install_nix
     run_step install_direnv
     run_step install_nix_direnv
 

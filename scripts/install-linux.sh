@@ -139,6 +139,7 @@ main() {
     require_cmd ssh-keygen
     require_cmd dpkg
     require_cmd apt
+    start_sudo_askpass
     start_sudo_keepalive
     # Prerequisites, deliberately outside run_step: the rest of the install is
     # built on these, so a failure here aborts under errexit rather than being
