@@ -112,13 +112,27 @@ Shared functions called by both platform scripts. Only the ones with a non-obvio
 
 No install step registers MCP servers — that is left to `claude mcp add` by hand.
 
-### Cargo tools are installed --locked
+### Cargo tools come from prebuilt binaries
 
-`install_cargo_tool` backs `install_eza`, `install_fd`, `install_bat`, `install_ripgrep`, `install_git_delta` and `install_hyperfine`, and passes `--locked`, so each crate builds against the dependency versions it was published with rather than the newest semver-compatible ones.
+`install_cargo_tool` backs `install_eza`, `install_fd`, `install_bat`, `install_ripgrep`, `install_git_delta`, `install_hyperfine` and `install_zoxide`. It downloads the upstream release binary into `~/.local/bin`, and keeps `cargo install --locked` only as the fallback for a platform upstream publishes nothing for.
 
-eza is why. It pins `palette = "=0.7.5"`, palette takes `palette_derive = "0.7"`, and an unlocked resolve pairs the 0.7.5 library with the 0.7.7 derive macro, which generates references to `crate::lms` and `xyz::meta` — modules that first appear in 0.7.6. The build stops with 34 `error[E0433]`s, reproduced locally on rustc 1.97.1 as well as on the runner, and it is the sole cause of the CI install job failing on all five runs between 13 and 18 August 2026. eza's shipped lockfile pairs palette 0.7.5 with palette_derive 0.7.6, so `cargo install eza --locked` builds in 43s.
+Compile time is why. The seven crates cost 5m21s of a 7m36s continuous integration (CI) install run (eza 67s, bat 79s, delta 75s, fd 36s, ripgrep 22s, hyperfine 22s, zoxide 20s), measured from the `[install]` timestamps of run 33171164419 on 28 August 2026. The same wait falls on every new machine.
 
-No flag can move eza to palette 0.7.7, since `=0.7.5` is an exact requirement rather than a lower bound. The alternative was the release binary, which upstream publishes for Linux only (x86_64 gnu and musl, aarch64 gnu, armhf) and not for macOS on either arch, so it would have put macOS back on brew. That is worth remembering if the compile becomes a problem again: brew's eza matched upstream at 0.23.5 on 19 August 2026, but tracking upstream through source is the reason this repo builds these six rather than installing them from a package manager. All six ship a `Cargo.lock`, which `--locked` requires.
+The asset names follow no shared convention, so each tool carries its own file-name template in `_rust_tool_spec`. eza leaves the version out of the name; fd, bat and hyperfine keep the tag's leading `v`; ripgrep, delta and zoxide strip it. Some tarballs hold a bare binary and others a versioned directory, so the binary is located with `find -type f -name` rather than a spelled-out path.
+
+Each tool's list of *target triples* in that table doubles as its platform coverage: only the triples upstream publishes are named, and a platform with no entry falls back to cargo. eza is the only tool that falls back, publishing no macOS asset on either architecture, which is the same gap this section recorded before.
+
+*musl* is preferred over gnu wherever both exist, for the reason `install_atuin` records — upstream builds the gnu binaries against a newer glibc than the oldest target distro ships, so they exit in the dynamic linker before `main()` runs. fd, bat, ripgrep and zoxide offer musl on both architectures; eza, delta and hyperfine offer it on x86_64 only and fall to gnu on aarch64.
+
+All 20 asset URLs return 200, and all 14 Linux tarballs extract and yield an Executable and Linkable Format (ELF) binary of the right architecture. The six tools with macOS coverage were installed into a scratch `HOME` and each ran `--version` correctly.
+
+A copy found under `~/.cargo/bin` is treated as absent, so the prebuilt binary replaces it, and the cargo copy is deleted afterwards. `~/.local/bin` leads `~/.cargo/bin` in the rendered zshrc, so the new copy would win in a real shell anyway, but `verify-install.sh` searches the two in the opposite order, and a stale build there would answer for the tool on every check.
+
+The skip check runs before `github_latest_tag`, so an already-installed tool costs no API call. `install_atuin` and `install_treehouse` still resolve the tag first and pay for it every run.
+
+The fallback passes `--locked`, so a crate reached through it builds against the dependency versions it was published with rather than the newest semver-compatible ones. eza is why. It pins `palette = "=0.7.5"`, palette takes `palette_derive = "0.7"`, and an unlocked resolve pairs the 0.7.5 library with the 0.7.7 derive macro, which references `crate::lms` and `xyz::meta` — modules first appearing in 0.7.6. The build stops with 34 `error[E0433]`s, the sole cause of the CI install job failing on all five runs between 13 and 18 August 2026. Every crate reached through the fallback ships a `Cargo.lock`, which `--locked` requires.
+
+eza on macOS is the one path that still compiles, so that failure stays reachable on one tool and one platform.
 
 ### Both gh-stack steps need an authenticated gh
 

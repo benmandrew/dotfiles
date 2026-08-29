@@ -909,17 +909,120 @@ install_cmake() {
     sudo sh "${tmp_dir}/${installer}" --prefix=/usr/local --skip-license
 }
 
-install_cargo_tool() {
-    local cmd="$1" crate="${2:-$1}"
-    if command -v "${cmd}" >/dev/null 2>&1; then
-        if [[ -z "${UPGRADE:-}" ]]; then
-            log "${cmd} already installed; skipping"
+# The seven tools routed through install_cargo_tool were compiled from source
+# until August 2026. On the CI runner that cost 5m21s of a 7m36s install run —
+# eza 67s, bat 79s, delta 75s, fd 36s, rg 22s, hyperfine 22s, zoxide 20s — and
+# the same wait lands on any new machine. All seven publish prebuilt binaries
+# on their GitHub releases, so the tarball is fetched instead and cargo is
+# kept only as the fallback.
+#
+# The release assets agree on nothing. eza leaves the version out of the file
+# name entirely; fd, bat and hyperfine keep the tag's leading `v`; ripgrep,
+# delta and zoxide strip it. Some unpack a bare binary, others a versioned
+# directory. So the name is per-tool data — %TAG% is the tag as published,
+# %VER% the same with any leading `v` removed, %TRIPLE% the Rust target triple
+# — and the binary is found by searching the unpacked tree rather than by a
+# path that would have to be spelled out seven different ways.
+#
+# The triple list is that tool's platform coverage: only triples upstream
+# actually publishes are named, so a platform absent from the list falls back
+# to `cargo install`. eza is the one that does, shipping no macOS asset at all.
+_rust_tool_spec() {
+    case "$1" in
+        eza) echo "eza-community/eza|eza_%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu" ;;
+        fd) echo "sharkdp/fd|fd-%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin" ;;
+        bat) echo "sharkdp/bat|bat-%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin" ;;
+        rg) echo "BurntSushi/ripgrep|ripgrep-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin" ;;
+        delta) echo "dandavison/delta|delta-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin" ;;
+        hyperfine) echo "sharkdp/hyperfine|hyperfine-%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin" ;;
+        zoxide) echo "ajeetdsouza/zoxide|zoxide-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin" ;;
+        *) return 1 ;;
+    esac
+}
+
+# Target triples for this machine, best first. musl leads gnu wherever a tool
+# offers both, for the reason install_atuin sets out at length: upstream builds
+# the gnu binaries against a newer glibc than the oldest distro here ships, and
+# they die at the dynamic linker before main() runs. None of these tools is
+# allocator-bound, so the static build costs nothing that matters.
+_rust_tool_triples() {
+    local os_name arch
+    os_name="$(uname -s)"
+    arch="$(uname -m)"
+    case "${os_name}/${arch}" in
+        Linux/x86_64 | Linux/amd64) echo "x86_64-unknown-linux-musl x86_64-unknown-linux-gnu" ;;
+        Linux/aarch64 | Linux/arm64) echo "aarch64-unknown-linux-musl aarch64-unknown-linux-gnu" ;;
+        Darwin/arm64 | Darwin/aarch64) echo "aarch64-apple-darwin" ;;
+        Darwin/x86_64) echo "x86_64-apple-darwin" ;;
+        *) echo "" ;;
+    esac
+}
+
+# First release-asset version number in `<tool> --version` output. Matched with
+# a regex rather than by field, because the seven disagree there too: eza
+# prints a bare `v0.23.5`, rg and eza print several lines, and some wrap the
+# number in escape sequences. This is the same read install_btop makes.
+_rust_tool_version() {
+    local output
+    output="$("$1" --version 2>/dev/null)" || return 1
+    [[ "${output}" =~ ([0-9]+\.[0-9]+\.[0-9]+) ]] || return 1
+    echo "${BASH_REMATCH[1]}"
+}
+
+_install_rust_tool_binary() {
+    local cmd="$1" repo="$2" template="$3" triple="$4"
+
+    local tag version
+    tag="$(github_latest_tag "${repo}")"
+    version="${tag#v}"
+    if [[ -z "${version}" ]]; then
+        err "Could not resolve the latest ${cmd} release"
+        return 1
+    fi
+
+    if [[ -n "${UPGRADE:-}" ]] && command -v "${cmd}" >/dev/null 2>&1; then
+        local current
+        current="$(_rust_tool_version "${cmd}")" || current=""
+        if [[ "${current}" == "${version}" ]]; then
+            log "${cmd} ${current} already at latest; skipping"
             return
         fi
-        log "Upgrading ${cmd}"
-    else
-        log "Installing ${cmd}"
     fi
+
+    local asset="${template}"
+    asset="${asset//%TAG%/${tag}}"
+    asset="${asset//%VER%/${version}}"
+    asset="${asset//%TRIPLE%/${triple}}"
+
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
+    download "https://github.com/${repo}/releases/download/${tag}/${asset}" \
+        "${tmp_dir}/${asset}" || return 1
+    tar -C "${tmp_dir}" -xf "${tmp_dir}/${asset}" || return 1
+
+    # Located by name, since the tarballs disagree on whether the binary sits
+    # at the root or inside a versioned directory. -type f keeps it off the
+    # completion and man directories several of them ship alongside.
+    local binary
+    binary="$(find "${tmp_dir}" -type f -name "${cmd}" -print -quit)"
+    if [[ -z "${binary}" ]]; then
+        err "No ${cmd} binary inside ${asset}"
+        return 1
+    fi
+    mkdir -p "${HOME}/.local/bin"
+    install -m755 "${binary}" "${HOME}/.local/bin/${cmd}" || return 1
+
+    # Delete the build this function left behind before it moved to prebuilt
+    # binaries. ~/.local/bin leads ~/.cargo/bin in the rendered zshrc so the new
+    # copy would win there anyway, but verify-install.sh searches the two the
+    # other way round, and a stale build answering for the tool on every check
+    # is exactly the shadowing install_starship had to unpick for /usr/local.
+    rm -f "${HOME}/.cargo/bin/${cmd}"
+}
+
+_install_cargo_tool_from_source() {
+    local crate="$1"
     load_cargo_env
     require_cmd cargo
     # --locked builds against the dependency versions the crate was published
@@ -935,6 +1038,52 @@ install_cargo_tool() {
     # builds in 43s. All six crates installed through here ship a Cargo.lock,
     # which is what --locked needs.
     cargo install --locked "${crate}"
+}
+
+install_cargo_tool() {
+    local cmd="$1" crate="${2:-$1}"
+
+    local repo="" template="" published="" triple=""
+    local spec
+    if spec="$(_rust_tool_spec "${cmd}")"; then
+        repo="${spec%%|*}"
+        template="${spec#*|}"
+        template="${template%%|*}"
+        published="${spec##*|}"
+
+        local candidates candidate triple_list
+        triple_list="$(_rust_tool_triples)"
+        read -r -a candidates <<<"${triple_list}"
+        for candidate in "${candidates[@]}"; do
+            if [[ " ${published} " == *" ${candidate} "* ]]; then
+                triple="${candidate}"
+                break
+            fi
+        done
+    fi
+
+    # The skip check comes before github_latest_tag, so an already-installed
+    # tool costs no API call. install_atuin and install_treehouse still resolve
+    # the tag first and pay for it on every run.
+    local existing
+    existing="$(command -v "${cmd}" 2>/dev/null)" || existing=""
+    if [[ -n "${existing}" && -z "${UPGRADE:-}" ]]; then
+        if [[ -z "${triple}" || "${existing}" != "${HOME}/.cargo/bin/"* ]]; then
+            log "${cmd} already installed; skipping"
+            return
+        fi
+        log "Replacing cargo-built ${cmd} with the prebuilt binary"
+    elif [[ -n "${existing}" ]]; then
+        log "Upgrading ${cmd}"
+    else
+        log "Installing ${cmd}"
+    fi
+
+    if [[ -z "${triple}" ]]; then
+        _install_cargo_tool_from_source "${crate}"
+        return
+    fi
+    _install_rust_tool_binary "${cmd}" "${repo}" "${template}" "${triple}"
 }
 
 install_pyright() {
