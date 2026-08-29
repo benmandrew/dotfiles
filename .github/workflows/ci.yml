@@ -4,6 +4,12 @@ on:
   push:
     branches: [ main ]
   pull_request:
+  schedule:
+    # A weekly cold run. The install job below restores a warm cache, which
+    # every step's `command -v` guard is then satisfied by, so a cached run
+    # exercises almost none of the install paths it exists to test. This run
+    # skips the restore and installs everything from scratch.
+    - cron: '0 4 * * 1'
 
 jobs:
   changes:
@@ -15,6 +21,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Check for install script changes
+        # Skipped on the weekly cold run, which has no base ref to diff
+        # against; the install job's `if` admits that event on its own.
+        if: github.event_name != 'schedule'
         uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -57,12 +66,14 @@ jobs:
   install:
     runs-on: ubuntu-latest
     needs: [lint, changes]
-    if: needs.changes.outputs.install == 'true'
+    if: needs.changes.outputs.install == 'true' || github.event_name == 'schedule'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Cache installed tools
+        # Skipped on the weekly cold run — see the `schedule:` trigger above.
+        if: github.event_name != 'schedule'
         uses: actions/cache@v4
         with:
           path: |
@@ -77,6 +88,15 @@ jobs:
             /usr/local/bin
             /usr/local/lib/node_modules
           key: install-${{ runner.os }}-${{ hashFiles('scripts/install-common.sh', 'scripts/install-linux.sh') }}
+          # The primary key can never hit. It hashes the two scripts, and this
+          # job only runs when one of them changed, so the key is new on every
+          # run that reaches here — measured as a 0s restore and a 3m save of a
+          # 1.1 GB cache nothing would ever read. The prefix restores the
+          # previous run's tools instead, which the install steps then skip
+          # over, leaving the run to exercise whatever the edit actually
+          # changed.
+          restore-keys: |
+            install-${{ runner.os }}-
 
       - name: Run install script
         env:
