@@ -47,10 +47,23 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
+      # v5 talks to the cache service API GitHub has since retired, so every
+      # restore came back `Cache service responded with 400`, and its save then
+      # died on the root-owned files under /nix/var that it tried to tar
+      # (temproots, gc.lock, db/reserved) — `tar failed with exit code 2`. The
+      # store was therefore neither restored nor saved, and the repo held no
+      # nix-* cache entry at all, leaving `nix develop` to re-fetch the whole
+      # devShell closure on every run: 74s for the first invocation against 6s
+      # for the second, warm one. v7 moves to the current cache API and caches
+      # /nix alone by default.
       - name: Cache Nix store
-        uses: nix-community/cache-nix-action@v5
+        uses: nix-community/cache-nix-action@v7
         with:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'flake.nix') }}
+          # A flake.lock bump changes the primary key but almost none of the
+          # closure, so fall back to the newest store from any earlier lock
+          # rather than starting from an empty one.
+          restore-prefixes-first-match: nix-${{ runner.os }}-
 
       - name: Format check
         run: nix develop --command make fmt-ci
