@@ -2278,6 +2278,33 @@ schedule_obsync() {
     esac
 }
 
+# The crontab in $1 with every obsync line taken out. Matching on obsync.sh as
+# well as the marker catches hand-written entries that predate it. Everything
+# else is passed through.
+obsync_cron_stripped() {
+    printf '%s\n' "$1" | grep -vF "${OBSYNC_CRON_MARKER}" | grep -vF 'obsync.sh' || true
+}
+
+# Called from the launchd path as well as here, so a Mac that predates the
+# LaunchAgent does not keep running the crontab entry beside it. obsync.sh has
+# no lock file, and launchd's phase resets on every reboot, so the two
+# schedules can land together mid-rebase.
+remove_obsync_cron() {
+    if ! command -v crontab >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local existing kept
+    existing="$(crontab -l 2>/dev/null || true)"
+    kept="$(obsync_cron_stripped "${existing}")"
+    if [[ "${kept}" == "${existing}" ]]; then
+        return 0
+    fi
+
+    log "Removing obsync crontab entry"
+    printf '%s\n' "${kept}" | crontab -
+}
+
 schedule_obsync_cron() {
     if ! command -v crontab >/dev/null 2>&1; then
         log "obsync: no crontab command; skipping schedule"
@@ -2297,10 +2324,9 @@ schedule_obsync_cron() {
     fi
 
     # Drop any earlier entry before appending, so re-running does not stack up
-    # duplicate schedules. Matching on obsync.sh as well as the marker catches
-    # hand-written entries that predate it. Everything else is passed through.
+    # duplicate schedules.
     local kept
-    kept="$(printf '%s\n' "${existing}" | grep -vF "${OBSYNC_CRON_MARKER}" | grep -vF 'obsync.sh' || true)"
+    kept="$(obsync_cron_stripped "${existing}")"
 
     # Assemble first, pipe second. Anything but printf on the left of
     # `crontab -` has its exit status masked by the pipeline, so a failure
@@ -2352,7 +2378,11 @@ EOF
     # bootout first so a changed plist is picked up; it fails when nothing is
     # loaded, which is the normal first-install case.
     launchctl bootout "${domain}/${OBSYNC_LAUNCHD_LABEL}" >/dev/null 2>&1 || true
-    launchctl bootstrap "${domain}" "${plist}"
+    launchctl bootstrap "${domain}" "${plist}" || return 1
+
+    # After the agent is loaded, not before: a machine whose bootstrap failed
+    # keeps the crontab entry and stays scheduled by it.
+    remove_obsync_cron
 }
 
 # Both halves run under the one `obsidian` opt-in. install_obsidian returns
