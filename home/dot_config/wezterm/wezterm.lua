@@ -802,6 +802,68 @@ local function spawn_in_claude_cwd(variant)
     end)
 end
 
+-- Equalise the panes in the active tab. WezTerm ships no balance action, so this
+-- reads the layout and walks each boundary onto the even split with
+-- AdjustPaneSize. `group` is one row (or column) of panes, already ordered along
+-- the axis being balanced.
+local function balance_group(window, group, horizontal)
+    local size = function(p)
+        return horizontal and p.width or p.height
+    end
+    local total = 0
+    for _, p in ipairs(group) do
+        total = total + size(p)
+    end
+    -- Cells rarely divide evenly, so the first `total % n` panes take one extra.
+    local n = #group
+    local base, remainder = math.floor(total / n), total % n
+    -- Moving a boundary resizes the two panes either side of it and nothing
+    -- else, so the leftover from the previous boundary is carried into this
+    -- pane's current size rather than re-read. Every adjustment *grows* a pane
+    -- towards the boundary being moved: AdjustPaneSize takes no direction that
+    -- shrinks a pane away from one.
+    local carried = 0
+    for i = 1, n - 1 do
+        local delta = base + (i <= remainder and 1 or 0) - (size(group[i]) - carried)
+        if delta > 0 then
+            window:perform_action(act.AdjustPaneSize({ horizontal and "Right" or "Down", delta }), group[i].pane)
+        elseif delta < 0 then
+            window:perform_action(act.AdjustPaneSize({ horizontal and "Left" or "Up", -delta }), group[i + 1].pane)
+        end
+        carried = delta
+    end
+end
+
+-- Panes sharing a top edge and a height form a row and are balanced
+-- horizontally; panes sharing a left edge and a width form a column and are
+-- balanced vertically. Nesting is handled one group at a time, so a tab holding
+-- a split column beside a full-height pane gets the column's own boundary
+-- evened but not the outer one: panes_with_info reports rectangles rather than
+-- the split tree, and the column's two panes match no neighbour's height.
+local balance_panes = wezterm.action_callback(function(window)
+    for _, horizontal in ipairs({ true, false }) do
+        -- Re-read between the passes: balancing the rows moves the left edges
+        -- and widths that the column grouping keys on.
+        local groups = {}
+        for _, p in ipairs(window:active_tab():panes_with_info()) do
+            local key = horizontal and (p.top .. ":" .. p.height) or (p.left .. ":" .. p.width)
+            groups[key] = groups[key] or {}
+            table.insert(groups[key], p)
+        end
+        for _, group in pairs(groups) do
+            if #group > 1 then
+                table.sort(group, function(a, b)
+                    if horizontal then
+                        return a.left < b.left
+                    end
+                    return a.top < b.top
+                end)
+                balance_group(window, group, horizontal)
+            end
+        end
+    end
+end)
+
 config.keys = {
     -- Copy (overrides the stock CopyTo bindings to add the indicator)
     { key = "c", mods = "SHIFT|CTRL", action = copy_and_flash("Clipboard") },
@@ -815,6 +877,7 @@ config.keys = {
     { key = "k", mods = "LEADER", action = act.ActivatePaneDirection("Up") },
     { key = "l", mods = "LEADER", action = act.ActivatePaneDirection("Right") },
     { key = "w", mods = "LEADER", action = act.PaneSelect({ mode = "SwapWithActive" }) },
+    { key = "=", mods = "LEADER", action = balance_panes },
     -- Tabs
     { key = "c", mods = "LEADER", action = spawn_in_claude_cwd("SpawnCommandInNewTab") },
     { key = "n", mods = "LEADER", action = act.ActivateTabRelative(1) },
