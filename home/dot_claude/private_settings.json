@@ -59,5 +59,8 @@
   },
   "effortLevel": "high",
   "theme": "dark",
-  "skipDangerousModePermissionPrompt": true
+  "skipDangerousModePermissionPrompt": true,
+  "attribution": {
+    "sessionUrl": false
+  }
 }
