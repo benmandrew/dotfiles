@@ -1,5 +1,139 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-make fmt-ci
-make lint
+# Staged files only. This hook used to run `make fmt-ci` and `make lint` over
+# the whole tree, so a file nobody had touched blocked every commit, and it
+# needed the nix devShell already on PATH — committing from a plain shell just
+# died on the first missing linter.
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "${repo_root}"
+
+# Re-enter through the devShell when the tools are not on PATH. The guard
+# variable stops it recursing if the devShell still has no shfmt in it.
+if [[ -z "${DOTFILES_HOOK_NIX:-}" ]] &&
+    ! command -v shfmt >/dev/null 2>&1 &&
+    command -v nix >/dev/null 2>&1; then
+    exec env DOTFILES_HOOK_NIX=1 nix develop --command "$0" "$@"
+fi
+
+# NUL-separated, so a path with a space or a newline in it survives. Deleted
+# paths are already excluded by the filter, but a rename can stage a path that
+# is not on disk, so check.
+staged=()
+# shellcheck disable=SC2312  # git's status is not the interesting one here: a
+# repository with nothing staged and a failed git both give an empty list, and
+# both mean there is nothing to check.
+while IFS= read -r -d '' path; do
+    [[ -e "${path}" ]] && staged+=("${path}")
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+if ((${#staged[@]} == 0)); then
+    exit 0
+fi
+
+# Three shellcheck styles for the same reason the Makefile has them: scripts/
+# takes the whole optional set, and the deployed scripts take it without the
+# three checks that only comment on brace and bracket style.
+deployed_exclude=(--exclude SC2250,SC2249,SC2292)
+
+lua_files=()
+install_files=()
+deployed_bash=()
+sh_files=()
+toml_files=()
+workflow_files=()
+makefile_staged=false
+ssh_template_staged=false
+
+for path in "${staged[@]}"; do
+    case "${path}" in
+        *.lua) lua_files+=("${path}") ;;
+        scripts/*.sh) install_files+=("${path}") ;;
+        home/dot_claude/*.sh) deployed_bash+=("${path}") ;;
+        # The executable_ prefix is chezmoi's; this one is a uv Python script.
+        home/dot_local/bin/executable_ai-commit-msg) ;;
+        home/dot_local/bin/executable_* | home/dot_config/tmux/*.sh) sh_files+=("${path}") ;;
+        *.toml) toml_files+=("${path}") ;;
+        .github/workflows/*) workflow_files+=("${path}") ;;
+        Makefile) makefile_staged=true ;;
+        home/private_dot_ssh/private_config.tmpl) ssh_template_staged=true ;;
+        *) ;;
+    esac
+done
+
+# Render the ssh template to a temporary file for the linter to read.
+# shellcheck disable=SC2329  # called indirectly, through check
+lint_ssh() {
+    local tmp
+    tmp="$(mktemp)"
+    # shellcheck disable=SC2064  # expand tmp now, not when the trap fires
+    trap "rm -f '${tmp}'" RETURN
+    chezmoi execute-template <home/private_dot_ssh/private_config.tmpl >"${tmp}" || return 1
+    sshconfig-lint --config "${tmp}"
+}
+
+status=0
+skipped=()
+
+# Run a check, or record the tool as missing and carry on. Outside the devShell
+# with no nix to re-enter through, a commit is still worth making with whatever
+# checks the machine can run.
+check() {
+    local tool="$1"
+    shift
+    if ! command -v "${tool}" >/dev/null 2>&1; then
+        skipped+=("${tool}")
+        return 0
+    fi
+    "$@" || status=1
+}
+
+if ((${#lua_files[@]} > 0)); then
+    check stylua stylua --check -- "${lua_files[@]}"
+    check luacheck luacheck -q "${lua_files[@]}" --globals vim
+fi
+
+if ((${#install_files[@]} > 0)); then
+    check shfmt shfmt -ln bash -i 4 -ci -d "${install_files[@]}"
+    check shellcheck shellcheck --external-sources --shell bash --enable all "${install_files[@]}"
+fi
+
+if ((${#deployed_bash[@]} > 0)); then
+    check shfmt shfmt -ln bash -i 4 -ci -d "${deployed_bash[@]}"
+    check shellcheck shellcheck --external-sources --shell bash --enable all \
+        "${deployed_exclude[@]}" "${deployed_bash[@]}"
+fi
+
+if ((${#sh_files[@]} > 0)); then
+    check shfmt shfmt -ln posix -i 4 -ci -d "${sh_files[@]}"
+    check shellcheck shellcheck --external-sources --shell sh --enable all \
+        "${deployed_exclude[@]}" "${sh_files[@]}"
+fi
+
+if ((${#toml_files[@]} > 0)); then
+    check taplo env RUST_LOG=warn taplo lint "${toml_files[@]}"
+fi
+
+if ((${#workflow_files[@]} > 0)); then
+    check actionlint actionlint
+fi
+
+if [[ "${makefile_staged}" == true ]]; then
+    check checkmake checkmake Makefile
+fi
+
+if [[ "${ssh_template_staged}" == true ]]; then
+    check sshconfig-lint lint_ssh
+fi
+
+# The whole tree, since a typo is cheap to check and the tool takes no file
+# list worth building.
+check typos typos
+
+if ((${#skipped[@]} > 0)); then
+    printf 'pre-commit: skipped (not on PATH): %s\n' "${skipped[*]}" >&2
+    printf 'pre-commit: run inside the nix devShell for the full set.\n' >&2
+fi
+
+exit "${status}"

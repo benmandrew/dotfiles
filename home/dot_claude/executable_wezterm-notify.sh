@@ -16,26 +16,26 @@ sessions="${HOME}/.claude/sessions"
 name=""
 pid=""
 if [ -n "$session_id" ] && [ -d "$sessions" ]; then
-	# The pid comes back alongside the name because it keys the tab flag below.
-	IFS=$'\t' read -r pid name <<<"$(jq -r --arg id "$session_id" \
-		'select(.sessionId == $id) | [(.pid | tostring), (.name // "")] | @tsv' \
-		"$sessions"/*.json 2>/dev/null | head -n1 || true)"
+    # The pid comes back alongside the name because it keys the tab flag below.
+    IFS=$'\t' read -r pid name <<<"$(jq -r --arg id "$session_id" \
+        'select(.sessionId == $id) | [(.pid | tostring), (.name // "")] | @tsv' \
+        "$sessions"/*.json 2>/dev/null | head -n1 || true)"
 fi
 
 label="${name:-$(basename "${cwd:-$PWD}")}"
 
 case "$(uname -s)" in
-Darwin)
-	osascript -e 'on run argv' \
-		-e 'display notification (item 1 of argv) with title "Claude Code"' \
-		-e 'end run' \
-		"$label"
-	;;
-Linux)
-	if command -v notify-send >/dev/null 2>&1; then
-		notify-send "Claude Code" "$label"
-	fi
-	;;
+    Darwin)
+        osascript -e 'on run argv' \
+            -e 'display notification (item 1 of argv) with title "Claude Code"' \
+            -e 'end run' \
+            "$label"
+        ;;
+    Linux)
+        if command -v notify-send >/dev/null 2>&1; then
+            notify-send "Claude Code" "$label"
+        fi
+        ;;
 esac
 
 # Flag the tab so the notification is visible on an unfocused one. WezTerm
@@ -45,11 +45,11 @@ esac
 # the task word, the agent identifier or a manual rename.
 bells="${HOME}/.claude/tab-bells"
 if [ -n "$pid" ]; then
-	mkdir -p "$bells"
-	# Drop flags whose session has exited, as claude-tab-title does for titles.
-	for stale in "$bells"/*; do
-		[ -f "$stale" ] || continue
-		[ -f "$sessions/${stale##*/}.json" ] || rm -f "$stale"
-	done
-	: >"$bells/$pid"
+    mkdir -p "$bells"
+    # Drop flags whose session has exited, as claude-tab-title does for titles.
+    for stale in "$bells"/*; do
+        [ -f "$stale" ] || continue
+        [ -f "$sessions/${stale##*/}.json" ] || rm -f "$stale"
+    done
+    : >"$bells/$pid"
 fi

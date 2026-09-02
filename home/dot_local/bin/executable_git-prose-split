@@ -72,4 +72,4 @@ BEGIN {
 function is_abbreviation(word) {
     return word ~ /^[A-Z]$/ || word in abbreviation
 }
-' < "$1"
+' <"$1"

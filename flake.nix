@@ -35,6 +35,9 @@
       {
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
+            # Every entry point into this repository is `nix develop --command
+            # make`, so the shell has to carry make itself.
+            gnumake
             chezmoi
             stylua
             shfmt
