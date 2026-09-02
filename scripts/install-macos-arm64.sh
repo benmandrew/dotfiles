@@ -7,19 +7,33 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/install-common.sh"
 
 install_brew_formulae_if_missing() {
+    local formula
     if [[ -n "${UPGRADE:-}" ]]; then
         log "Upgrading Homebrew formulae: $*"
         brew update
-        brew upgrade "$@" || true
-        for formula in "$@"; do
-            if ! brew list --formula "${formula}" >/dev/null 2>&1; then
-                brew install "${formula}"
-            fi
-        done
+        # A batch `brew upgrade` stops at the formula that failed and takes the
+        # rest of the list with it. The failure used to be discarded with
+        # `|| true` and only entirely-missing formulae reinstalled, so a
+        # half-finished upgrade reported success. Retry each formula on its own
+        # instead, and fail the step for whatever is still broken at the end.
+        local failed=()
+        if ! brew upgrade "$@"; then
+            log "Batch upgrade failed; retrying each formula on its own"
+            for formula in "$@"; do
+                if ! brew list --formula "${formula}" >/dev/null 2>&1; then
+                    brew install "${formula}" || failed+=("${formula}")
+                elif ! brew upgrade "${formula}"; then
+                    failed+=("${formula}")
+                fi
+            done
+        fi
+        if ((${#failed[@]} > 0)); then
+            err "Homebrew formulae failed: ${failed[*]}"
+            return 1
+        fi
         return
     fi
     local missing_formulae=()
-    local formula
     for formula in "$@"; do
         if ! brew list --formula "${formula}" >/dev/null 2>&1; then
             missing_formulae+=("${formula}")
@@ -153,6 +167,16 @@ main() {
     run_step install_moor
     run_step install_glow
     run_step install_treehouse
+    run_step install_git_absorb
+    run_step install_gitleaks
+    run_step install_sccache
+    run_step install_ripgrep_all
+    run_step install_difftastic
+    run_step install_cargo_nextest
+    run_step install_ansible_lint
+    run_step install_elan
+    run_step install_fzf_git
+    run_step install_cargo_extras
     run_step install_ccusage
     run_step install_starship
     run_step install_tmux_plugins

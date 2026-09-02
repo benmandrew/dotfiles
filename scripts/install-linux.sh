@@ -186,6 +186,16 @@ main() {
     run_step install_moor
     run_step install_glow
     run_step install_treehouse
+    run_step install_git_absorb
+    run_step install_gitleaks
+    run_step install_sccache
+    run_step install_ripgrep_all
+    run_step install_difftastic
+    run_step install_cargo_nextest
+    run_step install_ansible_lint
+    run_step install_elan
+    run_step install_fzf_git
+    run_step install_cargo_extras
     run_step install_ccusage
     run_step install_starship
     run_step install_tmux_plugins

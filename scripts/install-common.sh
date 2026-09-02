@@ -20,6 +20,43 @@ exec 3>&2
 _STEP_LOG_DIR=""
 _STEP_LOG_LINES=50
 
+# The terminal's line settings from before the running step, held here rather
+# than in a local so the handlers below can put them back. Empty when no step
+# is running.
+_QUIET_TTY_STATE=""
+
+_quiet_restore_tty() {
+    if [[ -n "${_QUIET_TTY_STATE}" ]]; then
+        stty "${_QUIET_TTY_STATE}" </dev/tty 2>/dev/null || true
+        _QUIET_TTY_STATE=""
+    fi
+}
+
+# One handler for everything this script has to undo, because a second
+# `trap ... EXIT` replaces the first rather than adding to it.
+_install_cleanup() {
+    _quiet_restore_tty
+    stop_sudo_helpers
+    # rmdir, not rm -rf: the directory is empty once every step that passed has
+    # had its log deleted, and a run with a failure keeps its logs.
+    if [[ -n "${_STEP_LOG_DIR}" ]]; then
+        rmdir "${_STEP_LOG_DIR}" 2>/dev/null || true
+    fi
+}
+
+# Clean up, then re-raise, so an interrupted run still dies of the signal it was
+# sent instead of carrying on to the next step.
+_install_signal_exit() {
+    local signal="$1"
+    _install_cleanup
+    trap - "${signal}" EXIT
+    kill "-${signal}" "$$"
+}
+
+trap _install_cleanup EXIT
+trap '_install_signal_exit INT' INT
+trap '_install_signal_exit TERM' TERM
+
 # Homebrew 6 has ask mode on by default, so `brew install` and `brew upgrade`
 # stop for a [y/n] confirmation whenever the plan reaches past the packages
 # named on the command line — a dependency bump, a cask's dependants. Nothing
@@ -45,7 +82,9 @@ export HOMEBREW_NO_ASK=1
 # --upgrade run on 19 August 2026 did that: the shell it ran from was left at
 # `-isig -opost`, so ^C and ^Z did nothing and every line of output started where
 # the last one ended. Which step it was went unidentified, which is the argument
-# for guarding all of them rather than the suspects.
+# for guarding all of them rather than the suspects. The restore hangs off the
+# signal handlers as well as the end of the step, since Ctrl-C during a step
+# would otherwise skip it and leave exactly that shell behind.
 #
 # Steps that must prompt therefore cannot go through here. The two that do —
 # `install_xcode_clt` and `install_homebrew` — are called directly instead.
@@ -54,9 +93,8 @@ export HOMEBREW_NO_ASK=1
 # status is returned unchanged, and `if ! quiet foo` suppresses errexit exactly
 # as `if ! foo` did.
 quiet() {
-    local tty_state=""
     if { : </dev/tty; } 2>/dev/null; then
-        tty_state="$(stty -g </dev/tty 2>/dev/null || true)"
+        _QUIET_TTY_STATE="$(stty -g </dev/tty 2>/dev/null || true)"
     fi
 
     local status=0 log_file=""
@@ -70,9 +108,7 @@ quiet() {
         "$@" </dev/null >"${log_file}" 2>&1 || status=$?
     fi
 
-    if [[ -n "${tty_state}" ]]; then
-        stty "${tty_state}" </dev/tty 2>/dev/null || true
-    fi
+    _quiet_restore_tty
 
     if [[ -n "${log_file}" ]]; then
         if ((status == 0)); then
@@ -93,15 +129,12 @@ run_step() {
     fi
 }
 
-# Name the failed steps again at the end. A full install runs 49 steps on Linux
-# and 45 on macOS, printing a screen or two of stderr past the one that broke, so
+# Name the failed steps again at the end. A full install runs 60 steps on Linux
+# and 55 on macOS, printing a screen or two of stderr past the one that broke, so
 # the report at the point of failure has scrolled away by the time it ends.
 check_failed() {
-    # Empty once every step that passed has had its log deleted, so this removes
-    # it; a run with a failure leaves the directory and the logs in it.
-    if [[ -n "${_STEP_LOG_DIR}" ]]; then
-        rmdir "${_STEP_LOG_DIR}" 2>/dev/null || true
-    fi
+    # The log directory is removed by the EXIT handler, which gets an
+    # interrupted run as well as this one.
     if [[ "${_INSTALL_FAILED}" == "true" ]]; then
         local count="${#_FAILED_STEPS[@]}" noun="steps"
         if ((count == 1)); then
@@ -156,6 +189,207 @@ download() {
     if ! curl -fsSL --proto '=https' --tlsv1.2 "${_CURL_RETRY_OPTS[@]}" "${url}" -o "${dest}"; then
         err "Download failed: ${url}"
         return 1
+    fi
+}
+
+# sha256 of a file, from whichever tool the platform has: coreutils on Linux,
+# shasum on macOS.
+sha256_file() {
+    local file="$1" out=""
+    if command -v sha256sum >/dev/null 2>&1; then
+        out="$(sha256sum "${file}")" || return 1
+    elif command -v shasum >/dev/null 2>&1; then
+        out="$(shasum -a 256 "${file}")" || return 1
+    else
+        err "Neither sha256sum nor shasum is on PATH; cannot verify downloads"
+        return 1
+    fi
+    # Both print `<hash>  <path>`.
+    printf '%s\n' "${out%% *}"
+}
+
+# Check a downloaded file against a checksum manifest published beside it.
+#
+# The manifests disagree on layout. Some releases ship one line per asset
+# (charmbracelet, kunchenguid and gitleaks call it checksums.txt, Kitware and
+# ryanoasis SHA-256.txt), some a file per asset holding the hash and the name
+# (BurntSushi, atuinsh, wez, nextest-rs), and mozilla ships the hash on its own
+# with no name at all. atuinsh prefixes the name with `*`, BSD's binary marker.
+# So the hash is the first field of the line naming the asset, falling back to
+# the only field when the manifest names nothing.
+#
+# What this buys and what it does not: the manifest sits in the same release as
+# the asset, so it cannot detect a release the publisher's own account was used
+# to rewrite. It does catch a truncated or corrupted download, and an asset
+# swapped underneath a tag pinned below — which is the failure the pins exist
+# to make visible.
+verify_sha256() {
+    local file="$1" manifest_url="$2" asset="$3"
+    local manifest expected actual
+    manifest="$(mktemp)"
+    if ! download "${manifest_url}" "${manifest}"; then
+        rm -f "${manifest}"
+        err "Could not fetch the checksum manifest for ${asset}"
+        return 1
+    fi
+    # Matched on the whole name field rather than on a substring of the line,
+    # because a manifest listing `<asset>.tar.gz` also lists
+    # `<asset>.tar.gz.sbom.json` beside it and a substring match would take
+    # whichever came first. The leading `*` is BSD's binary marker.
+    expected="$(awk -v a="${asset}" \
+        '{ n = $NF; sub(/^\*/, "", n); if (n == a) { print $1; exit } }' "${manifest}")"
+    if [[ -z "${expected}" ]]; then
+        expected="$(awk 'NF == 1 { print $1; exit }' "${manifest}")"
+    fi
+    rm -f "${manifest}"
+    expected="$(printf '%s' "${expected}" | tr '[:upper:]' '[:lower:]')"
+    if [[ ! "${expected}" =~ ^[0-9a-f]{64}$ ]]; then
+        err "No sha256 for ${asset} in ${manifest_url}"
+        return 1
+    fi
+    actual="$(sha256_file "${file}")" || return 1
+    actual="$(printf '%s' "${actual}" | tr '[:upper:]' '[:lower:]')"
+    if [[ "${actual}" != "${expected}" ]]; then
+        err "Checksum mismatch for ${asset}: expected ${expected}, got ${actual}"
+        return 1
+    fi
+}
+
+# download, then verify. The name looked up in the manifest is the last path
+# component of the download URL.
+download_verified() {
+    local url="$1" dest="$2" manifest_url="$3"
+    download "${url}" "${dest}" || return 1
+    verify_sha256 "${dest}" "${manifest_url}" "${url##*/}" || return 1
+}
+
+# nproc is coreutils and absent on macOS. Only Linux calls the two steps that
+# build from source, but neither should depend on that staying true.
+cpu_count() {
+    if command -v nproc >/dev/null 2>&1; then
+        nproc
+    elif command -v sysctl >/dev/null 2>&1; then
+        sysctl -n hw.ncpu 2>/dev/null || echo 1
+    else
+        echo 1
+    fi
+}
+
+# --- Pinned upstream versions ------------------------------------------------
+#
+# Ten steps used to resolve their tag through github_latest_tag on every run, so
+# two machines provisioned months apart came up with different builds of every
+# tool, and an upstream release that breaks something landed on whichever
+# machine happened to be provisioned next. A normal run installs the versions
+# below instead.
+#
+# --upgrade ignores the pins and takes whatever upstream calls latest, which is
+# also how a pin gets bumped: `make pins` prints each constant beside the tag
+# upstream publishes now, and the ones that differ are edited in here by hand.
+# Pinning is also what makes the checksum verification above worth anything,
+# since a floating tag has no fixed content to check against.
+#
+# Each value is the tag exactly as upstream publishes it -- some carry a leading
+# `v`, some do not, and nextest-rs prefixes the crate name -- so the call sites
+# strip what they need rather than the constants guessing.
+ATUIN_VERSION="v18.21.0"
+BAT_VERSION="v0.26.1"
+CARGO_NEXTEST_VERSION="cargo-nextest-0.9.143"
+CMAKE_VERSION="v4.4.3"
+DELTA_VERSION="0.19.2"
+DIFFTASTIC_VERSION="0.70.0"
+ELAN_VERSION="v4.2.4"
+EZA_VERSION="v0.23.5"
+FD_VERSION="v10.5.0"
+GIT_ABSORB_VERSION="0.9.0"
+GITLEAKS_VERSION="v8.30.1"
+GLOW_VERSION="v3.0.0"
+GO_VERSION="go1.27.1"
+HYPERFINE_VERSION="v1.20.0"
+LUA_LS_VERSION="3.19.1"
+MOOR_VERSION="v2.18.0"
+NERD_FONTS_VERSION="v3.5.1"
+OPAM_VERSION="2.5.2"
+RIPGREP_ALL_VERSION="v0.10.10"
+RIPGREP_VERSION="15.2.0"
+SCCACHE_VERSION="v0.17.0"
+TREEHOUSE_VERSION="v2.3.0"
+WEZTERM_VERSION="20240203-110809-5046fc22"
+ZOXIDE_VERSION="v0.10.0"
+
+# btop is pinned for a reason of its own rather than for reproducibility: >=
+# 1.4.5 uses std::ranges::to, which needs GCC 14, and jammy ships GCC 11. Bump
+# it once the oldest target distro has a new enough compiler.
+BTOP_VERSION="1.4.4"
+
+# tmux is built from source, and the build is the slowest step in the run, so
+# this deliberately lags upstream rather than tracking it.
+TMUX_VERSION="3.6b"
+
+# The pinned tag, or the newest tag upstream publishes under --upgrade.
+pinned_tag() {
+    local pin="$1" repo="$2"
+    if [[ -n "${UPGRADE:-}" ]]; then
+        github_latest_tag "${repo}"
+        return
+    fi
+    printf '%s\n' "${pin}"
+}
+
+# Print each pin beside the tag upstream publishes now, for `make pins`. A line
+# where the two differ is a pin that can be bumped. Writes to stdout: this is a
+# report, not a step.
+print_pin_updates() {
+    local spec name repo pinned latest
+    for spec in \
+        "ATUIN_VERSION|atuinsh/atuin" \
+        "BAT_VERSION|sharkdp/bat" \
+        "BTOP_VERSION|aristocratos/btop" \
+        "CARGO_NEXTEST_VERSION|nextest-rs/nextest" \
+        "CMAKE_VERSION|Kitware/CMake" \
+        "DELTA_VERSION|dandavison/delta" \
+        "DIFFTASTIC_VERSION|Wilfred/difftastic" \
+        "ELAN_VERSION|leanprover/elan" \
+        "EZA_VERSION|eza-community/eza" \
+        "FD_VERSION|sharkdp/fd" \
+        "GIT_ABSORB_VERSION|tummychow/git-absorb" \
+        "GITLEAKS_VERSION|gitleaks/gitleaks" \
+        "GLOW_VERSION|charmbracelet/glow" \
+        "HYPERFINE_VERSION|sharkdp/hyperfine" \
+        "LUA_LS_VERSION|LuaLS/lua-language-server" \
+        "MOOR_VERSION|walles/moor" \
+        "NERD_FONTS_VERSION|ryanoasis/nerd-fonts" \
+        "OPAM_VERSION|ocaml/opam" \
+        "RIPGREP_ALL_VERSION|phiresky/ripgrep-all" \
+        "RIPGREP_VERSION|BurntSushi/ripgrep" \
+        "SCCACHE_VERSION|mozilla/sccache" \
+        "TMUX_VERSION|tmux/tmux" \
+        "TREEHOUSE_VERSION|kunchenguid/treehouse" \
+        "WEZTERM_VERSION|wez/wezterm" \
+        "ZOXIDE_VERSION|ajeetdsouza/zoxide"; do
+        name="${spec%%|*}"
+        repo="${spec#*|}"
+        pinned="${!name}"
+        latest="$(github_latest_tag "${repo}" 2>/dev/null)" || latest=""
+        if [[ -z "${latest}" ]]; then
+            printf '%-24s %-30s (upstream unreachable)\n' "${name}" "${pinned}"
+        elif [[ "${pinned}" == "${latest}" ]]; then
+            printf '%-24s %-30s up to date\n' "${name}" "${pinned}"
+        else
+            printf '%-24s %-30s -> %s\n' "${name}" "${pinned}" "${latest}"
+        fi
+    done
+    # Go publishes its current release as plain text rather than as a GitHub tag.
+    local go_out go_latest
+    go_out="$(curl -fsSL --proto '=https' --tlsv1.2 "${_CURL_RETRY_OPTS[@]}" \
+        'https://go.dev/VERSION?m=text' 2>/dev/null)" || go_out=""
+    go_latest="${go_out%%$'\n'*}"
+    if [[ -z "${go_latest}" ]]; then
+        printf '%-24s %-30s (upstream unreachable)\n' GO_VERSION "${GO_VERSION}"
+    elif [[ "${go_latest}" == "${GO_VERSION}" ]]; then
+        printf '%-24s %-30s up to date\n' GO_VERSION "${GO_VERSION}"
+    else
+        printf '%-24s %-30s -> %s\n' GO_VERSION "${GO_VERSION}" "${go_latest}"
     fi
 }
 
@@ -225,7 +459,6 @@ start_sudo_askpass() {
     chmod 700 "${helper}"
     printf '#!/bin/sh\nexec cat %s\n' "${secret}" >"${helper}"
     export SUDO_ASKPASS="${helper}"
-    trap stop_sudo_helpers EXIT
 }
 
 stop_sudo_askpass() {
@@ -293,9 +526,6 @@ start_sudo_keepalive() {
     # never prints one. Best-effort: macOS ships bash 3.2, where `disown` may
     # only accept a %jobspec rather than a bare pid, so failure is ignored.
     disown "${_SUDO_KEEPALIVE_PID}" 2>/dev/null || true
-    # One EXIT trap, not two: a second `trap ... EXIT` replaces the first, so
-    # both teardowns have to hang off the same handler.
-    trap stop_sudo_helpers EXIT
 }
 
 stop_sudo_keepalive() {
@@ -311,6 +541,7 @@ stop_sudo_helpers() {
 }
 
 parse_args() {
+    local arg
     for arg in "$@"; do
         case "${arg}" in
             --upgrade) UPGRADE=true ;;
@@ -422,11 +653,15 @@ npm_install_g() {
 
 # Wrapper around curl for GitHub API calls; adds auth header when GITHUB_TOKEN is set
 # to avoid unauthenticated rate limits (60 req/hr) on shared CI runner IPs.
+# Same TLS floor as download(): these calls decide which version gets installed,
+# so a downgrade to plaintext or to an obsolete TLS version matters here at
+# least as much as on the fetch that follows.
 github_api_curl() {
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-        curl -fsSL "${_CURL_RETRY_OPTS[@]}" -H "Authorization: Bearer ${GITHUB_TOKEN}" "$@"
+        curl -fsSL --proto '=https' --tlsv1.2 "${_CURL_RETRY_OPTS[@]}" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" "$@"
     else
-        curl -fsSL "${_CURL_RETRY_OPTS[@]}" "$@"
+        curl -fsSL --proto '=https' --tlsv1.2 "${_CURL_RETRY_OPTS[@]}" "$@"
     fi
 }
 
@@ -437,11 +672,21 @@ github_latest_tag() {
     # RETURN traps persist for the caller too until unset, so clear it here
     # or it would also fire (and re-delete an unrelated tmp) when the caller returns.
     trap 'rm -f "${tmp}"; trap - RETURN' RETURN
-    github_api_curl "https://api.github.com/repos/${repo}/releases/latest" -o "${tmp}"
+    # Checked here rather than at each call site: a rate-limited or unreachable
+    # API returns an empty tag, which the callers then paste into an asset URL
+    # and download a 404 page with. Three of the ten guarded it, seven did not.
+    if ! github_api_curl "https://api.github.com/repos/${repo}/releases/latest" -o "${tmp}"; then
+        err "GitHub API request failed for ${repo}"
+        return 1
+    fi
     local tag_line tag
     tag_line="$(grep -m1 '"tag_name"' "${tmp}" || true)"
     tag="${tag_line#*\"tag_name\": \"}"
     tag="${tag%%\"*}"
+    if [[ -z "${tag}" ]]; then
+        err "No release tag for ${repo} in the GitHub API response"
+        return 1
+    fi
     echo "${tag}"
 }
 
@@ -674,10 +919,7 @@ install_btop() {
     # linux/x86_64 and resolves libnvidia-ml.so at runtime, so it needs no CUDA
     # toolkit at build time -- just the driver already being present.
     #
-    # Pinned rather than tracking latest: btop >= 1.4.5 uses std::ranges::to,
-    # which needs GCC 14, and jammy ships GCC 11. Bump this once the oldest
-    # target distro has a new enough compiler.
-    local version="1.4.4"
+    local version="${BTOP_VERSION}"
 
     # ~/.local/bin is appended after /usr/bin on PATH, so a leftover apt btop
     # would shadow the binary installed below.
@@ -735,7 +977,7 @@ install_btop() {
     # binutils/glibc get picked up alongside the system g++, and the link fails
     # on __isoc23_* symbols that the older system glibc does not export.
     local jobs
-    jobs="$(nproc)"
+    jobs="$(cpu_count)"
     env PATH=/usr/local/bin:/usr/bin:/bin CXX=/usr/bin/g++ \
         make -C "${src_dir}" -j"${jobs}" || return 1
     mkdir -p "${HOME}/.local/bin"
@@ -833,7 +1075,7 @@ install_clangd() {
 }
 
 install_cmake() {
-    local required_version="4.3.2"
+    local required_version="${CMAKE_VERSION#v}"
     local os_name
     os_name="$(uname -s)"
 
@@ -864,7 +1106,7 @@ install_cmake() {
     local install_version
     if [[ -n "${UPGRADE:-}" ]]; then
         local latest_tag
-        latest_tag="$(github_latest_tag Kitware/CMake)"
+        latest_tag="$(github_latest_tag Kitware/CMake)" || return 1
         install_version="${latest_tag#v}"
         if command -v cmake >/dev/null 2>&1; then
             local cmake_output current_version
@@ -903,8 +1145,9 @@ install_cmake() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    download "https://github.com/Kitware/CMake/releases/download/v${install_version}/${installer}" \
-        "${tmp_dir}/${installer}" || return 1
+    local cmake_base="https://github.com/Kitware/CMake/releases/download/v${install_version}"
+    download_verified "${cmake_base}/${installer}" "${tmp_dir}/${installer}" \
+        "${cmake_base}/cmake-${install_version}-SHA-256.txt" || return 1
     chmod +x "${tmp_dir}/${installer}"
     sudo sh "${tmp_dir}/${installer}" --prefix=/usr/local --skip-license
 }
@@ -927,15 +1170,28 @@ install_cmake() {
 # The triple list is that tool's platform coverage: only triples upstream
 # actually publishes are named, so a platform absent from the list falls back
 # to `cargo install`. eza is the one that does, shipping no macOS asset at all.
+#
+# Five fields, pipe-separated:
+#   <repo>|<asset template>|<published triples>|<checksum template>|<pinned tag>
+# The checksum template is empty for the upstreams that publish none, which is
+# most of them; %ASSET% in it stands for the asset name already expanded.
 _rust_tool_spec() {
     case "$1" in
-        eza) echo "eza-community/eza|eza_%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu" ;;
-        fd) echo "sharkdp/fd|fd-%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin" ;;
-        bat) echo "sharkdp/bat|bat-%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin" ;;
-        rg) echo "BurntSushi/ripgrep|ripgrep-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin" ;;
-        delta) echo "dandavison/delta|delta-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin" ;;
-        hyperfine) echo "sharkdp/hyperfine|hyperfine-%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin" ;;
-        zoxide) echo "ajeetdsouza/zoxide|zoxide-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin" ;;
+        eza) echo "eza-community/eza|eza_%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu||${EZA_VERSION}" ;;
+        fd) echo "sharkdp/fd|fd-%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin||${FD_VERSION}" ;;
+        bat) echo "sharkdp/bat|bat-%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin||${BAT_VERSION}" ;;
+        rg) echo "BurntSushi/ripgrep|ripgrep-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin|%ASSET%.sha256|${RIPGREP_VERSION}" ;;
+        delta) echo "dandavison/delta|delta-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin||${DELTA_VERSION}" ;;
+        hyperfine) echo "sharkdp/hyperfine|hyperfine-%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin||${HYPERFINE_VERSION}" ;;
+        zoxide) echo "ajeetdsouza/zoxide|zoxide-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin||${ZOXIDE_VERSION}" ;;
+        difft) echo "Wilfred/difftastic|difft-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin x86_64-apple-darwin||${DIFFTASTIC_VERSION}" ;;
+        sccache) echo "mozilla/sccache|sccache-%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin x86_64-apple-darwin|%ASSET%.sha256|${SCCACHE_VERSION}" ;;
+        # Upstream publishes one fat macOS binary rather than a per-arch pair,
+        # which is why universal-apple-darwin is in the triple list at all.
+        cargo-nextest) echo "nextest-rs/nextest|%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl universal-apple-darwin|%TAG%-%TRIPLE%.sha256|${CARGO_NEXTEST_VERSION}" ;;
+        # No aarch64 asset for either platform, so an ARM machine takes the
+        # cargo fallback; git-absorb is a small crate and builds in seconds.
+        git-absorb) echo "tummychow/git-absorb|git-absorb-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl x86_64-apple-darwin||${GIT_ABSORB_VERSION}" ;;
         *) return 1 ;;
     esac
 }
@@ -952,8 +1208,8 @@ _rust_tool_triples() {
     case "${os_name}/${arch}" in
         Linux/x86_64 | Linux/amd64) echo "x86_64-unknown-linux-musl x86_64-unknown-linux-gnu" ;;
         Linux/aarch64 | Linux/arm64) echo "aarch64-unknown-linux-musl aarch64-unknown-linux-gnu" ;;
-        Darwin/arm64 | Darwin/aarch64) echo "aarch64-apple-darwin" ;;
-        Darwin/x86_64) echo "x86_64-apple-darwin" ;;
+        Darwin/arm64 | Darwin/aarch64) echo "aarch64-apple-darwin universal-apple-darwin" ;;
+        Darwin/x86_64) echo "x86_64-apple-darwin universal-apple-darwin" ;;
         *) echo "" ;;
     esac
 }
@@ -970,13 +1226,17 @@ _rust_tool_version() {
 }
 
 _install_rust_tool_binary() {
-    local cmd="$1" repo="$2" template="$3" triple="$4"
+    local cmd="$1" repo="$2" template="$3" triple="$4" sum_template="$5" pin="$6"
 
     local tag version
-    tag="$(github_latest_tag "${repo}")"
+    tag="$(pinned_tag "${pin}" "${repo}")" || return 1
+    # nextest-rs tags the crate name into the tag (`cargo-nextest-0.9.143`), so
+    # strip that as well as a leading `v` before comparing against what the
+    # installed binary reports.
     version="${tag#v}"
+    version="${version#"${cmd}-"}"
     if [[ -z "${version}" ]]; then
-        err "Could not resolve the latest ${cmd} release"
+        err "Could not resolve the ${cmd} release to install"
         return 1
     fi
 
@@ -994,11 +1254,21 @@ _install_rust_tool_binary() {
     asset="${asset//%VER%/${version}}"
     asset="${asset//%TRIPLE%/${triple}}"
 
+    local base_url="https://github.com/${repo}/releases/download/${tag}"
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    download "https://github.com/${repo}/releases/download/${tag}/${asset}" \
-        "${tmp_dir}/${asset}" || return 1
+    if [[ -n "${sum_template}" ]]; then
+        local sum_asset="${sum_template}"
+        sum_asset="${sum_asset//%ASSET%/${asset}}"
+        sum_asset="${sum_asset//%TAG%/${tag}}"
+        sum_asset="${sum_asset//%VER%/${version}}"
+        sum_asset="${sum_asset//%TRIPLE%/${triple}}"
+        download_verified "${base_url}/${asset}" "${tmp_dir}/${asset}" \
+            "${base_url}/${sum_asset}" || return 1
+    else
+        download "${base_url}/${asset}" "${tmp_dir}/${asset}" || return 1
+    fi
     tar -C "${tmp_dir}" -xf "${tmp_dir}/${asset}" || return 1
 
     # Located by name, since the tarballs disagree on whether the binary sits
@@ -1012,6 +1282,30 @@ _install_rust_tool_binary() {
     fi
     mkdir -p "${HOME}/.local/bin"
     install -m755 "${binary}" "${HOME}/.local/bin/${cmd}" || return 1
+
+    # Several of these tarballs carry a completions/ directory, and for a tool
+    # with no "print your own completion" subcommand that archive is the only
+    # source there is: install_zsh_completions can generate for uv, fd, delta
+    # and the rest, but zoxide 0.9.9 has no such subcommand, so on Linux — where
+    # these arrive as bare binaries with no package manager to link a
+    # site-functions file — `zoxide <TAB>` completed nothing at all. Homebrew
+    # links one on macOS, which is why the gap only shows on the other platform.
+    # Skipped where a system-wide copy already exists, so the package manager
+    # keeps ownership, matching the policy install_zsh_completions follows.
+    local completion
+    completion="$(find "${tmp_dir}" -type f -name "_${cmd}" -print -quit)"
+    if [[ -n "${completion}" ]] && ! _zsh_completion_installed "${cmd}"; then
+        local comp_dir="${XDG_DATA_HOME:-${HOME}/.local/share}/zsh/site-functions"
+        mkdir -p "${comp_dir}"
+        if install -m644 "${completion}" "${comp_dir}/_${cmd}"; then
+            log "Installed the zsh completion shipped with ${cmd}"
+            # compinit caches the command-to-function map in the dump and only
+            # rereads fpath when the dump is stale, so drop it. Cheap, and this
+            # step does not always run before install_zsh_completions, which
+            # does the same at the end of a full run.
+            rm -f "${ZDOTDIR:-${HOME}}/.zcompdump" "${ZDOTDIR:-${HOME}}/.zcompdump.zwc"
+        fi
+    fi
 
     # Delete the build this function left behind before it moved to prebuilt
     # binaries. ~/.local/bin leads ~/.cargo/bin in the rendered zshrc so the new
@@ -1043,13 +1337,10 @@ _install_cargo_tool_from_source() {
 install_cargo_tool() {
     local cmd="$1" crate="${2:-$1}"
 
-    local repo="" template="" published="" triple=""
+    local repo="" template="" published="" sum_template="" pin="" triple=""
     local spec
     if spec="$(_rust_tool_spec "${cmd}")"; then
-        repo="${spec%%|*}"
-        template="${spec#*|}"
-        template="${template%%|*}"
-        published="${spec##*|}"
+        IFS='|' read -r repo template published sum_template pin <<<"${spec}"
 
         local candidates candidate triple_list
         triple_list="$(_rust_tool_triples)"
@@ -1083,7 +1374,8 @@ install_cargo_tool() {
         _install_cargo_tool_from_source "${crate}"
         return
     fi
-    _install_rust_tool_binary "${cmd}" "${repo}" "${template}" "${triple}"
+    _install_rust_tool_binary "${cmd}" "${repo}" "${template}" "${triple}" \
+        "${sum_template}" "${pin}"
 }
 
 install_pyright() {
@@ -1255,8 +1547,17 @@ install_atuin() {
     fi
 
     # Linux: official release tarball, which upstream ships for both arches.
+    # The skip check comes first, so an install that has nothing to do costs no
+    # network round trip -- and, under --upgrade, the pin resolves to whatever
+    # upstream calls latest.
+    if command -v atuin >/dev/null 2>&1 && [[ -z "${UPGRADE:-}" ]] &&
+        atuin --version >/dev/null 2>&1; then
+        log "atuin already installed; skipping"
+        return
+    fi
+
     local tag version
-    tag="$(github_latest_tag atuinsh/atuin)"
+    tag="$(pinned_tag "${ATUIN_VERSION}" atuinsh/atuin)" || return 1
     version="${tag#v}"
 
     if command -v atuin >/dev/null 2>&1; then
@@ -1308,9 +1609,10 @@ install_atuin() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    download "https://github.com/atuinsh/atuin/releases/download/${tag}/${tarball}" \
-        "${tmp_dir}/${tarball}" || return 1
-    tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}"
+    local atuin_base="https://github.com/atuinsh/atuin/releases/download/${tag}"
+    download_verified "${atuin_base}/${tarball}" "${tmp_dir}/${tarball}" \
+        "${atuin_base}/${tarball}.sha256" || return 1
+    tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}" || return 1
     mkdir -p "${HOME}/.local/bin"
     install -m755 "${tmp_dir}/atuin-${triple}/atuin" "${HOME}/.local/bin/atuin"
 }
@@ -1400,7 +1702,7 @@ install_direnv() {
     local script_path
     script_path="$(mktemp)"
     download https://direnv.net/install.sh "${script_path}" || return 1
-    bin_path="${HOME}/.local/bin" bash "${script_path}"
+    bin_path="${HOME}/.local/bin" bash "${script_path}" || return 1
     rm -f "${script_path}"
 }
 
@@ -1576,7 +1878,7 @@ install_tmux_from_source() {
     local build_version
 
     if [[ -n "${UPGRADE:-}" ]]; then
-        build_version="$(github_latest_tag tmux/tmux)"
+        build_version="$(github_latest_tag tmux/tmux)" || return 1
         if command -v tmux >/dev/null 2>&1; then
             local tmux_v_output tmux_v_word current_version
             tmux_v_output="$(tmux -V)"
@@ -1592,7 +1894,7 @@ install_tmux_from_source() {
             log "Installing tmux ${build_version}"
         fi
     else
-        build_version="3.6b"
+        build_version="${TMUX_VERSION}"
         if command -v tmux >/dev/null 2>&1; then
             local current_version
             local tmux_v_output tmux_v_word
@@ -1618,9 +1920,9 @@ install_tmux_from_source() {
     trap 'rm -rf "${build_dir}"; trap - RETURN' RETURN
     download "https://github.com/tmux/tmux/releases/download/${build_version}/${tarball}" \
         "${build_dir}/${tarball}" || return 1
-    tar -C "${build_dir}" -xf "${build_dir}/${tarball}"
-    local cpu_count
-    cpu_count="$(nproc)"
+    tar -C "${build_dir}" -xf "${build_dir}/${tarball}" || return 1
+    local jobs
+    jobs="$(cpu_count)"
     # configure and make run with a pruned PATH and an explicit CC, for the same
     # reason install_btop does. direnv activates this repo's own flake for anyone
     # running the installer from a shell sat in it, and pkgs.mkShell puts
@@ -1633,7 +1935,7 @@ install_tmux_from_source() {
     (
         cd "${build_dir}/tmux-${build_version}" &&
             "${build_env[@]}" ./configure &&
-            "${build_env[@]}" make -j"${cpu_count}" &&
+            "${build_env[@]}" make -j"${jobs}" &&
             sudo make install
     )
 }
@@ -1653,7 +1955,18 @@ install_tmux_plugins() {
     else
         log "Installing tmux plugin manager (tpm)"
         mkdir -p "${HOME}/.tmux/plugins"
-        git clone https://github.com/tmux-plugins/tpm "${tpm_dir}"
+        git clone https://github.com/tmux-plugins/tpm "${tpm_dir}" || return 1
+    fi
+
+    # Cloning tpm installs no plugin: tpm's own binding does that, and nothing
+    # here ever pressed it, so every machine had ~/.tmux/plugins holding tpm
+    # alone and tmux-sensible's settings were never applied. install_plugins
+    # reads the @plugin lines out of the tmux config and is a no-op once they
+    # are all cloned, so it can run on every install. It needs no server and
+    # skips tpm itself.
+    if [[ -x "${tpm_dir}/bin/install_plugins" ]]; then
+        log "Installing tmux plugins"
+        "${tpm_dir}/bin/install_plugins" || return 1
     fi
 }
 
@@ -1708,12 +2021,8 @@ install_wezterm() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    github_api_curl https://api.github.com/repos/wez/wezterm/releases/latest \
-        -o "${tmp_dir}/release.json"
-    local tag tag_line
-    tag_line="$(grep -m1 '"tag_name"' "${tmp_dir}/release.json" || true)"
-    tag="${tag_line#*\"tag_name\": \"}"
-    tag="${tag%%\"*}"
+    local tag
+    tag="$(pinned_tag "${WEZTERM_VERSION}" wez/wezterm)" || return 1
     if [[ -n "${UPGRADE:-}" ]] && command -v wezterm >/dev/null 2>&1; then
         local installed_tag
         installed_tag="$(wezterm --version 2>/dev/null | awk '{print $2}' || true)"
@@ -1723,8 +2032,9 @@ install_wezterm() {
         fi
     fi
     local deb="wezterm-${tag}.Ubuntu${ubuntu_version}.deb"
-    download "https://github.com/wez/wezterm/releases/download/${tag}/${deb}" \
-        "${tmp_dir}/${deb}" || return 1
+    local wezterm_base="https://github.com/wez/wezterm/releases/download/${tag}"
+    download_verified "${wezterm_base}/${deb}" "${tmp_dir}/${deb}" \
+        "${wezterm_base}/${deb}.sha256" || return 1
     sudo apt-get install -y "${tmp_dir}/${deb}"
 }
 
@@ -1766,7 +2076,7 @@ install_nerd_font() {
         log "Installing CodeNewRoman Nerd Font"
     fi
     local tag
-    tag="$(github_latest_tag ryanoasis/nerd-fonts)"
+    tag="$(pinned_tag "${NERD_FONTS_VERSION}" ryanoasis/nerd-fonts)" || return 1
     if [[ -n "${UPGRADE:-}" ]] && [[ -f "${version_file}" ]]; then
         local installed_tag
         installed_tag="$(cat "${version_file}")"
@@ -1778,10 +2088,11 @@ install_nerd_font() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    download "https://github.com/ryanoasis/nerd-fonts/releases/download/${tag}/CodeNewRoman.zip" \
-        "${tmp_dir}/CodeNewRoman.zip" || return 1
+    local nerd_base="https://github.com/ryanoasis/nerd-fonts/releases/download/${tag}"
+    download_verified "${nerd_base}/CodeNewRoman.zip" "${tmp_dir}/CodeNewRoman.zip" \
+        "${nerd_base}/SHA-256.txt" || return 1
     mkdir -p "${font_dir}"
-    unzip -oq "${tmp_dir}/CodeNewRoman.zip" -d "${font_dir}"
+    unzip -oq "${tmp_dir}/CodeNewRoman.zip" -d "${font_dir}" || return 1
     echo "${tag}" >"${version_file}"
     fc-cache -f "${font_dir}" >/dev/null 2>&1 || true
 }
@@ -1855,12 +2166,8 @@ install_lua_ls() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    github_api_curl https://api.github.com/repos/LuaLS/lua-language-server/releases/latest \
-        -o "${tmp_dir}/release.json"
-    local tag tag_line
-    tag_line="$(grep -m1 '"tag_name"' "${tmp_dir}/release.json" || true)"
-    tag="${tag_line#*\"tag_name\": \"}"
-    tag="${tag%%\"*}"
+    local tag
+    tag="$(pinned_tag "${LUA_LS_VERSION}" LuaLS/lua-language-server)" || return 1
     if [[ -n "${UPGRADE:-}" ]] && command -v lua-language-server >/dev/null 2>&1; then
         local current_version
         current_version="$(lua-language-server --version 2>/dev/null || true)"
@@ -1872,9 +2179,11 @@ install_lua_ls() {
     local archive="lua-language-server-${tag}-${lua_arch}.tar.gz"
     local install_dir="${HOME}/.local/opt/lua-language-server"
     mkdir -p "${install_dir}"
+    # No checksum manifest: LuaLS publishes the tarballs alone.
     download "https://github.com/LuaLS/lua-language-server/releases/download/${tag}/${archive}" \
         "${tmp_dir}/${archive}" || return 1
-    tar -xf "${tmp_dir}/${archive}" -C "${install_dir}"
+    tar -xf "${tmp_dir}/${archive}" -C "${install_dir}" || return 1
+    mkdir -p "${HOME}/.local/bin"
     ln -sf "${install_dir}/bin/lua-language-server" "${HOME}/.local/bin/lua-language-server"
 }
 
@@ -1894,8 +2203,11 @@ install_opam() {
         else
             opam_arch="x86_64"
         fi
+        # opam signs its binaries with a detached GPG signature rather than
+        # publishing a checksum manifest, and verifying one needs the opam
+        # release key imported first, so this download is unverified.
         local tag version
-        tag="$(github_latest_tag ocaml/opam)"
+        tag="$(pinned_tag "${OPAM_VERSION}" ocaml/opam)" || return 1
         version="${tag#v}"
         if [[ -n "${UPGRADE:-}" ]] && command -v opam >/dev/null 2>&1; then
             local current_version
@@ -1938,14 +2250,56 @@ install_opam() {
     # Initialise opam root (idempotent: skip if ~/.opam already exists)
     if [[ -d "${HOME}/.opam" ]]; then
         log "opam already initialised; skipping opam init"
+    else
+        local init_flags=(--bare --yes --no-setup)
+        if ! _opam_sandboxing_works; then
+            log "bwrap sandboxing unavailable (container/VM); initialising opam with --disable-sandboxing"
+            init_flags+=(--disable-sandboxing)
+        fi
+        opam init "${init_flags[@]}" || return 1
+    fi
+
+    install_ocaml_tools
+}
+
+# ocamllsp and ocamlformat, which the Neovim config enables and expects on PATH.
+# They are opam packages, so they need a switch: `opam init --bare` deliberately
+# creates none, and `opam install` into no switch fails. ocaml-system reuses a
+# compiler already on the machine where there is one, which is the difference
+# between seconds and a from-source OCaml build on every fresh install.
+install_ocaml_tools() {
+    require_cmd opam
+    local switches
+    switches="$(opam switch list --short 2>/dev/null || true)"
+    if ! grep -qx "default" <<<"${switches}"; then
+        log "Creating the default opam switch"
+        if command -v ocamlc >/dev/null 2>&1; then
+            opam switch create default --packages=ocaml-system --yes || return 1
+        else
+            opam switch create default --yes || return 1
+        fi
+    fi
+
+    local installed
+    installed="$(opam list --switch default --installed --short 2>/dev/null || true)"
+    local missing=()
+    local package
+    for package in ocaml-lsp-server ocamlformat; do
+        if ! grep -qx "${package}" <<<"${installed}"; then
+            missing+=("${package}")
+        fi
+    done
+    if ((${#missing[@]} == 0)); then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "ocaml-lsp-server and ocamlformat already installed; skipping"
+            return
+        fi
+        log "Upgrading ocaml-lsp-server and ocamlformat"
+        opam upgrade --switch default --yes ocaml-lsp-server ocamlformat || return 1
         return
     fi
-    local init_flags=(--bare --yes --no-setup)
-    if ! _opam_sandboxing_works; then
-        log "bwrap sandboxing unavailable (container/VM); initialising opam with --disable-sandboxing"
-        init_flags+=(--disable-sandboxing)
-    fi
-    opam init "${init_flags[@]}"
+    log "Installing ${missing[*]} into the default opam switch"
+    opam install --switch default --yes "${missing[@]}" || return 1
 }
 
 install_go() {
@@ -1988,16 +2342,52 @@ install_go() {
             ;;
     esac
 
-    local latest version_output
-    version_output="$(curl -fsSL "${_CURL_RETRY_OPTS[@]}" 'https://go.dev/VERSION?m=text')"
-    latest="$(printf '%s' "${version_output}" | head -1)" # e.g. go1.24.2
+    # Pinned like every other toolchain here. Under --upgrade the current
+    # release comes from go.dev, whose status is checked: a bare curl left an
+    # empty version behind, which then built a tarball name of
+    # `.linux-amd64.tar.gz` and fetched a 404 page under it.
+    local latest="${GO_VERSION}"
+    if [[ -n "${UPGRADE:-}" ]]; then
+        local version_output
+        if ! version_output="$(curl -fsSL --proto '=https' --tlsv1.2 \
+            "${_CURL_RETRY_OPTS[@]}" 'https://go.dev/VERSION?m=text')"; then
+            err "Could not read the current Go release from go.dev"
+            return 1
+        fi
+        latest="${version_output%%$'\n'*}" # e.g. go1.24.2
+        if [[ -z "${latest}" ]]; then
+            err "go.dev returned no version"
+            return 1
+        fi
+    fi
+
     local tarball="${latest}.linux-${go_arch}.tar.gz"
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    download "https://go.dev/dl/${tarball}" "${tmp_dir}/${tarball}" || return 1
-    sudo rm -rf /usr/local/go
-    sudo tar -C /usr/local -xf "${tmp_dir}/${tarball}" || return 1
+    download_verified "https://go.dev/dl/${tarball}" "${tmp_dir}/${tarball}" \
+        "https://dl.google.com/go/${tarball}.sha256" || return 1
+
+    # Unpack beside the live toolchain and swap, rather than deleting first: an
+    # extract that fails after `rm -rf /usr/local/go` used to leave the machine
+    # with no Go at all, and the tar was unchecked.
+    local staged="${tmp_dir}/stage"
+    mkdir -p "${staged}"
+    tar -C "${staged}" -xf "${tmp_dir}/${tarball}" || return 1
+    if [[ ! -x "${staged}/go/bin/go" ]]; then
+        err "No go binary inside ${tarball}; upstream layout changed"
+        return 1
+    fi
+    sudo rm -rf /usr/local/go.old
+    if [[ -d /usr/local/go ]]; then
+        sudo mv /usr/local/go /usr/local/go.old || return 1
+    fi
+    if ! sudo mv "${staged}/go" /usr/local/go; then
+        err "Could not move the new Go into place"
+        sudo mv /usr/local/go.old /usr/local/go 2>/dev/null || true
+        return 1
+    fi
+    sudo rm -rf /usr/local/go.old
     export PATH="/usr/local/go/bin:${PATH}"
 }
 
@@ -2042,14 +2432,16 @@ install_moor() {
         return
     fi
 
-    # x86_64: download official release binary
+    # x86_64: download official release binary. No checksum manifest is
+    # published alongside it.
     local tag
-    tag="$(github_latest_tag walles/moor)"
+    tag="$(pinned_tag "${MOOR_VERSION}" walles/moor)" || return 1
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
     download "https://github.com/walles/moor/releases/download/${tag}/moor-${tag}-linux-amd64" \
         "${tmp_dir}/moor" || return 1
+    mkdir -p "${HOME}/.local/bin"
     install -m755 "${tmp_dir}/moor" "${HOME}/.local/bin/moor"
 }
 
@@ -2095,15 +2487,16 @@ install_glow() {
     esac
 
     local tag version
-    tag="$(github_latest_tag charmbracelet/glow)"
+    tag="$(pinned_tag "${GLOW_VERSION}" charmbracelet/glow)" || return 1
     version="${tag#v}" # release assets drop the leading v
     local dir_name="glow_${version}_Linux_${release_arch}"
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    download "https://github.com/charmbracelet/glow/releases/download/${tag}/${dir_name}.tar.gz" \
-        "${tmp_dir}/glow.tar.gz" || return 1
-    tar -C "${tmp_dir}" -xf "${tmp_dir}/glow.tar.gz"
+    local glow_base="https://github.com/charmbracelet/glow/releases/download/${tag}"
+    download_verified "${glow_base}/${dir_name}.tar.gz" "${tmp_dir}/${dir_name}.tar.gz" \
+        "${glow_base}/checksums.txt" || return 1
+    tar -C "${tmp_dir}" -xf "${tmp_dir}/${dir_name}.tar.gz" || return 1
     mkdir -p "${HOME}/.local/bin"
     install -m755 "${tmp_dir}/${dir_name}/glow" "${HOME}/.local/bin/glow"
 }
@@ -2111,17 +2504,23 @@ install_glow() {
 install_treehouse() {
     # Not in brew and no upstream arm64-Linux gap, so download the official
     # release binary on every platform (darwin/linux x amd64/arm64).
-    local tag
-    tag="$(github_latest_tag kunchenguid/treehouse)"
-
+    #
+    # The skip check comes before the tag resolves, so an install with nothing
+    # to do costs no network round trip.
+    local version_output current=""
     if command -v treehouse >/dev/null 2>&1; then
-        local version_output current
         version_output="$(treehouse --version 2>/dev/null)"
         current="$(awk '{print $NF}' <<<"${version_output}")"
         if [[ -z "${UPGRADE:-}" ]]; then
             log "treehouse ${current} already installed; skipping"
             return
         fi
+    fi
+
+    local tag
+    tag="$(pinned_tag "${TREEHOUSE_VERSION}" kunchenguid/treehouse)" || return 1
+
+    if [[ -n "${current}" ]]; then
         if [[ "${current}" == "${tag}" ]]; then
             log "treehouse ${current} already at latest; skipping"
             return
@@ -2155,11 +2554,283 @@ install_treehouse() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    download "https://github.com/kunchenguid/treehouse/releases/download/${tag}/${tarball}" \
-        "${tmp_dir}/${tarball}" || return 1
-    tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}"
+    local treehouse_base="https://github.com/kunchenguid/treehouse/releases/download/${tag}"
+    download_verified "${treehouse_base}/${tarball}" "${tmp_dir}/${tarball}" \
+        "${treehouse_base}/checksums.txt" || return 1
+    tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}" || return 1
     mkdir -p "${HOME}/.local/bin"
     install -m755 "${tmp_dir}/treehouse" "${HOME}/.local/bin/treehouse"
+}
+
+# Prebuilt release binaries where upstream publishes one for this platform, and
+# `cargo install` where it does not -- the shape install_cargo_tool already has.
+install_sccache() { install_cargo_tool sccache; }
+install_difftastic() { install_cargo_tool difft difftastic; }
+install_cargo_nextest() { install_cargo_tool cargo-nextest; }
+
+# git-absorb publishes no aarch64 asset for either platform, so on an ARM Mac
+# install_cargo_tool would build it from source on every fresh machine. brew
+# has a bottle, so take that and leave Linux on the release binary.
+install_git_absorb() {
+    local os_name
+    os_name="$(uname -s)"
+    if [[ "${os_name}" != "Darwin" ]]; then
+        install_cargo_tool git-absorb
+        return
+    fi
+    if brew list --formula git-absorb >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "git-absorb already installed; skipping"
+            return
+        fi
+        log "Upgrading git-absorb"
+        brew upgrade git-absorb
+        return
+    fi
+    log "Installing git-absorb"
+    brew install git-absorb
+}
+
+# rga is two binaries, not one: `rga` shells out to `rga-preproc` for every
+# adapter it runs, so installing the first alone gives a tool that fails on the
+# first PDF it meets. install_cargo_tool only knows how to place one, so this
+# step places both by hand.
+install_ripgrep_all() {
+    local os_name
+    os_name="$(uname -s)"
+
+    if [[ "${os_name}" == "Darwin" ]]; then
+        if brew list --formula ripgrep-all >/dev/null 2>&1; then
+            if [[ -z "${UPGRADE:-}" ]]; then
+                log "ripgrep-all already installed; skipping"
+                return
+            fi
+            log "Upgrading ripgrep-all"
+            brew upgrade ripgrep-all
+            return
+        fi
+        log "Installing ripgrep-all"
+        brew install ripgrep-all
+        return
+    fi
+
+    if command -v rga >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "ripgrep-all already installed; skipping"
+            return
+        fi
+        log "Upgrading ripgrep-all"
+    else
+        log "Installing ripgrep-all"
+    fi
+
+    local arch triple
+    arch="$(uname -m)"
+    case "${arch}" in
+        # musl on x86_64 and gnu on aarch64 is upstream's own split; those are
+        # the only two Linux assets published.
+        x86_64 | amd64) triple="x86_64-unknown-linux-musl" ;;
+        aarch64 | arm64) triple="aarch64-unknown-linux-gnu" ;;
+        *)
+            log "Unsupported arch ${arch} for ripgrep-all install; skipping"
+            return
+            ;;
+    esac
+
+    local tag
+    tag="$(pinned_tag "${RIPGREP_ALL_VERSION}" phiresky/ripgrep-all)" || return 1
+    local tarball="ripgrep_all-${tag}-${triple}.tar.gz"
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
+    # No checksum manifest is published alongside the tarballs.
+    download "https://github.com/phiresky/ripgrep-all/releases/download/${tag}/${tarball}" \
+        "${tmp_dir}/${tarball}" || return 1
+    tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}" || return 1
+    mkdir -p "${HOME}/.local/bin"
+    local binary name
+    for name in rga rga-preproc; do
+        binary="$(find "${tmp_dir}" -type f -name "${name}" -print -quit)"
+        if [[ -z "${binary}" ]]; then
+            err "No ${name} binary inside ${tarball}"
+            return 1
+        fi
+        install -m755 "${binary}" "${HOME}/.local/bin/${name}" || return 1
+    done
+}
+
+install_gitleaks() {
+    local os_name
+    os_name="$(uname -s)"
+
+    if [[ "${os_name}" == "Darwin" ]]; then
+        if brew list --formula gitleaks >/dev/null 2>&1; then
+            if [[ -z "${UPGRADE:-}" ]]; then
+                log "gitleaks already installed; skipping"
+                return
+            fi
+            log "Upgrading gitleaks"
+            brew upgrade gitleaks
+            return
+        fi
+        log "Installing gitleaks"
+        brew install gitleaks
+        return
+    fi
+
+    if command -v gitleaks >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "gitleaks already installed; skipping"
+            return
+        fi
+        log "Upgrading gitleaks"
+    else
+        log "Installing gitleaks"
+    fi
+
+    # Go release naming, so the asset carries `x64`/`arm64` rather than a Rust
+    # target triple.
+    local arch release_arch
+    arch="$(uname -m)"
+    case "${arch}" in
+        x86_64 | amd64) release_arch="x64" ;;
+        aarch64 | arm64) release_arch="arm64" ;;
+        *)
+            log "Unsupported arch ${arch} for gitleaks install; skipping"
+            return
+            ;;
+    esac
+
+    local tag version
+    tag="$(pinned_tag "${GITLEAKS_VERSION}" gitleaks/gitleaks)" || return 1
+    version="${tag#v}"
+    local tarball="gitleaks_${version}_linux_${release_arch}.tar.gz"
+    local gitleaks_base="https://github.com/gitleaks/gitleaks/releases/download/${tag}"
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
+    download_verified "${gitleaks_base}/${tarball}" "${tmp_dir}/${tarball}" \
+        "${gitleaks_base}/gitleaks_${version}_checksums.txt" || return 1
+    tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}" || return 1
+    mkdir -p "${HOME}/.local/bin"
+    install -m755 "${tmp_dir}/gitleaks" "${HOME}/.local/bin/gitleaks" || return 1
+}
+
+# ansible-lint is a Python package, so brew on macOS and a uv-managed tool
+# environment on Linux -- the same place aider and the other Python CLIs here
+# would go, and version-independent of whatever python3 the distro ships.
+install_ansible_lint() {
+    local os_name
+    os_name="$(uname -s)"
+
+    if [[ "${os_name}" == "Darwin" ]]; then
+        if brew list --formula ansible-lint >/dev/null 2>&1; then
+            if [[ -z "${UPGRADE:-}" ]]; then
+                log "ansible-lint already installed; skipping"
+                return
+            fi
+            log "Upgrading ansible-lint"
+            brew upgrade ansible-lint
+            return
+        fi
+        log "Installing ansible-lint"
+        brew install ansible-lint
+        return
+    fi
+
+    require_cmd uv
+    if command -v ansible-lint >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "ansible-lint already installed; skipping"
+            return
+        fi
+        log "Upgrading ansible-lint"
+        uv tool upgrade ansible-lint
+        return
+    fi
+    log "Installing ansible-lint"
+    uv tool install ansible-lint
+}
+
+# elan is Lean's toolchain manager, the equivalent of rustup: it installs `lean`
+# and `lake` per project from the lean-toolchain file, so this step only has to
+# put elan itself on the machine. The release tarball holds `elan-init`, the
+# one-shot installer, which writes into ~/.elan.
+install_elan() {
+    if command -v elan >/dev/null 2>&1 || [[ -x "${HOME}/.elan/bin/elan" ]]; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "elan already installed; skipping"
+            return
+        fi
+        log "Upgrading elan"
+        "${HOME}/.elan/bin/elan" self update || return 1
+        return
+    fi
+
+    local os_name arch triple
+    os_name="$(uname -s)"
+    arch="$(uname -m)"
+    case "${os_name}/${arch}" in
+        Darwin/arm64 | Darwin/aarch64) triple="aarch64-apple-darwin" ;;
+        Darwin/x86_64) triple="x86_64-apple-darwin" ;;
+        Linux/x86_64 | Linux/amd64) triple="x86_64-unknown-linux-gnu" ;;
+        Linux/aarch64 | Linux/arm64) triple="aarch64-unknown-linux-gnu" ;;
+        *)
+            log "Unsupported platform ${os_name}/${arch} for elan install; skipping"
+            return
+            ;;
+    esac
+
+    local tag
+    tag="$(pinned_tag "${ELAN_VERSION}" leanprover/elan)" || return 1
+    log "Installing elan ${tag}"
+    local tarball="elan-${triple}.tar.gz"
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
+    # No checksum manifest is published alongside the tarballs.
+    download "https://github.com/leanprover/elan/releases/download/${tag}/${tarball}" \
+        "${tmp_dir}/${tarball}" || return 1
+    tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}" || return 1
+    if [[ ! -x "${tmp_dir}/elan-init" ]]; then
+        err "No elan-init inside ${tarball}; upstream layout changed"
+        return 1
+    fi
+    # --no-modify-path: ~/.elan/bin goes on PATH from the shell config, not from
+    # a line elan-init appends to a profile file chezmoi owns.
+    "${tmp_dir}/elan-init" -y --no-modify-path || return 1
+}
+
+# fzf-git.sh binds git objects -- branches, tags, hashes, remotes, stashes --
+# onto fzf pickers. Clone-and-source, like fzf-tab, so the clone is all this
+# step does; the shell config sources it.
+install_fzf_git() {
+    local fzf_git_home="${XDG_DATA_HOME:-${HOME}/.local/share}/fzf-git.sh"
+    if [[ -d "${fzf_git_home}/.git" ]]; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "fzf-git.sh already installed; skipping"
+            return
+        fi
+        log "Upgrading fzf-git.sh"
+        ensure_user_owns "${fzf_git_home}"
+        safe_git "${fzf_git_home}" fetch origin || return 1
+        safe_git "${fzf_git_home}" reset --hard origin/main
+        return
+    fi
+    log "Installing fzf-git.sh"
+    mkdir -p "$(dirname "${fzf_git_home}")"
+    git clone --depth 1 https://github.com/junegunn/fzf-git.sh.git "${fzf_git_home}"
+}
+
+# The cargo tools with no prebuilt binary upstream. Every one of these is a
+# source build, so this is the slowest step on a fresh machine; it is one step
+# rather than five so a single failure is reported as one line, and each tool
+# is skipped individually once installed.
+install_cargo_extras() {
+    local tool
+    for tool in cargo-audit cargo-fuzz cargo-llvm-cov cross samply; do
+        install_cargo_tool "${tool}" || return 1
+    done
 }
 
 # The thing advertised at obsidian.md/cli is not a separately installable
@@ -2237,7 +2908,7 @@ install_obsidian() {
     fi
 
     local tag version
-    tag="$(github_latest_tag obsidianmd/obsidian-releases)"
+    tag="$(github_latest_tag obsidianmd/obsidian-releases)" || return 1
     version="${tag#v}"
 
     case "${os_arch}" in

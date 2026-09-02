@@ -2,7 +2,13 @@
 
 set -uo pipefail
 
-export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${HOME}/.fzf/bin:${HOME}/go/bin:/opt/nvim-linux-x86_64/bin:/opt/nvim-linux-arm64/bin:/nix/var/nix/profiles/default/bin:${PATH}"
+# Every directory the install scripts put a binary in. /opt/homebrew/bin was
+# missing, so on macOS every brew-installed tool reported FAIL unless brew
+# happened to be on the caller's PATH already; /usr/local/go/bin, ~/.opam and
+# ~/.elan/bin cover the three toolchains that install outside ~/.local/bin.
+export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${HOME}/.fzf/bin:${HOME}/go/bin:${HOME}/.elan/bin:${HOME}/.opam/default/bin:/usr/local/go/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/opt/nvim-linux-x86_64/bin:/opt/nvim-linux-arm64/bin:/nix/var/nix/profiles/default/bin:${PATH}"
+
+os_name="$(uname -s)"
 
 ok=0
 fail=0
@@ -99,6 +105,37 @@ check_cmd atuin
 check_cmd gh
 check_cmd tailscale
 
+# Go installs on Linux only; macOS takes it from brew when a project needs it.
+if [[ "${os_name}" == "Linux" ]]; then
+    check_cmd go
+fi
+
+# nix-direnv is a nix profile entry rather than a command, and the line that
+# loads it is what actually makes it do anything.
+check_file "nix-direnv wired into direnvrc" "${HOME}/.config/direnv/direnvrc"
+
+# Editor and formatter for OCaml, installed into the default opam switch.
+check_cmd ocamllsp
+check_cmd ocamlformat
+
+check_cmd git-absorb
+check_cmd gitleaks
+check_cmd sccache
+check_cmd rga
+check_cmd rga-preproc
+check_cmd difft
+check_cmd ansible-lint
+check_cmd cargo-nextest
+check_cmd elan
+
+check_cmd cargo-audit
+check_cmd cargo-fuzz
+check_cmd cargo-llvm-cov
+check_cmd cross
+check_cmd samply
+
+check_dir "fzf-git.sh" "${HOME}/.local/share/fzf-git.sh"
+
 # Neither of these is a binary on PATH, and both are skipped by the install
 # when gh is unauthenticated — which it is on any box that has not had
 # `gh auth login` run by hand — so absence is a warning, not a failure.
@@ -126,7 +163,6 @@ check_optional "gh-stack extension" has_gh_stack_ext
 check_optional "gh-stack skill" has_gh_stack_skill
 
 headless_linux=false
-os_name="$(uname -s)"
 if [[ "${os_name}" == "Linux" ]] && [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
     headless_linux=true
 fi
@@ -168,6 +204,14 @@ check_cmd_optional obsidian
 check_cmd_optional zathura
 
 check_dir "tpm" "${HOME}/.tmux/plugins/tpm"
+# tpm clones its plugins beside itself, so a declared plugin that is not there
+# means install_tmux_plugins cloned the manager and never ran it -- which is
+# what left history-limit at tmux's 2000-line default on every machine. Read
+# the declaration out of the rendered config rather than assume it, since the
+# plugin list is free to change.
+if [[ -f "${HOME}/.tmux.conf" ]] && grep -q "tmux-sensible" "${HOME}/.tmux.conf"; then
+    check_dir "tmux-sensible" "${HOME}/.tmux/plugins/tmux-sensible"
+fi
 
 check_cmd nvim
 
