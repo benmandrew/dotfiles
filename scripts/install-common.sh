@@ -314,7 +314,6 @@ RIPGREP_ALL_VERSION="v0.10.10"
 RIPGREP_VERSION="15.2.0"
 SCCACHE_VERSION="v0.17.0"
 TREEHOUSE_VERSION="v2.3.0"
-WEZTERM_VERSION="20240203-110809-5046fc22"
 ZOXIDE_VERSION="v0.10.0"
 
 # btop is pinned for a reason of its own rather than for reproducibility: >=
@@ -365,7 +364,6 @@ print_pin_updates() {
         "SCCACHE_VERSION|mozilla/sccache" \
         "TMUX_VERSION|tmux/tmux" \
         "TREEHOUSE_VERSION|kunchenguid/treehouse" \
-        "WEZTERM_VERSION|wez/wezterm" \
         "ZOXIDE_VERSION|ajeetdsouza/zoxide"; do
         name="${spec%%|*}"
         repo="${spec#*|}"
@@ -2017,10 +2015,16 @@ install_wezterm() {
         fi
     fi
 
-    # Linux binary download (install or upgrade via latest GitHub release)
+    # Linux binary download, tracking the rolling `nightly` tag rather than the
+    # newest tagged release. WezTerm has cut no release since 20240203 (February
+    # 2024), so `releases/latest` pinned Linux to a build two and a half years
+    # behind the wezterm@nightly cask that macOS installs. The nightly tag name
+    # never changes; its assets are rebuilt from the tip of main.
     local os_arch
     os_arch="$(uname -m)"
     if [[ "${os_arch}" != "x86_64" ]]; then
+        # arm64 nightly debs are published but lag the x86_64 ones by months,
+        # so there is nothing worth tracking on that architecture yet.
         log "WezTerm: no official binary for ${os_arch}; skipping"
         return
     fi
@@ -2028,25 +2032,20 @@ install_wezterm() {
     version_id_line="$(grep -m1 '^VERSION_ID=' /etc/os-release || true)"
     ubuntu_version="${version_id_line#VERSION_ID=}"
     ubuntu_version="${ubuntu_version//\"/}"
-    # WezTerm only publishes 20.04 and 22.04 packages; 22.04 works on newer Ubuntu
-    if [[ "${ubuntu_version}" != "20.04" && "${ubuntu_version}" != "22.04" ]]; then
-        ubuntu_version="22.04"
-    fi
+    # Nightly publishes 20.04, 22.04, 24.04 and 26.04 packages. Anything else
+    # falls back to 22.04, which runs on newer Ubuntu.
+    case "${ubuntu_version}" in
+        20.04 | 22.04 | 24.04 | 26.04) ;;
+        *) ubuntu_version="22.04" ;;
+    esac
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    local tag
-    tag="$(pinned_tag "${WEZTERM_VERSION}" wez/wezterm)" || return 1
-    if [[ -n "${UPGRADE:-}" ]] && command -v wezterm >/dev/null 2>&1; then
-        local installed_tag
-        installed_tag="$(wezterm --version 2>/dev/null | awk '{print $2}' || true)"
-        if [[ "${installed_tag}" == "${tag}" ]]; then
-            log "WezTerm ${tag} already at latest; skipping"
-            return
-        fi
-    fi
-    local deb="wezterm-${tag}.Ubuntu${ubuntu_version}.deb"
-    local wezterm_base="https://github.com/wez/wezterm/releases/download/${tag}"
+    # No "already at latest" check: the tag is fixed, so the installed version
+    # string can never match it, and a nightly moves most days in any case. This
+    # only runs when UPGRADE is set, since an existing install returns above.
+    local deb="wezterm-nightly.Ubuntu${ubuntu_version}.deb"
+    local wezterm_base="https://github.com/wezterm/wezterm/releases/download/nightly"
     download_verified "${wezterm_base}/${deb}" "${tmp_dir}/${deb}" \
         "${wezterm_base}/${deb}.sha256" || return 1
     sudo apt-get install -y "${tmp_dir}/${deb}"
