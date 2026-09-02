@@ -980,6 +980,24 @@ for i = 1, 8 do
 end
 table.insert(config.keys, { key = "9", mods = "LEADER", action = act.ActivateTab(-1) })
 
+-- Claude Code inserts the wrong character for shifted punctuation under the
+-- kitty keyboard protocol. WezTerm reports shift+/ correctly as
+-- `CSI 47:63;2;63 u` -- base-layout key `/`, shifted key `?`, shift modifier,
+-- associated text `?` -- and Claude Code takes the first field, so `?` arrives
+-- as `/`, `:` as `;` and so on down the row. Its own docs expose no way to turn
+-- the protocol off, so intercept these keys here: a key assignment runs before
+-- the kitty encoder, and SendString puts the literal character on the wire.
+-- Listed by the character shift produces on a gb pc105 layout, which is what
+-- run_once_configure-gnome-input-sources.sh pins every Linux box to. macOS is
+-- excluded because its British layout maps this row differently (shift+2 gives
+-- `@` there, not `"`), so it needs its own list once tested.
+local GB_SHIFTED_PUNCTUATION = [[! " £ $ % ^ & * ( ) _ + { } : @ ~ | < > ? ¬]]
+if not IS_MACOS then
+    for ch in GB_SHIFTED_PUNCTUATION:gmatch("%S+") do
+        table.insert(config.keys, { key = ch, mods = "SHIFT", action = act.SendString(ch) })
+    end
+end
+
 -- Resize, the one leader gesture tmux has (prefix then a repeating H/J/K/L) that
 -- had no WezTerm counterpart. A key table rather than four LEADER bindings, so a
 -- resize is one leader press and then as many nudges as it takes; the timeout
