@@ -1964,10 +1964,24 @@ install_tmux_plugins() {
     # reads the @plugin lines out of the tmux config and is a no-op once they
     # are all cloned, so it can run on every install. It needs no server and
     # skips tpm itself.
-    if [[ -x "${tpm_dir}/bin/install_plugins" ]]; then
-        log "Installing tmux plugins"
-        "${tpm_dir}/bin/install_plugins" || return 1
+    #
+    # It does need a tmux.conf that sources tpm, though: it reads
+    # TMUX_PLUGIN_MANAGER_PATH out of the running config and aborts with
+    # "Tmux Plugin Manager not configured in tmux.conf" when there is none.
+    # The install scripts run before `chezmoi apply`, so on a fresh machine
+    # ~/.tmux.conf does not exist yet and there are no @plugin lines to act
+    # on — which is what failed CI run 33694339533. Skipping is the whole
+    # answer: with no config there is nothing to install, and the next run
+    # after chezmoi apply picks the plugins up.
+    if [[ ! -x "${tpm_dir}/bin/install_plugins" ]]; then
+        return
     fi
+    if ! grep -qs "tpm/tpm" "${HOME}/.tmux.conf"; then
+        log "No ~/.tmux.conf sourcing tpm yet; skipping plugin install (re-run after chezmoi apply)"
+        return
+    fi
+    log "Installing tmux plugins"
+    "${tpm_dir}/bin/install_plugins" || return 1
 }
 
 install_wezterm() {
@@ -2318,10 +2332,18 @@ install_ocaml_tools() {
     switches="$(opam switch list --short 2>/dev/null || true)"
     if ! grep -qx "default" <<<"${switches}"; then
         log "Creating the default opam switch"
+        # --packages is required on both paths. `opam switch create <name>`
+        # reads a bare name as a compiler specification, so `opam switch create
+        # default --yes` looks for a compiler called "default" and exits with
+        # "No compiler matching `default' found" — which is what failed CI run
+        # 33694339533 on a runner with no OCaml. ocaml-system reuses a compiler
+        # already on the machine, the difference between seconds and a
+        # from-source build; ocaml-base-compiler is that from-source build, and
+        # is the only option where the machine has no ocamlc.
         if command -v ocamlc >/dev/null 2>&1; then
             opam switch create default --packages=ocaml-system --yes || return 1
         else
-            opam switch create default --yes || return 1
+            opam switch create default --packages=ocaml-base-compiler --yes || return 1
         fi
     fi
 
