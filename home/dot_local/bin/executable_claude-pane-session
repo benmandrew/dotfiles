@@ -24,9 +24,19 @@ titles="${HOME}/.claude/tab-titles"
 # the tab is focused. The file's existence is the whole signal; its name is the
 # same pid again.
 bells="${HOME}/.claude/tab-bells"
-# Per-user by construction on both platforms: XDG_RUNTIME_DIR is /run/user/<uid>
-# on Linux, and TMPDIR is a private per-user directory on macOS.
-cache="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/claude-pane-session.tsv"
+# XDG_RUNTIME_DIR is /run/user/<uid> and macOS TMPDIR is a private per-user
+# directory, so both are per-user already. Bare /tmp is not, and it is reached on
+# a Linux SSH login without pam_systemd, where XDG_RUNTIME_DIR is unset: /tmp's
+# sticky bit then makes the atomic `mv -f` fail outright against another user's
+# file of the same name. So the uid goes in the name there, and only there, since
+# `id -u` is a fork this script otherwise pays once per window per tick.
+if [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+    cache="${XDG_RUNTIME_DIR%/}/claude-pane-session.tsv"
+elif [ -n "${TMPDIR:-}" ]; then
+    cache="${TMPDIR%/}/claude-pane-session.tsv"
+else
+    cache="/tmp/claude-pane-session.$(id -u).tsv"
+fi
 
 field=${1:-}
 pane_pid=${2:-}
@@ -45,7 +55,9 @@ emit_fallback() {
 build_cache() {
     tmp="$cache.$$"
     {
-        ps -axo pid=,ppid= 2>/dev/null | awk '{ print "P\t" $1 "\t" $2 }'
+        # `ps -eo` is the POSIX spelling, accepted by both procps and the
+        # BSD ps on macOS; `-axo` mixed a UNIX option with a BSD one.
+        ps -eo pid=,ppid= 2>/dev/null | awk '{ print "P\t" $1 "\t" $2 }'
         # Newest first: claude rewrites the file on every status change, so a
         # pane holding more than one session resolves to the most recently
         # active one. Filenames are "<pid>.json", so no globbing hazard here.
@@ -201,10 +213,15 @@ if [ "$field" = cwd ]; then
     # stale answer sends the new pane somewhere wrong. Always work from a fresh
     # snapshot; nothing is polling this, so the cost lands on one keypress.
     build_cache || emit_fallback
-elif [ -z "$(find "$cache" -mmin -1 2>/dev/null)" ]; then
-    # Polled per window per tick, so this reads what the status line built. The
-    # rebuild here is a safety net for a tmux without that status-left entry --
-    # in steady state the cache is seconds old and no window ever pays for it.
+elif [ ! -f "$cache" ]; then
+    # Polled per window per tick, so this reads what the status line built one
+    # #() job earlier. The rebuild stays as a safety net for the tick that finds
+    # no cache at all -- a tmux server whose config has no status-left refresh,
+    # or the first tick after a reboot cleared the runtime directory. Freshness
+    # was checked here too, with `find -mmin -1`, which cost a fork per window
+    # per tick to answer a question status-left had already answered; a cache
+    # that exists but has stopped being refreshed means status-left is gone, and
+    # the existence test catches that on the next server start.
     build_cache || emit_fallback
 fi
 

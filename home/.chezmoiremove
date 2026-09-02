@@ -3,3 +3,9 @@
 
 # renamed to claude-pane-session, which also resolves the agent name
 .local/bin/claude-pane-cwd
+
+# folded into a single .config/tmux/status.sh, so tmux forks once a tick for the
+# status-right metrics rather than three times
+.config/tmux/cpu.sh
+.config/tmux/ram.sh
+.config/tmux/uptime.sh

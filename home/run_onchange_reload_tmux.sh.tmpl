@@ -24,10 +24,21 @@ if tmux ls >/dev/null 2>&1; then
     if [[ -f "${HOME}/.zshrc" ]]; then
         # tmux has no way to re-source a running pane's rc file directly, so
         # simulate typing the command into each zsh pane instead.
-        while read -r pane_id pane_command; do
+        #
+        # Two things have to happen before the text is typed. A pane sitting in
+        # copy mode swallows the keys as copy-mode commands, so cancel out of it
+        # first. And a pane with a half-typed command line has that line in its
+        # buffer: without the C-u the command is appended to whatever was
+        # already there and Enter runs the pair of them. C-u is
+        # kill-whole-line under zsh's emacs bindings, which is what this
+        # config uses.
+        while read -r pane_id pane_in_mode pane_command; do
             if [[ "${pane_command}" == "zsh" ]]; then
-                tmux send-keys -t "${pane_id}" 'source ~/.zshrc' C-m
+                if [[ "${pane_in_mode}" == "1" ]]; then
+                    tmux send-keys -t "${pane_id}" -X cancel
+                fi
+                tmux send-keys -t "${pane_id}" C-u 'source ~/.zshrc' C-m
             fi
-        done < <(tmux list-panes -a -F '#{pane_id} #{pane_current_command}')
+        done < <(tmux list-panes -a -F '#{pane_id} #{pane_in_mode} #{pane_current_command}')
     fi
 fi

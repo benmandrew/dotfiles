@@ -4,8 +4,11 @@ set-option -g prefix C-a
 bind-key C-a send-prefix
 
 # RGB for truecolor; extkeys so tmux passes through distinct codes for
-# modified keys (e.g. Ctrl/Option+arrow) instead of collapsing them
-set-option -a terminal-features 'xterm-256color:RGB:extkeys'
+# modified keys (e.g. Ctrl/Option+arrow) instead of collapsing them; hyperlinks
+# so OSC 8 survives the pass through tmux. tmux's built-in xterm* feature set
+# omits hyperlinks, so without this it strips the links delta, eza and gh emit,
+# and the ctrl-click gesture in wezterm.lua has nothing to open.
+set-option -a terminal-features 'xterm-256color:RGB:extkeys:hyperlinks'
 set-option -g focus-events on
 set -g extended-keys on
 
@@ -16,6 +19,15 @@ set -g allow-passthrough on
 
 # on: tmux sends OSC 52 to the client terminal on yank (works over SSH)
 set -s set-clipboard on
+
+# Windows and panes count from 1, matching the number on the key you press to
+# reach them. wezterm.lua renders tab_index + 1 for the same reason, so with the
+# default base of 0 the two bars disagreed and prefix 1 landed on the second
+# window. renumber-windows closes the gap a closed window leaves, so the numbers
+# stay contiguous and #I keeps matching the key.
+set -g base-index 1
+setw -g pane-base-index 1
+set -g renumber-windows on
 
 # reload config file
 bind r source-file ~/.tmux.conf
@@ -37,6 +49,20 @@ bind j select-pane -D
 bind k select-pane -U
 bind l select-pane -R
 bind x kill-pane
+
+# The three defaults the bindings above displaced, given somewhere else to live.
+# Shift is the free half of each key: s, l and x are taken by the WezTerm-mirror
+# bindings, and their uppercase forms are unbound.
+#
+# last-window is the one that is missed most, so it also gets Tab, which is where
+# the muscle memory for "the other one" already is.
+bind S choose-tree -Zs
+bind Tab last-window
+bind L last-window
+# `x` is deliberately unconfirmed, mirroring CloseCurrentPane({confirm = false})
+# in wezterm.lua. This is the same kill with the prompt tmux ships by default,
+# for the pane you are less sure about.
+bind X confirm-before -p "kill-pane #P? (y/n)" kill-pane
 
 
 # Enable mouse control (clickable windows, panes, resizable panes)
@@ -91,8 +117,24 @@ set -g status-position top
 set -g status-left-length 20
 set -g status-left '#(~/.local/bin/claude-pane-session refresh)#{?client_prefix,#[bg=#c75a22#,fg=#141414#,bold],#[bg=#141414#,fg=#464444#,nobold]} ⌃a #[bg=#141414,fg=#c9c9c9,nobold] '
 set -g status-right-length 120
-set -g status-interval 5
-set -g status-right "#[bg=#191918,fg=#c9c9c9] 󰒋 #{host_short}  󰍛 #(~/.config/tmux/cpu.sh)%%  󰾲 #(~/.config/tmux/ram.sh)  󰥔 #(~/.config/tmux/uptime.sh) "
+# The tick has to keep up with the busy/idle bar on the window chips, which
+# WezTerm redraws against a 1s TTL; at the old interval of 5 a session going idle
+# could sit stale for five seconds. What stopped it being lowered was the cost:
+# cpu.sh, ram.sh and uptime.sh took 238 ms between them per tick, 218 of it the
+# blocking `sleep 0.2` inside cpu.sh, and each window costs two more #() jobs on
+# top. Folding the three into status.sh and dropping the per-window `find` in
+# claude-pane-session took a whole five-window tick from 336 ms +/- 37 to 148 ms
+# +/- 61 of wall time, and 339 ms to 287 ms of CPU (hyperfine, 25 runs, jobs
+# started in parallel the way tmux starts them, this Mac).
+#
+# 1 rather than 2 would hold 287 ms of CPU per second, near a third of a core,
+# indefinitely and on battery. 2 halves that, and leaves a worst-case lag within
+# a second of WezTerm's own TTL, which is what the bar is being matched against.
+set -g status-interval 2
+# One #() job for all three metrics rather than three. tmux cannot split a job's
+# output across fields, so the glyphs and gaps between them moved into the
+# script; the host stays here, since tmux already knows it.
+set -g status-right "#[bg=#191918,fg=#c9c9c9] 󰒋 #{host_short}  #(~/.config/tmux/status.sh) "
 
 # Do nothing on bell
 set -g visual-activity off
@@ -126,7 +168,37 @@ bind-key -T copy-mode-vi Enter send-keys -X copy-pipe-and-cancel '~/.config/tmux
 bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel '~/.config/tmux/copy.sh'
 {{ end }}
 
-# Plugins
+# The four options tmux-sensible sets that this file does not already set for
+# itself (escape-time and focus-events are above). They are inlined rather than
+# left to the plugin because the plugin had never once been installed: tpm was
+# cloned and `install_plugins` never run, so ~/.tmux/plugins held tpm alone and
+# history-limit had been sitting at tmux's default of 2000 lines throughout.
+#
+# aggressive-resize sizes a window to the smallest client actually looking at it
+# rather than to the smallest attached to the session, which matters when a phone
+# or a second terminal is attached to the same session and not watching this
+# window. status-keys emacs is for the command prompt only; copy mode stays vi
+# (mode-keys below).
+set -g history-limit 50000
+setw -g aggressive-resize on
+set -g display-time 4000
+set -g status-keys emacs
+
+# Plugins. Session persistence, which is the one thing here that genuinely needs
+# a plugin: tmux has no save/restore of its own, and dot_zshrc.tmpl auto-attaches
+# on every SSH host, so a reboot silently costs the layout on machines that are
+# only ever reached through tmux. continuum saves on a timer and restores when
+# the server starts; resurrect is the mechanism underneath it, and has to be
+# listed first. Capturing pane contents keeps the scrollback that was on screen,
+# and the nvim strategy restores sessions written by :mksession.
+#
+# tpm is only sourced if it is actually there, so a machine that has not been
+# provisioned yet gets a working config rather than an error on every source.
 set -g @plugin 'tmux-plugins/tpm'
-set -g @plugin 'tmux-plugins/tmux-sensible'
-run '~/.tmux/plugins/tpm/tpm'
+set -g @plugin 'tmux-plugins/tmux-resurrect'
+set -g @plugin 'tmux-plugins/tmux-continuum'
+set -g @resurrect-capture-pane-contents 'on'
+set -g @resurrect-strategy-nvim 'session'
+set -g @continuum-restore 'on'
+set -g @continuum-save-interval '15'
+if-shell '[ -f ~/.tmux/plugins/tpm/tpm ]' "run '~/.tmux/plugins/tpm/tpm'"
