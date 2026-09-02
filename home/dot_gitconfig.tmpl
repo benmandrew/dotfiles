@@ -4,6 +4,44 @@
     signingkey = {{ .chezmoi.homeDir }}/.ssh/id_benmandrew
 [pull]
     rebase = true
+[rebase]
+    # pull.rebase is on above, so without autoStash every pull on a dirty tree
+    # aborts before it starts.
+    autoStash = true
+    autoSquash = true
+    # Rebasing a base branch otherwise leaves every branch stacked on top of it
+    # pointing at the old commits. gh-stack (install_gh_stack) depends on this.
+    updateRefs = true
+[rerere]
+    # Records how a conflict was resolved and replays it when the same one
+    # recurs, which rebasing a stack makes routine.
+    enabled = true
+    autoUpdate = true
+[merge]
+    # Three-way, so the common ancestor is visible alongside both sides.
+    conflictStyle = zdiff3
+[fetch]
+    prune = true
+    pruneTags = true
+[push]
+    autoSetupRemote = true
+    followTags = true
+[branch]
+    # Matches the ordering the bv alias below already produces by hand.
+    sort = -committerdate
+[tag]
+    gpgsign = true
+    sort = -version:refname
+[column]
+    ui = auto
+[help]
+    autocorrect = prompt
+[diff]
+    algorithm = histogram
+    colorMoved = default
+    colorMovedWS = allow-indentation-change
+    mnemonicPrefix = true
+    renames = copies
 [alias]
     st = status -s --show-stash
     cm = commit -m
@@ -17,11 +55,14 @@
     # wt is ~/.local/bin/git-wt, not an alias — git runs any git-* on PATH.
 [init]
     defaultBranch = main
-[protocol "file"]
-    allow = always
 [commit]
     gpgsign = true
     template = {{ .chezmoi.homeDir }}/.config/git/.gitmessage
+    # Puts the staged diff below the template in the editor, which the template
+    # asks for a body explaining.
+    verbose = true
+[log]
+    date = iso
 [core]
     excludesfile = {{ .chezmoi.homeDir }}/.config/git/.gitignore_global
     attributesFile = {{ .chezmoi.homeDir }}/.config/git/attributes
@@ -58,8 +99,6 @@
 [delta]
     navigate = true
     line-numbers = true
-[tag]
-    gpgsign = true
 [gpg]
     format = ssh
 [gpg "ssh"]
