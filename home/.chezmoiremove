@@ -9,3 +9,10 @@
 .config/tmux/cpu.sh
 .config/tmux/ram.sh
 .config/tmux/uptime.sh
+
+# Every plugin's setup moved into its lazy.nvim spec, so the plugin loads on a
+# key, command or event instead of at startup. nvim sources anything under
+# after/plugin regardless of where it came from, so a leftover file here would
+# still run: it would re-require the plugins these specs now lazy-load, undoing
+# the deferral, and re-add the gi/gr maps that shadow the 0.11 builtins.
+.config/nvim/after
