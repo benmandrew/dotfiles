@@ -2262,13 +2262,58 @@ install_opam() {
     install_ocaml_tools
 }
 
+# Where a C header lives on a Mac whose active developer directory does not
+# carry it. `xcode-select -p` can point at a nix-provided apple-sdk — it does on
+# this machine, at .../apple-sdk-14.4 — and those SDKs ship a subset of the
+# headers a Command Line Tools SDK does. zlib.h is one of the missing ones, so
+# /usr/bin/cc cannot preprocess `#include <zlib.h>` at all, and any opam package
+# with a C stub needing it fails to build. Homebrew's keg-only zlib is preferred
+# because it is the copy the rest of the machine already builds against; the CLT
+# SDK is the fallback for a Mac without it. Setting SDKROOT does not help, since
+# the CLT shim resolves its toolchain through xcode-select regardless.
+_macos_c_search_path() {
+    local candidate
+    for candidate in /opt/homebrew/opt/zlib/include \
+        /usr/local/opt/zlib/include \
+        "$(xcrun --show-sdk-path 2>/dev/null)/usr/include" \
+        /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include; do
+        if [[ -f "${candidate}/zlib.h" ]]; then
+            printf '%s' "${candidate}"
+            return 0
+        fi
+    done
+    return 1
+}
+
 # ocamllsp and ocamlformat, which the Neovim config enables and expects on PATH.
 # They are opam packages, so they need a switch: `opam init --bare` deliberately
 # creates none, and `opam install` into no switch fails. ocaml-system reuses a
 # compiler already on the machine where there is one, which is the difference
 # between seconds and a from-source OCaml build on every fresh install.
+#
+# This installs into whichever `default` switch the machine already has, which
+# is shared with whatever else the user keeps there. opam resolves the request
+# against the whole switch, so it may recompile packages this step never asked
+# for — and a build failing part way leaves opam rolling back the ones it had
+# already removed. That is not hypothetical: on 2 September 2026 camlzip failed
+# on the missing zlib.h above, and the rollback dropped alt-ergo and why3 from
+# this machine's default switch. Hence the search path below, and hence failing
+# the step loudly rather than continuing.
 install_ocaml_tools() {
     require_cmd opam
+
+    local os_name
+    os_name="$(uname -s)"
+    if [[ "${os_name}" == "Darwin" ]]; then
+        local c_include
+        if c_include="$(_macos_c_search_path)"; then
+            export CPATH="${c_include}${CPATH:+:${CPATH}}"
+            export LIBRARY_PATH="${c_include%/include}/lib${LIBRARY_PATH:+:${LIBRARY_PATH}}"
+        else
+            err "No zlib.h on this Mac; opam packages with C stubs will not build"
+            return 1
+        fi
+    fi
     local switches
     switches="$(opam switch list --short 2>/dev/null || true)"
     if ! grep -qx "default" <<<"${switches}"; then
