@@ -454,7 +454,8 @@ end
 
 -- Linux CPU: diff two /proc/stat snapshots taken across calls. Since the refresh
 -- cadence is ~1s (see the cache below), the delta spans ~1s without the blocking
--- `sleep 0.2` the tmux cpu.sh needs. The first call has no baseline -> nil.
+-- `sleep 0.2` the tmux status scripts used to need. No baseline on the first
+-- call -> nil.
 local prev_cpu_linux = nil
 local function cpu_linux()
     local f = io.open("/proc/stat", "r")
@@ -498,7 +499,8 @@ local function cpu_macos()
     return math.min(100, math.floor(sum / ncpu + 0.5))
 end
 
--- Linux RAM: used = MemTotal - MemAvailable (kB), rendered in GiB, matching ram.sh.
+-- Linux RAM: used = MemTotal - MemAvailable (kB), rendered in GiB, matching
+-- .config/tmux/status.sh.
 local function ram_linux()
     local f = io.open("/proc/meminfo", "r")
     if not f then
@@ -575,8 +577,9 @@ local function metrics_text()
     end
     -- Fixed-width fields so a changing value doesn't nudge the row: the right
     -- status is right-aligned, so any width change shifts everything to its left.
-    -- CPU pads to 3 digits (the 100% case), RAM to %4.1f per number (as ram.sh
-    -- does), uptime left-justified into a field wide enough for "123d 4h".
+    -- CPU pads to 3 digits (the 100% case), RAM to %4.1f per number (as
+    -- .config/tmux/status.sh does), uptime left-justified into a field wide
+    -- enough for "123d 4h".
     local cpu_s = cpu and string.format("%3d%%", cpu) or " --%"
     local text =
         string.format(" %s %s   %s %-11s   %s %-7s ", ICON_CPU, cpu_s, ICON_RAM, ram or "--", ICON_UPTIME, up or "--")
@@ -649,6 +652,18 @@ local function left_status(window)
         { Foreground = { Color = leader and hacktober.bg or hacktober.hover } },
         { Text = " " .. LEADER_LABEL .. " " },
     }
+
+    -- Which key table is on top of the stack, when one is: the resize table
+    -- above holds the keyboard until it times out or is popped, so it needs to
+    -- say so. Named rather than coloured, since it is rare enough that a shift
+    -- in the tabs beside it costs nothing.
+    local key_table = window_field(window, "active_key_table")
+    if key_table and key_table ~= "" and key_table ~= "copy_mode" then
+        table.insert(elements, { Attribute = { Intensity = "Bold" } })
+        table.insert(elements, { Background = { Color = hacktober.bg } })
+        table.insert(elements, { Foreground = { Color = hacktober.orange } })
+        table.insert(elements, { Text = " " .. key_table:gsub("_", " ") .. " " })
+    end
 
     local workspace = window_field(window, "active_workspace")
     if workspace and workspace ~= "" and workspace ~= DEFAULT_WORKSPACE then
@@ -766,6 +781,26 @@ config.scrollback_lines = 10000
 config.audible_bell = "Disabled"
 config.enable_kitty_keyboard = true
 
+-- Cell widths follow the Unicode version, and the default of 9 predates the
+-- assignments current fonts and terminals lay out against. The tab bar and the
+-- status line are built out of Nerd Font icons and box-drawing glyphs, where
+-- disagreeing about a width by one cell shifts the whole row; 14 is the value
+-- WezTerm documents for anything not emulating an old terminal.
+config.unicode_version = 14
+-- Those icons sit in the Private Use Area, so a machine whose Nerd Font is
+-- missing gets a warning window for each one. The box the renderer would draw
+-- instead says the same thing without interrupting, and the font is the install
+-- scripts' job.
+config.warn_about_missing_glyphs = false
+-- Versions come from the install scripts, so an in-app update prompt has nothing
+-- to offer and costs a network round trip on start.
+config.check_for_updates = false
+-- The default, made explicit because status_update_interval above is set ten
+-- times tighter than stock and the two have to be read together: the tab bar is
+-- recomputed at 10Hz and nothing it produces reaches the screen faster than
+-- this. 60 is the panel rate on the machines this config runs on.
+config.max_fps = 60
+
 -- Under Wayland, WezTerm speaks text-input-v3 to ibus itself where GTK and Qt
 -- terminals go through their toolkit's input module, and 20240203 drops the
 -- shift level on some punctuation: shift+/ commits `/`, shift+; commits `;`.
@@ -878,6 +913,16 @@ config.keys = {
     { key = "l", mods = "LEADER", action = act.ActivatePaneDirection("Right") },
     { key = "w", mods = "LEADER", action = act.PaneSelect({ mode = "SwapWithActive" }) },
     { key = "=", mods = "LEADER", action = balance_panes },
+    { key = "z", mods = "LEADER", action = act.TogglePaneZoomState },
+    {
+        key = "r",
+        mods = "LEADER|SHIFT",
+        action = act.ActivateKeyTable({
+            name = "resize_pane",
+            one_shot = false,
+            timeout_milliseconds = 1000,
+        }),
+    },
     -- Tabs
     { key = "c", mods = "LEADER", action = spawn_in_claude_cwd("SpawnCommandInNewTab") },
     { key = "n", mods = "LEADER", action = act.ActivateTabRelative(1) },
@@ -897,6 +942,25 @@ config.keys = {
             end),
         }),
     },
+    -- Workspaces. A WezTerm workspace is a tmux session, so the picker sits on
+    -- the same shifted key tmux's choose-tree does, and the create prompt beside
+    -- LEADER c, which is the new tab. Without these the workspace is only ever
+    -- "default" and the chip left_status draws for it could never appear.
+    { key = "s", mods = "LEADER|SHIFT", action = act.ShowLauncherArgs({ flags = "FUZZY|WORKSPACES" }) },
+    {
+        key = "c",
+        mods = "LEADER|SHIFT",
+        action = act.PromptInputLine({
+            description = "New workspace",
+            action = wezterm.action_callback(function(window, pane, line)
+                if line and line ~= "" then
+                    window:perform_action(act.SwitchToWorkspace({ name = line }), pane)
+                end
+            end),
+        }),
+    },
+    -- Re-read this file. Mirrors tmux's `bind r source-file ~/.tmux.conf`.
+    { key = "r", mods = "LEADER", action = act.ReloadConfiguration },
     -- Close pane/tab
     { key = "x", mods = "LEADER", action = act.CloseCurrentPane({ confirm = false }) },
     -- Copy mode (vi keys work inside)
@@ -916,6 +980,28 @@ for i = 1, 8 do
 end
 table.insert(config.keys, { key = "9", mods = "LEADER", action = act.ActivateTab(-1) })
 
+-- Resize, the one leader gesture tmux has (prefix then a repeating H/J/K/L) that
+-- had no WezTerm counterpart. A key table rather than four LEADER bindings, so a
+-- resize is one leader press and then as many nudges as it takes; the timeout
+-- matches config.leader's and resets on each keypress, and Escape, Enter or q
+-- leave early. left_status paints a chip while the table is active, since an
+-- unfocused mode with no indicator is a stuck keyboard.
+local key_tables = {
+    resize_pane = {
+        { key = "h", action = act.AdjustPaneSize({ "Left", 3 }) },
+        { key = "j", action = act.AdjustPaneSize({ "Down", 3 }) },
+        { key = "k", action = act.AdjustPaneSize({ "Up", 3 }) },
+        { key = "l", action = act.AdjustPaneSize({ "Right", 3 }) },
+        { key = "LeftArrow", action = act.AdjustPaneSize({ "Left", 3 }) },
+        { key = "DownArrow", action = act.AdjustPaneSize({ "Down", 3 }) },
+        { key = "UpArrow", action = act.AdjustPaneSize({ "Up", 3 }) },
+        { key = "RightArrow", action = act.AdjustPaneSize({ "Right", 3 }) },
+        { key = "Escape", action = act.PopKeyTable },
+        { key = "Enter", action = act.PopKeyTable },
+        { key = "q", action = act.PopKeyTable },
+    },
+}
+
 -- Copy mode's `y` (LEADER [ above). Assigning key_tables.copy_mode replaces the
 -- whole table, so start from the defaults and patch just the yank entry.
 -- wezterm.gui is absent in the mux server, which also loads this file.
@@ -932,8 +1018,9 @@ if wezterm.gui then
             })
         end
     end
-    config.key_tables = { copy_mode = copy_mode }
+    key_tables.copy_mode = copy_mode
 end
+config.key_tables = key_tables
 
 -- Selecting with the mouse copies by default (ClipboardAndPrimarySelection);
 -- streak 1/2/3 are drag-release, double-click word and triple-click line.
