@@ -32,10 +32,22 @@ printf '%s\n' "$remotes" | awk \
     -v g="$label_colour" \
     -v x="$reset" '
 {
-    kind = $3
-    gsub(/[()]/, "", kind)
-    if (!($1 in seen)) { order[++n] = $1; seen[$1] = 1 }
-    if (kind == "fetch") fetch[$1] = $2; else push[$1] = $2
+    # `git remote -v` writes "name<TAB>url (direction)", and a URL may contain
+    # a space — a local path most easily. Splitting the record on whitespace
+    # then pushed the direction out of $3 and mislabelled the row, so take the
+    # name off the tab and peel the direction off the end of what is left.
+    tab = index($0, "\t")
+    if (!tab) next
+    name = substr($0, 1, tab - 1)
+    rest = substr($0, tab + 1)
+    kind = rest
+    sub(/^.*[(]/, "", kind)
+    sub(/[)][ \t]*$/, "", kind)
+    url = rest
+    sub(/[ \t]+[(][^()]*[)][ \t]*$/, "", url)
+
+    if (!(name in seen)) { order[++n] = name; seen[name] = 1 }
+    if (kind == "fetch") fetch[name] = url; else push[name] = url
 }
 
 END {

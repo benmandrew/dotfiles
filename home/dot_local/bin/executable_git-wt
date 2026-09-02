@@ -41,7 +41,10 @@ while [ $# -gt 0 ]; do
     case $1 in
         --paths) paths=1 ;;
         --full) full=1 ;;
-        *) echo "usage: git wt [--full] [--paths]" >&2; exit 2 ;;
+        *)
+            echo "usage: git wt [--full] [--paths]" >&2
+            exit 2
+            ;;
     esac
     shift
 done
@@ -66,15 +69,23 @@ reset=$(colour sgr0)
 sessions="${HOME}/.claude/sessions"
 agents=""
 if [ -d "$sessions" ] && command -v jq >/dev/null 2>&1; then
+    # Gather the live files first, then read them in one jq. Forking jq per
+    # file cost a process for every registered session on an interactive
+    # command; claude-pane-session already reads the same set in a single
+    # pass. The argument-parsing loop above consumed "$@", so the positional
+    # parameters are free to hold the list — this is /bin/sh, with no arrays.
+    set --
     for file in "$sessions"/*.json; do
         [ -e "$file" ] || continue
         pid=${file##*/}
         pid=${pid%.json}
         case $pid in *[!0-9]*) continue ;; esac
         kill -0 "$pid" 2>/dev/null || continue
-        agents="${agents}$(jq -r '[.cwd, .name, .status] | @tsv' "$file" 2>/dev/null)
-"
+        set -- "$@" "$file"
     done
+    # jq exits non-zero if any file is malformed, so ask for one record per
+    # input and let a bad file lose only its own row.
+    [ "$#" -eq 0 ] || agents=$(jq -r '[.cwd, .name, .status] | @tsv' "$@" 2>/dev/null)
 fi
 
 list=$(git worktree list --porcelain) || exit $?
