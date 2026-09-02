@@ -688,6 +688,35 @@ github_latest_tag() {
     echo "${tag}"
 }
 
+# The repo's latest release is not necessarily a desktop one. Obsidian ships
+# Android from the same repo on its own cadence, and v1.13.8 (21 August 2026)
+# carried a single Obsidian-1.13.8.apk with no .deb or tarball beside it — so
+# github_latest_tag resolved a version whose desktop assets do not exist and the
+# download 404ed. desktop-releases.json on the repo's master branch is what the
+# app's own updater reads, so its latestVersion names the newest version that
+# actually has desktop builds; here that is 1.13.7. The beta block repeats the
+# same key further down, which -m1 skips.
+obsidian_desktop_version() {
+    local tmp
+    tmp="$(mktemp)"
+    # RETURN traps persist for the caller too until unset; see github_latest_tag.
+    trap 'rm -f "${tmp}"; trap - RETURN' RETURN
+    if ! download \
+        https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/desktop-releases.json \
+        "${tmp}"; then
+        return 1
+    fi
+    local line version
+    line="$(grep -m1 '"latestVersion"' "${tmp}" || true)"
+    version="${line#*\"latestVersion\": \"}"
+    version="${version%%\"*}"
+    if [[ -z "${version}" ]]; then
+        err "Obsidian: no latestVersion in desktop-releases.json; upstream format changed"
+        return 1
+    fi
+    echo "${version}"
+}
+
 version_gte() {
     local current="$1" required="$2"
     local cur_major cur_minor cur_patch req_major req_minor req_patch
@@ -2974,8 +3003,8 @@ install_obsidian() {
     fi
 
     local tag version
-    tag="$(github_latest_tag obsidianmd/obsidian-releases)" || return 1
-    version="${tag#v}"
+    version="$(obsidian_desktop_version)" || return 1
+    tag="v${version}"
 
     case "${os_arch}" in
         x86_64 | amd64)
