@@ -1,0 +1,25 @@
+# Login shells only. Homebrew and elan both want to be on PATH before .zshrc
+# runs, since .zshrc reads $HOMEBREW_BASE and ~/.fzf.zsh sources out of the
+# keg — a Mac provisioned from the install scripts with neither of these files
+# managed came up with no brew on PATH at all.
+{{ if eq .chezmoi.os "darwin" -}}
+# `brew shellenv` sets PATH, MANPATH, INFOPATH and the HOMEBREW_* variables.
+# The path is fixed on Apple silicon, and this repo targets no Intel Mac.
+[ -x /opt/homebrew/bin/brew ] && eval "$(/opt/homebrew/bin/brew shellenv)"
+{{- else if eq .chezmoi.os "linux" }}
+# Linuxbrew installs to /home/linuxbrew/.linuxbrew as a shared install and to
+# ~/.linuxbrew when it has no write access there. Neither is guaranteed to
+# exist, and most of these machines get their tools from the install scripts
+# instead, so both are guarded and a miss is silent.
+for _brew in /home/linuxbrew/.linuxbrew/bin/brew "$HOME/.linuxbrew/bin/brew"; do
+    if [ -x "$_brew" ]; then
+        eval "$("$_brew" shellenv)"
+        break
+    fi
+done
+unset _brew
+{{- end }}
+
+# Lean's toolchain manager. Guarded on the directory, so a machine without lean
+# does not carry a PATH entry that resolves to nothing.
+[ -d "$HOME/.elan/bin" ] && export PATH="$HOME/.elan/bin:$PATH"

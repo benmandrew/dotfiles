@@ -35,16 +35,41 @@ autoload -Uz compinit
 # startups skips compinit's expensive rescan of $fpath entirely. (N.mh-24) is
 # zsh's own mtime test — the `find` this replaced forked a process on every
 # single shell startup to answer the same question.
+#
+# The day the dump goes stale, the rebuild used to run in the foreground and
+# the shell it landed in took 357 ms to reach a prompt. So the stale dump is
+# sourced with -C as usual and the rescan happens in a backgrounded subshell,
+# which writes a dump of its own and moves it over the old one — the shell that
+# triggered the rebuild pays nothing for it, and the next shell picks the new
+# dump up. Moved rather than written in place, so a shell starting mid-rebuild
+# never reads a half-written dump. The dump goes first and the .zwc after it:
+# zsh ignores a .zwc older than its dump, so the window between the two moves
+# costs a slower source rather than a wrong one.
 # shellcheck disable=SC1036  # zsh glob qualifier, read as bash by the linter
-_zcompdump_fresh=("${ZDOTDIR:-$HOME}"/.zcompdump(N.mh-24))
-if (( ! $#_zcompdump_fresh )); then
-  compinit
-  # Compile dump in background; subsequent startups source the faster .zwc
-  (zcompile "${ZDOTDIR:-$HOME}/.zcompdump" &)
+_zcompdump="${ZDOTDIR:-$HOME}/.zcompdump"
+# shellcheck disable=SC1036  # zsh glob qualifier, read as bash by the linter
+_zcompdump_fresh=("$_zcompdump"(N.mh-24))
+if [[ ! -f "$_zcompdump" ]]; then
+  # No dump at all — nothing to source, so this one has to be built here.
+  compinit -d "$_zcompdump"
+  (zcompile "$_zcompdump" &)
 else
-  compinit -C
+  compinit -C -d "$_zcompdump"
+  if (( ! $#_zcompdump_fresh )); then
+    # Backgrounded inside a subshell, the same idiom as the zcompile above:
+    # the subshell exits at once and the job goes with it, so an interactive
+    # shell never prints a job notification for it. $$ names the temp files
+    # after this shell, so two shells rebuilding at once do not collide.
+    ( {
+        compinit -d "$_zcompdump.$$" \
+          && zcompile "$_zcompdump.$$" \
+          && mv -f "$_zcompdump.$$" "$_zcompdump" \
+          && mv -f "$_zcompdump.$$.zwc" "$_zcompdump.zwc"
+        rm -f "$_zcompdump.$$" "$_zcompdump.$$.zwc"
+      } & )
+  fi
 fi
-unset _zcompdump_fresh
+unset _zcompdump _zcompdump_fresh
 # Case-insensitive, then partial-word (_/-), then substring matching.
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
 # fzf-tab draws the menu itself, and needs zsh's own one off to capture the
@@ -57,6 +82,26 @@ zstyle ':completion:*' menu no
 zstyle ':completion:*' group-name ''
 zstyle ':completion:*:descriptions' format '[%d]'
 zstyle ':completion:*:warnings' format 'no matches: %d'
+# Nothing on either platform sets LS_COLORS: macOS ships BSD ls, which reads
+# LSCOLORS instead, and the Linux boxes get their tools as bare binaries with
+# no login script to run `dircolors`. So the list-colors zstyle below expanded
+# an empty variable and the completion menu came out uncoloured, and eza fell
+# back to its own defaults. Written out rather than generated, because
+# `dircolors -b` costs a fork (3.6 ms ± 0.9) on every startup for a constant,
+# and because this block runs before the PATH assignments further down, so a
+# `command -v` for it here would miss on a shell that has not sourced
+# ~/.zprofile. eza reads the same variable, so `ls` and the completion menu
+# agree on what a directory or an archive looks like.
+export LS_COLORS="rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35"\
+":bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00"\
+":tw=30;42:ow=34;42:st=37;44:ex=01;32"\
+":*.tar=01;31:*.tgz=01;31:*.zip=01;31:*.gz=01;31:*.bz2=01;31:*.xz=01;31"\
+":*.zst=01;31:*.7z=01;31:*.rar=01;31:*.deb=01;31:*.rpm=01;31"\
+":*.jpg=01;35:*.jpeg=01;35:*.png=01;35:*.gif=01;35:*.bmp=01;35:*.tif=01;35"\
+":*.svg=01;35:*.webp=01;35:*.pdf=01;35"\
+":*.mp4=01;35:*.mkv=01;35:*.webm=01;35:*.mov=01;35:*.avi=01;35"\
+":*.mp3=00;36:*.flac=00;36:*.wav=00;36:*.ogg=00;36:*.opus=00;36"
+
 # Reuse the ls palette so completed paths carry the same colours as `ls`.
 # shellcheck disable=SC2296  # zsh flag syntax, read as bash by the linter
 zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
@@ -86,11 +131,34 @@ fi
 setopt COMPLETE_IN_WORD    # complete from the cursor, not just word end
 setopt ALWAYS_TO_END       # move cursor to word end after completing
 
-# SSH agent — only start a new agent and load keys when no agent is running.
-# In subsequent shells the inherited SSH_AUTH_SOCK skips this block entirely.
-if [ -z "$SSH_AUTH_SOCK" ]; then
-  eval "$(ssh-agent -s)" > /dev/null
-  [[ -o interactive ]] && grep -slR "PRIVATE" $HOME/.ssh/ | xargs ssh-add > /dev/null 2>&1
+# SSH agent. macOS runs one under launchd and hands every session an
+# SSH_AUTH_SOCK, so this block never fires there; it is for the Linux machines
+# and for a login reached without agent forwarding.
+#
+# The agent is bound to a fixed socket rather than the random /tmp path
+# ssh-agent picks for itself. Every terminal that inherited no SSH_AUTH_SOCK
+# used to start an agent of its own and nothing ever reaped them, so a live
+# socket is reused here and only a stale one is replaced. Keys are not loaded
+# either: doing that meant a recursive `grep -slR ~/.ssh` per terminal, and
+# `AddKeysToAgent yes` in ~/.ssh/config already adds each key on first use.
+if [[ -o interactive && -z "$SSH_AUTH_SOCK" ]] && command -v ssh-agent > /dev/null 2>&1; then
+  _ssh_agent_dir="${XDG_RUNTIME_DIR:-$HOME/.cache}"
+  _ssh_agent_sock="$_ssh_agent_dir/ssh-agent.sock"
+  _ssh_agent_live=""
+  if [[ -S "$_ssh_agent_sock" ]]; then
+    # ssh-add exits 2 when it cannot open a connection; 1 is a live agent
+    # holding no keys, which is still an agent worth keeping.
+    SSH_AUTH_SOCK="$_ssh_agent_sock" ssh-add -l > /dev/null 2>&1
+    # shellcheck disable=SC2181  # the exit status is the whole test
+    (( $? != 2 )) && _ssh_agent_live=1
+  fi
+  if [[ -z "$_ssh_agent_live" ]]; then
+    mkdir -p "$_ssh_agent_dir"
+    rm -f "$_ssh_agent_sock"
+    ssh-agent -a "$_ssh_agent_sock" > /dev/null 2>&1
+  fi
+  [[ -S "$_ssh_agent_sock" ]] && export SSH_AUTH_SOCK="$_ssh_agent_sock"
+  unset _ssh_agent_dir _ssh_agent_sock _ssh_agent_live
 fi
 
 # zsh keeps `path` and `PATH` tied to one another, and -U makes `path` a unique
@@ -111,10 +179,16 @@ export CXX=clang++
 # Appending put them behind both, so a stale system binary shadowed the managed
 # one in silence: a /usr/local/bin/starship left by an older run kept being
 # used while ~/.local/bin/starship sat there unread. Highest priority first.
+# ~/.cargo/bin is listed here as well as in ~/.zshenv, which is where
+# `. ~/.cargo/env` puts it. That runs before this block, so without the entry
+# the rustup shims landed behind /opt/homebrew/bin — the shadowing this list
+# exists to prevent. typeset -U keeps the first occurrence, so naming it here
+# wins and the duplicate is dropped.
 path=(
   "$HOME/.local/bin"
   "$HOME/bin"
   "$HOME/Library/Python/3.10/bin"
+  "$HOME/.cargo/bin"
   "${GOPATH:-$HOME/go}/bin"
   $path
 )
@@ -158,13 +232,22 @@ path+=(
 # since it can't introspect a remote process's cwd directly like it can for
 # local panes.
 autoload -Uz add-zsh-hook
+#
+# Two things about the encoding loop. `printf -v` writes into the variable
+# directly, where the $(printf ...) it replaced forked a subshell for every
+# character that needed escaping. And nomultibyte makes the string index by
+# byte rather than by character, which is what RFC 3986 asks for: indexing by
+# character handed printf a code point, so a path holding é reported %E9
+# instead of its two UTF-8 bytes %C3%A9 and the terminal read the directory as
+# a different one. localoptions keeps that option inside the function.
 _osc7_cwd() {
-  local i c encoded=""
+  setopt localoptions nomultibyte
+  local i c hex encoded=""
   for (( i = 1; i <= ${#PWD}; ++i )); do
     c="${PWD:$((i-1)):1}"
     case "$c" in
       [A-Za-z0-9_.!~*\'\(\)/:-]) encoded+="$c" ;;
-      *) encoded+=$(printf '%%%02X' "'$c") ;;
+      *) printf -v hex '%%%02X' "'$c"; encoded+="$hex" ;;
     esac
   done
   printf '\e]7;file://%s%s\e\\' "${HOST}" "$encoded"
@@ -193,9 +276,13 @@ export ZSTD_CLEVEL=6
 # `tar -xf` handles .zst, .gz and .xz alike.
 alias tarc="tar -a -cf"
 
-export PAGER="moor --wrap --tab-size=4 --quit-if-one-screen"
-export MANPAGER="$PAGER"
-alias less=moor
+# Guarded, because a box that has not run the install scripts yet has no moor,
+# and an unconditional MANPAGER makes `man` fail rather than fall back to less.
+if command -v moor > /dev/null 2>&1; then
+  export PAGER="moor --wrap --tab-size=4 --quit-if-one-screen"
+  export MANPAGER="$PAGER"
+  alias less=moor
+fi
 
 # glow looks for glow.yml under ~/Library/Preferences on macOS and under
 # $XDG_CONFIG_HOME on Linux, so the chezmoi-managed ~/.config/glow/glow.yml,
@@ -238,15 +325,48 @@ watch() {
 # format even when stdout isn't a tty, which breaks idioms like `ls | xargs`.
 # unalias first: zsh refuses to define a function over an existing alias
 # of the same name (e.g. one set by a system skeleton .zshrc).
+# Guarded for the same reason as moor above: without eza this left `ls` as a
+# function calling a binary that is not there, so the first command on a fresh
+# box failed. Unguarded, the system ls stays in place.
 unalias ls 2>/dev/null || true
-ls() {
-  if [[ -t 1 ]]; then
-    eza --long --group-directories-first "$@"
-  else
-    eza --oneline --group-directories-first "$@"
-  fi
-}
-alias lsa="eza --long --group-directories-first --all"
+if command -v eza > /dev/null 2>&1; then
+  ls() {
+    if [[ -t 1 ]]; then
+      eza --long --group-directories-first "$@"
+    else
+      eza --oneline --group-directories-first "$@"
+    fi
+  }
+  alias lsa="eza --long --group-directories-first --all"
+fi
+# Spelt through `ls` rather than through eza, so both names still work when the
+# guard above did not fire and `ls` is the system one.
+alias ll="ls -l"
+alias la="ls -la"
+
+mkcd() { mkdir -p -- "$1" && cd -- "$1"; }
+
+# AUTO_PUSHD makes each of these a dirstack entry, so `cd -` walks back up.
+# `..` needs no alias: AUTO_CD reads a bare directory name as a cd already.
+alias ...="cd ../.."
+alias ....="cd ../../.."
+
+# fd and rg are installed and barely reached for — 7 uses against 180 of
+# `find`, 3 against 31 of `grep` in the recorded history. Short names rather
+# than taking the old ones: neither tool is a drop-in, since rg makes recursion
+# the default and spells -r as its replace flag while fd shares no syntax at
+# all with find's predicate expressions, so shadowing `find` and `grep` would
+# break every invocation that carries a flag instead of redirecting it. These
+# are defined in .zshrc, so scripts and non-interactive shells see none of it.
+if command -v fd > /dev/null 2>&1; then
+  alias f="fd"
+  # fd honours .gitignore and skips dotfiles; the search that finds nothing is
+  # usually one of those two, so the second name turns both off.
+  alias fa="fd --hidden --no-ignore"
+fi
+if command -v rg > /dev/null 2>&1; then
+  alias rga="rg --hidden --no-ignore"
+fi
 alias python="python3"
 alias cz="chezmoi"
 
@@ -266,6 +386,13 @@ alias gdc="git diff --cached"
 alias gll="git ll"
 alias gdl="git dl"
 alias gwt="git wt"
+# The write verbs, on the same g<initials> pattern. gch above already covers
+# checkout, so there is no separate gco.
+alias gcm="git cm"
+alias gp="git push"
+alias gpl="git pull"
+alias gb="git branch"
+alias gf="git fetch --prune"
 # Switching worktrees cannot be a git subcommand: `git wt` runs as a child
 # process, so it can never change this shell's directory. Reuse its --paths
 # output rather than listing worktrees again, so the picker and the plain
@@ -278,13 +405,41 @@ gws() {
     --height=40% --reverse --no-multi --prompt='worktree> ') || return
   [[ -n $target ]] && cd "${target%%$'\t'*}"
 }
-unalias gl 2>/dev/null || true
-
 export HISTFILE="$HOME/.zsh_history"
 export HISTSIZE=1000000000
 export SAVEHIST=1000000000
 setopt EXTENDED_HISTORY
 setopt SHARE_HISTORY
+# HISTFILE is the offline fallback for atuin, and atuin's secrets_filter does
+# not reach it, so a command typed with a leading space to keep a token out of
+# the history was still landing in ~/.zsh_history.
+setopt HIST_IGNORE_SPACE
+setopt HIST_IGNORE_ALL_DUPS  # drop the older copy of a repeated command
+setopt HIST_SAVE_NO_DUPS     # and never write a duplicate to the file
+setopt HIST_FIND_NO_DUPS     # ^R walks distinct commands, not the same one
+setopt HIST_REDUCE_BLANKS    # normalise whitespace before storing
+setopt HIST_VERIFY           # a !-expansion lands on the line for review
+
+# INTERACTIVE_COMMENTS was on only because `atuin init zsh` sets it, so a
+# machine without atuin lost `#` comments at the prompt with nothing to say so.
+setopt INTERACTIVE_COMMENTS
+
+setopt AUTO_CD               # a bare directory name is a cd. It runs the
+                             # builtin, so zoxide's `cd` never sees it and
+                             # the jump is not recorded
+setopt AUTO_PUSHD            # every cd pushes, so `cd -<TAB>` lists history
+setopt PUSHD_IGNORE_DUPS
+setopt PUSHD_SILENT          # without it every cd prints the whole dirstack
+
+setopt EXTENDED_GLOB         # ^, # and ~ in patterns; also the (N) qualifiers
+setopt NO_CASE_GLOB          # match case-insensitively, as completion does
+# GLOB_DOTS is deliberately left off. It would make * match dotfiles, so
+# `rm *` in a project directory would take .git with it. Use *(D) or the
+# explicit .* where a glob really should reach them.
+
+unsetopt BEEP                # /etc/zshrc leaves it on, so every ambiguous
+                             # completion beeps
+unsetopt FLOW_CONTROL        # ^S froze the terminal; free it for the editor
 
 bindkey -e
 autoload -U up-line-or-beginning-search down-line-or-beginning-search
@@ -305,6 +460,25 @@ bindkey "^[[1;3C" forward-word
 bindkey "^[[1;5D" backward-word
 bindkey "^[[1;5C" forward-word
 
+# Home/End/Delete. /etc/zshrc binds these from terminfo, but it runs before the
+# `bindkey -e` above, which installs the emacs keymap over the top — so whether
+# they survive depends on a file this repo does not own. Bound here for both
+# the CSI ~ and the CSI-letter forms, since which one arrives depends on the
+# terminal's cursor-key mode.
+bindkey "^[[H"  beginning-of-line
+bindkey "^[[1~" beginning-of-line
+bindkey "^[OH"  beginning-of-line
+bindkey "^[[F"  end-of-line
+bindkey "^[[4~" end-of-line
+bindkey "^[OF"  end-of-line
+bindkey "^[[3~" delete-char
+
+# ^X^E opens the current line in $EDITOR and runs what comes back, for the
+# command that has outgrown a single line.
+autoload -Uz edit-command-line
+zle -N edit-command-line
+bindkey "^X^E" edit-command-line
+
 # Claude
 export MAX_THINKING_TOKENS=8000
 export WORKSPACE_ROOTS="$HOME/projects"
@@ -320,6 +494,12 @@ export CLAUDE_CODE_MAX_OUTPUT_TOKENS=64000
 # printed "no such file or directory". The stamp is a comment line, so a cache
 # written before this existed fails the comparison and is rebuilt once.
 #
+# The arguments are in the stamp too. Keyed on the binary alone, editing
+# `zoxide init zsh --cmd cd` or atuin's --disable flags changed nothing the
+# check could see, so the cache written under the old flags was sourced
+# indefinitely. Written out rather than hashed, since the stamp is a comment
+# line either way and a hash would cost a fork to compute.
+#
 # `command -v` and `read` are builtins, so the check costs no fork. A command
 # that has gone away takes its cache with it rather than being sourced stale.
 _cache_eval() {
@@ -329,7 +509,7 @@ _cache_eval() {
     rm -f "$cache" "$cache.zwc"
     return
   fi
-  stamp="# _cache_eval binary: $bin_path"
+  stamp="# _cache_eval binary: $bin_path args: $*"
   [[ -f "$cache" ]] && read -r first < "$cache"
   if [[ "$first" != "$stamp" ]] || [[ "$bin_path" -nt "$cache" ]]; then
     mkdir -p "${cache:h}"
@@ -381,6 +561,15 @@ if [[ -f "$HOME/.local/share/fzf-tab/fzf-tab.plugin.zsh" ]]; then
     'git log --oneline --graph --color=always -20 $word 2>/dev/null'
 fi
 
+# fzf pickers over git objects on ^G^B (branches), ^G^F (files), ^G^H (hashes),
+# ^G^T (tags) and ^G^R (remotes), cloned by install_fzf_git. Sourced after the
+# fzf-tab block because it binds the ^G prefix through zle, which needs the
+# line editor already set up. Guarded because it is a clone rather than a
+# package, so a machine that has not run the install scripts has no such file.
+_fzf_git="${XDG_DATA_HOME:-$HOME/.local/share}/fzf-git.sh/fzf-git.sh"
+[[ -f "$_fzf_git" ]] && source "$_fzf_git"
+unset _fzf_git
+
 # atuin stores history in its own SQLite db and syncs it per command record, so
 # two machines merge instead of conflicting the way a shared ~/.zsh_history
 # would. HISTFILE above still gets written, and stays the offline fallback.
@@ -401,7 +590,7 @@ if command -v atuin >/dev/null 2>&1; then
   # records already written keep the hostname, and `--filter-mode host` treats
   # the two as different machines.
   export ATUIN_HOST_NAME="{{ $atuinHost }}"
-{{ end }}
+{{- end }}
   _cache_eval atuin init zsh --disable-up-arrow --disable-ai
 fi
 

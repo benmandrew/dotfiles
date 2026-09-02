@@ -3,14 +3,23 @@
 if [[ ! "$PATH" == *$HOMEBREW_BASE/fzf/bin* ]]; then
   PATH="${PATH:+${PATH}:}$HOMEBREW_BASE/fzf/bin"
 fi
-source "$HOMEBREW_BASE/fzf/shell/completion.zsh"
-source "$HOMEBREW_BASE/fzf/shell/key-bindings.zsh"
+# Guarded on the files rather than sourced outright: brew's fzf keg is not
+# there until the install scripts have run, and an unconditional source made a
+# fresh shell print two "no such file or directory" lines before the prompt.
+[[ -f "$HOMEBREW_BASE/fzf/shell/completion.zsh" ]] \
+  && source "$HOMEBREW_BASE/fzf/shell/completion.zsh"
+[[ -f "$HOMEBREW_BASE/fzf/shell/key-bindings.zsh" ]] \
+  && source "$HOMEBREW_BASE/fzf/shell/key-bindings.zsh"
 
 {{ else if eq .chezmoi.os "linux" }}
 
 if [[ ! "$PATH" == */.fzf/bin* ]]; then
   PATH="${PATH:+${PATH}:}$HOME/.fzf/bin"
 fi
-source <(fzf --zsh)
+# Through _cache_eval like the other tool inits, which .zshrc defines before it
+# sources this file. `source <(fzf --zsh)` forked fzf on every shell start, the
+# one generator here that was still paying that on each startup rather than
+# once per fzf upgrade.
+_cache_eval fzf --zsh
 
 {{ end }}

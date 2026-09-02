@@ -1,0 +1,12 @@
+# Read by every zsh, interactive or not, which is why this file holds one
+# thing. rustup's env script prepends ~/.cargo/bin to PATH if it is not there
+# already; a script run with `zsh script.zsh` sources no .zprofile and no
+# .zshrc, so without it `cargo` and the rustup shims are unreachable from one.
+#
+# The interactive PATH block in .zshrc names ~/.cargo/bin as well. That block
+# runs after this file and prepends, so it is what decides the shims sit ahead
+# of /opt/homebrew/bin rather than behind it; typeset -U drops the copy.
+#
+# Guarded on the file, so a machine without rust starts a shell rather than
+# reporting a missing include on every invocation.
+[ -r "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
