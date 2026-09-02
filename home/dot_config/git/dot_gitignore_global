@@ -1,1 +1,15 @@
+# macOS
 .DS_Store
+
+# Python bytecode. CPython writes these beside the source, so a PEP 723 script
+# run from a repo leaves them in the working tree.
+__pycache__/
+*.pyc
+
+# Virtualenvs and node
+.venv/
+node_modules/
+
+# Editor and tooling state
+.direnv/
+*.swp
