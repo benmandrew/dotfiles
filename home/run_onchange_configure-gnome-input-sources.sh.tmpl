@@ -1,4 +1,5 @@
 #!/bin/bash
+# ibus-dropin-hash: {{ include "dot_config/systemd/user/org.freedesktop.IBus.session.GNOME.service.d/gb-engine.conf" | sha256sum }}
 
 set -euo pipefail
 
@@ -25,11 +26,13 @@ has_schema() {
     gsettings list-schemas 2>/dev/null | grep -qx "$1"
 }
 
-# UK layout on every Linux box. GNOME already had the right source list while
-# the live keymap was US, because ibus picks its engine from engines-order and
-# that key was empty -- an empty list falls back to ibus's built-in default of
-# xkb:us::eng, and the X11/XWayland keymap follows whatever engine ibus holds.
-# So the source list alone is not enough; engines-order has to name gb too.
+# UK layout on every Linux box. The source list alone is not enough, since ibus
+# picks its own engine from engines-order and an empty list falls back to its
+# built-in default of xkb:us::eng, which the X11/XWayland keymap then follows.
+# Naming gb in all three keys is still not enough either: under Wayland GNOME
+# resolves an xkb-only source in mutter without telling ibus, so the daemon
+# comes up on its default every login regardless of what these keys say. The
+# systemd drop-in beside this script corrects that at the point ibus starts.
 if has_schema org.gnome.desktop.input-sources; then
     gsettings set org.gnome.desktop.input-sources sources "[('xkb', 'gb')]"
 fi
@@ -45,8 +48,15 @@ if has_schema org.gnome.desktop.input-sources; then
     gsettings set org.gnome.desktop.input-sources xkb-options "['lv3:ralt_switch']"
 fi
 
-# Correct a session that has already drifted. Provisioning runs before ibus in
-# some orders, so a failure here is not one worth stopping the run for.
+# Pick up a changed drop-in. systemd reads unit files once, so without this the
+# drop-in only takes effect after a reboot rather than at the next login.
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
+fi
+
+# Correct a session that has already drifted, which the drop-in cannot do for
+# the session it is installed from. Provisioning runs before ibus in some
+# orders, so a failure here is not one worth stopping the run for.
 if command -v ibus >/dev/null 2>&1; then
     ibus engine xkb:gb::eng >/dev/null 2>&1 || true
 fi
