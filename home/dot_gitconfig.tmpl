@@ -26,18 +26,33 @@
     excludesfile = {{ .chezmoi.homeDir }}/.config/git/.gitignore_global
     attributesFile = {{ .chezmoi.homeDir }}/.config/git/attributes
     editor = nvim
+    # This key has to sit in [core]. It previously followed the [diff "prose"]
+    # header below, where git read it as diff.prose.pager and ignored it: a
+    # diff driver takes textconv, cachetextconv, binary, command, xfuncname
+    # and wordRegex, and no pager. core.pager was therefore unset and git fell
+    # back to $PAGER (dot_zshrc.tmpl:196), so `git diff`, `git log -p` and
+    # `git show` rendered through bare moor and never reached delta — which is
+    # why navigate and line-numbers below appeared to do nothing. `git add -p`
+    # was unaffected, since interactive.diffFilter is a top-level key.
+    # --paging=never stops delta spawning its own pager, which would nest
+    # a second pager inside moor instead of streaming straight into it.
+    # Falling back to cat matters because git runs this pipeline through sh:
+    # with delta absent the shell writes "command not found" to stderr and
+    # feeds moor an empty stdin, so `git diff` prints nothing at all rather
+    # than failing visibly. install_delta provisions it and verify-install.sh
+    # checks for it, but the pager should not be what discovers it is missing.
+    # A subshell rather than a brace group: git's config parser reads ";" as a
+    # start-of-comment, so the "; }" a brace group needs truncates the value.
+{{- if eq .chezmoi.os "darwin" }}
+    pager = (command -v delta >/dev/null 2>&1 && delta --paging=never || cat) | moor
+{{- else if eq .chezmoi.os "linux" }}
+    pager = (command -v delta >/dev/null 2>&1 && delta --paging=never || cat) | moor --wrap --tab-size=4
+{{- end }}
 [diff "prose"]
     # One sentence per line, so a one-word edit in a paragraph-per-line file
     # stops reading as the whole paragraph replaced. Display only — git turns
     # textconv off wherever the diff has to stay applicable.
     textconv = {{ .chezmoi.homeDir }}/.local/bin/git-prose-split
-{{ if eq .chezmoi.os "darwin" }}
-    # --paging=never stops delta spawning its own pager, which would nest
-    # a second pager inside moor instead of streaming straight into it
-    pager = delta --paging=never | moor
-{{ else if eq .chezmoi.os "linux" }}
-    pager = delta --paging=never | moor --wrap --tab-size=4
-{{ end }}
 [interactive]
     diffFilter = delta --color-only
 [delta]
