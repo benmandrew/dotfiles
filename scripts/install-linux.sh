@@ -33,6 +33,68 @@ install_apt_packages_if_missing() {
     sudo apt-get install -y "${missing_packages[@]}"
 }
 
+# Ubuntu freezes git's upstream version at release and backports fixes only, so
+# jammy is on 2.34.1 and stays there for the life of the release. That is old
+# enough to matter for the config this repo deploys: zdiff3 for
+# merge.conflictStyle arrived in 2.35, rebase.updateRefs in 2.38 and
+# push.autoSetupRemote in 2.37, and dot_gitconfig.tmpl sets all three. The
+# git-core PPA is maintained by the Debian git packagers, tracks upstream
+# releases, and publishes amd64 and arm64 for every supported series.
+GIT_MIN_VERSION="2.35.0"
+# Launchpad reports this for ~git-core/+archive/ubuntu/ppa. Pinned because the
+# keyserver below is authenticated by TLS alone.
+GIT_CORE_PPA_FINGERPRINT="F911AB184317630C59970973E363C90F8F1B6217"
+
+install_git() {
+    local version oldest=""
+    version="$(git --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"
+    # sort -V, since a string compare puts 2.5.0 above 2.34.1. The minimum
+    # sorting first means the installed git is at least that.
+    if [[ -n "${version}" ]]; then
+        oldest="$(printf '%s\n%s\n' "${GIT_MIN_VERSION}" "${version}" | sort -V | head -n 1)"
+    fi
+    if [[ "${oldest}" == "${GIT_MIN_VERSION}" && -z "${UPGRADE:-}" ]]; then
+        log "git ${version} is at least ${GIT_MIN_VERSION}; skipping"
+        return
+    fi
+    # A PPA is an Ubuntu construct, and the archive only builds for supported
+    # series. Anything else keeps whatever git the distro ships.
+    local id codename
+    id="$(sed -n 's/^ID=//p' /etc/os-release 2>/dev/null | tr -d '"')"
+    codename="$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release 2>/dev/null | tr -d '"')"
+    if [[ "${id}" != "ubuntu" || -z "${codename}" ]]; then
+        log "not Ubuntu; keeping git ${version:-(absent)} as the distro ships it"
+        return
+    fi
+
+    log "Installing git from the git-core PPA (distro git is ${version:-absent})"
+    local tmp keyring="/etc/apt/keyrings/git-core-ppa.gpg"
+    tmp="$(mktemp)"
+    download "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x${GIT_CORE_PPA_FINGERPRINT}" \
+        "${tmp}" || return 1
+    # Check the key that came back is the pinned one before apt is told to
+    # trust everything it signs.
+    if ! gpg --show-keys --with-colons "${tmp}" 2>/dev/null |
+        awk -F: '/^fpr:/ { print $10 }' | grep -qx "${GIT_CORE_PPA_FINGERPRINT}"; then
+        rm -f "${tmp}"
+        err "git-core PPA key does not carry the pinned fingerprint"
+        return 1
+    fi
+    sudo mkdir -p -m 755 /etc/apt/keyrings
+    gpg --dearmor <"${tmp}" >"${tmp}.gpg" || return 1
+    sudo install -m 644 "${tmp}.gpg" "${keyring}"
+    rm -f "${tmp}" "${tmp}.gpg"
+    local arch
+    arch="$(dpkg --print-architecture)"
+    printf 'deb [arch=%s signed-by=%s] https://ppa.launchpadcontent.net/git-core/ppa/ubuntu %s main\n' \
+        "${arch}" "${keyring}" "${codename}" |
+        sudo tee /etc/apt/sources.list.d/git-core-ppa.list >/dev/null
+    sudo apt-get update
+    sudo apt-get install -y git
+    version="$(git --version)"
+    log "git is now ${version}"
+}
+
 install_perf() {
     if command -v perf >/dev/null 2>&1; then
         log "perf already installed; skipping"
@@ -144,8 +206,11 @@ main() {
     # Prerequisites, deliberately outside run_step: the rest of the install is
     # built on these, so a failure here aborts under errexit rather than being
     # collected and reported at the end.
-    quiet install_apt_packages_if_missing git curl build-essential zsh entr libevent-dev libncurses-dev pkg-config bubblewrap bison autoconf unzip
+    quiet install_apt_packages_if_missing git curl gpg build-essential zsh entr libevent-dev libncurses-dev pkg-config bubblewrap bison autoconf unzip
     quiet install_perf
+    # Early, so every later step and the user's own work runs against the
+    # newer git rather than jammy's 2.34.1.
+    run_step install_git
     run_step install_inotify_limits
     run_step install_tmux_from_source
     run_step install_cmake

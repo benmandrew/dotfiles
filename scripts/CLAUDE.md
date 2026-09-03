@@ -76,8 +76,9 @@ Uses no bash 4+ features, so it is safe under the bash 3.2 macOS ships. Ordering
 
 ## `scripts/install-linux.sh`
 
-Supports x86_64 and aarch64 — arch is detected at runtime. Two steps that are not what they look like:
+Supports x86_64 and aarch64 — arch is detected at runtime. Three steps that are not what they look like:
 
+- `install_git` — replaces the distro git with the [git-core PPA](https://launchpad.net/~git-core/+archive/ubuntu/ppa) build whenever the installed one is below `GIT_MIN_VERSION` (2.35.0). Ubuntu freezes git's upstream version at release and backports fixes alone, so jammy sits on 2.34.1 for the life of the release, and `dot_gitconfig.tmpl` asks for `merge.conflictStyle = zdiff3` (git 2.35), `push.autoSetupRemote` (2.37) and `rebase.updateRefs` (2.38). The PPA's signing key comes from keyserver.ubuntu.com and is checked against the fingerprint pinned in `GIT_CORE_PPA_FINGERPRINT` before apt is told to trust it, since that keyserver is authenticated by TLS alone. It runs first of the `run_step` list, so every later step and the user's own work see the new git. A target that is not Ubuntu keeps whatever git it has, a PPA being an Ubuntu construct whose archive only builds for supported series; so does one already at 2.35, which retires the step by itself as the oldest supported release moves on
 - `perf` (`linux-tools-generic`) — best-effort; skipped with a warning (not a failure) if the exact-version kernel-tools package isn't available, which is common on cloud/CI kernels
 - `install_inotify_limits` — writes a sysctl drop-in (`/etc/sysctl.d/60-inotify-watches.conf`) raising `fs.inotify.max_user_watches`/`max_user_instances`, so VS Code's file watcher doesn't hit "Unable to watch for file changes" on large workspaces
 

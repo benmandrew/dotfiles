@@ -1,3 +1,6 @@
 [default.extend-words]
 # catppuccin theme variable prefix
 thm = "thm"
+# gpg's colon-listing record type for a fingerprint line, matched by
+# install_git in scripts/install-linux.sh
+fpr = "fpr"
