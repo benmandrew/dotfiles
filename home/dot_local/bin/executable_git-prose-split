@@ -13,6 +13,15 @@
 # cache is keyed on the blob rather than on this script, so it would serve
 # stale splits after every edit here, and an awk pass over prose is cheap.
 
+# VSCode fetches the "original" side of its editor gutter diff with
+# `git show --textconv`, then compares that against the unsplit editor buffer,
+# so every paragraph reads as a change even on a clean worktree. Its git child
+# processes all carry these variables, so hand the file back unsplit there and
+# leave the terminal diffs alone.
+if [ -n "${VSCODE_GIT_IPC_HANDLE-}" ] || [ -n "${VSCODE_GIT_ASKPASS_NODE-}" ]; then
+    exec cat "$1"
+fi
+
 # Abbreviations whose full stop ends a word rather than a sentence. Matched
 # against the whole preceding word, so `al` covers `et al.` and `No` covers
 # `No. 4` without also matching the word "no".
