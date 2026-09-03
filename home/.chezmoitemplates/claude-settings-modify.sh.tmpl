@@ -1,0 +1,61 @@
+#!/bin/sh
+# Claude Code owns settings.json: it rewrites the whole file whenever a setting
+# changes — /model, /output-style, the theme picker, a queued feedback draft —
+# and reorders every key while it is there. Managing it as a plain file meant
+# each of those writes tripped chezmoi's "has changed since chezmoi last wrote
+# it" prompt, on a diff that was pure reordering.
+#
+# So chezmoi manages a *subset* of keys. The current file arrives on stdin; we
+# merge our keys over the top and emit the result. Session preferences Claude
+# Code writes for itself — model, theme, outputStyle, effortLevel,
+# feedbackDrafts — are deliberately absent from that subset, so they survive
+# every apply and stay per-machine. Same shape as the VS Code script beside
+# this one, minus its JSONC scrubber: Claude Code writes strict JSON, and a
+# comment in this file would break Claude Code before it reached chezmoi.
+set -eu
+
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
+
+cat >"$tmpdir/current"
+
+cat >"$tmpdir/managed" <<'CHEZMOI_MANAGED_SETTINGS'
+{{ template "claude-settings.json.tmpl" . }}
+CHEZMOI_MANAGED_SETTINGS
+
+# Seeded on a machine that has no settings.json yet, then never touched again,
+# so a fresh box does not come up on the stock model, theme and output style.
+# None of the four is managed, so whatever Claude Code writes over them later
+# stands.
+cat >"$tmpdir/defaults" <<'CHEZMOI_SEEDED_SETTINGS'
+{
+  "model": "claude-opus-5",
+  "outputStyle": "voice",
+  "effortLevel": "high",
+  "theme": "dark"
+}
+CHEZMOI_SEEDED_SETTINGS
+
+# Without jq we cannot merge; fall back to asserting our keys only.
+if ! command -v jq >/dev/null 2>&1; then
+	cat "$tmpdir/managed"
+	exit 0
+fi
+
+# Empty stdin is a target that does not exist yet — a machine being
+# provisioned for the first time. That is the one moment the defaults apply.
+# Merging them in on every run instead would hoist their four keys to the front
+# of the output, so each time Claude Code reordered the file the merge would
+# reorder it back and the prompt this script exists to remove would return.
+if [ ! -s "$tmpdir/current" ]; then
+	cp "$tmpdir/defaults" "$tmpdir/current"
+fi
+
+# Recursive merge, managed keys winning. Objects merge key by key, so a plugin
+# enabled through the UI and absent from enabledPlugins here is kept; arrays
+# are replaced whole rather than concatenated, which is what permissions.deny
+# wants. If the existing file is unparseable (hand-mangled, half-written), fall
+# back to our keys rather than erroring out and leaving chezmoi unable to
+# apply.
+jq -s '.[0] * .[1]' "$tmpdir/current" "$tmpdir/managed" 2>/dev/null ||
+	cat "$tmpdir/managed"

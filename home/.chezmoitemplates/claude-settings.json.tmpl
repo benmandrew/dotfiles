@@ -1,7 +1,10 @@
 {
-  "includeCoAuthoredBy": false,
   "env": {
     "CLAUDE_CODE_NO_FLICKER": "1"
+  },
+  "includeCoAuthoredBy": false,
+  "attribution": {
+    "sessionUrl": false
   },
   "permissions": {
     "defaultMode": "auto",
@@ -12,8 +15,6 @@
       "Read(~/.ssh/id_*)"
     ]
   },
-  "model": "claude-opus-5",
-  "outputStyle": "voice",
   "hooks": {
     "PreToolUse": [
       {
@@ -57,10 +58,5 @@
     "lua-lsp@claude-plugins-official": true,
     "bib-audit@isaaccorley-skills": true
   },
-  "effortLevel": "high",
-  "theme": "dark",
-  "skipDangerousModePermissionPrompt": true,
-  "attribution": {
-    "sessionUrl": false
-  }
+  "skipDangerousModePermissionPrompt": true
 }
