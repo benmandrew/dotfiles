@@ -1,3 +1,8 @@
+{{- /* zdiff3 landed in git 2.35; the [merge] block below needs the version. */ -}}
+{{- $gitVersion := "0.0.0" -}}
+{{- if lookPath "git" -}}
+{{-   $gitVersion = (output "git" "--version") | regexFind `[0-9]+\.[0-9]+\.[0-9]+` | default "0.0.0" -}}
+{{- end -}}
 [user]
     name = benmandrew
     email = benmandrew@gmail.com
@@ -19,7 +24,13 @@
     autoUpdate = true
 [merge]
     # Three-way, so the common ancestor is visible alongside both sides.
-    conflictStyle = zdiff3
+    # zdiff3 needs git 2.35. An older git treats the unknown value as fatal,
+    # and not only on a merge. `git merge`, `git cherry-pick` and
+    # `git checkout -b` all exit 128 with "unknown style 'zdiff3' given for
+    # 'merge.conflictstyle'", and `git rebase` exits 1. Ubuntu 22.04 ships
+    # 2.34.1, so the value is resolved against the local git at apply time
+    # and falls back to diff3.
+    conflictStyle = {{ if semverCompare ">=2.35.0" $gitVersion }}zdiff3{{ else }}diff3{{ end }}
 [fetch]
     prune = true
     pruneTags = true
