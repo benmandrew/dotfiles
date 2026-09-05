@@ -20,6 +20,12 @@ exec 3>&2
 _STEP_LOG_DIR=""
 _STEP_LOG_LINES=50
 
+# Set by the cleanup handler when it finds a log for a step that never reported
+# a result, which means the step took the shell down with it. The run exits 1
+# on the strength of it, since bash otherwise leaves the status at 0 and
+# `install.sh && ...` treats a run that stopped half way as a success.
+_ABORTED_IN_STEP=false
+
 # The terminal's line settings from before the running step, held here rather
 # than in a local so the handlers below can put them back. Empty when no step
 # is running.
@@ -39,8 +45,24 @@ _install_cleanup() {
     stop_sudo_helpers
     # rmdir, not rm -rf: the directory is empty once every step that passed has
     # had its log deleted, and a run with a failure keeps its logs.
-    if [[ -n "${_STEP_LOG_DIR}" ]]; then
-        rmdir "${_STEP_LOG_DIR}" 2>/dev/null || true
+    if [[ -n "${_STEP_LOG_DIR}" ]] && ! rmdir "${_STEP_LOG_DIR}" 2>/dev/null; then
+        # A step that takes the whole script down with it — `set -e` or `set -u`
+        # firing inside a function, which `quiet` runs in this shell rather than
+        # a subshell — never reaches the reporting at the end of `quiet`. Its
+        # output is in the log and its stderr went there too, so the run ends
+        # with a bare prompt and nothing to go on. `run_step` marks the failures
+        # it handled, so this covers only the ones it never saw.
+        if [[ "${_INSTALL_FAILED}" != "true" ]]; then
+            local leftover
+            _ABORTED_IN_STEP=true
+            err "The run stopped inside a step. Its output is in:"
+            for leftover in "${_STEP_LOG_DIR}"/*.log; do
+                # No nullglob, so an empty directory yields the pattern itself.
+                if [[ -f "${leftover}" ]]; then
+                    printf "\033[1;31m[install]\033[0m   %s\n" "${leftover}" >&3
+                fi
+            done
+        fi
     fi
 }
 
@@ -53,7 +75,16 @@ _install_signal_exit() {
     kill "-${signal}" "$$"
 }
 
-trap _install_cleanup EXIT
+# The EXIT path alone turns an abort into a non-zero status. The signal path
+# below re-raises instead, so it wants the cleanup and not the exit.
+_install_exit_trap() {
+    _install_cleanup
+    if [[ "${_ABORTED_IN_STEP}" == "true" ]]; then
+        exit 1
+    fi
+}
+
+trap _install_exit_trap EXIT
 trap '_install_signal_exit INT' INT
 trap '_install_signal_exit TERM' TERM
 
@@ -1654,11 +1685,36 @@ enable_nix_flakes() {
     echo "extra-experimental-features = nix-command flakes" >>"${nix_conf}"
 }
 
+# Sourced only when nix is installed but absent from PATH, which is what a
+# macOS update that rewrites /etc/zshrc leaves behind.
+#
+# This used to source /etc/bashrc, where the macOS nix installer appends its
+# block. That file is an interactive-shell rc: line 16 is `if [ -z "$PS1" ]`,
+# and PS1 is unset in the non-interactive bash this script runs under, so
+# `set -u` killed the run on the spot. It died inside `quiet`, whose redirect
+# had stdout and stderr pointed at a log file, and the reporting that names
+# that file sits after the call that never returned — so the installer stopped
+# dead after "Xcode Command Line Tools already installed" and printed nothing
+# at all. Source the profile scripts the block loads instead; they are written
+# to be sourced from anywhere and reference nothing unguarded.
+#
+# The daemon script exports __ETC_PROFILE_NIX_SOURCED and returns early when it
+# is already set, so a caller that inherited the variable with a PATH that has
+# since lost the profile directory would get a silent no-op. Clear it first,
+# since reaching here means PATH needs rebuilding whatever the variable says.
 source_nix_profile() {
-    # shellcheck disable=SC1091
-    [[ -f /etc/bashrc ]] && source /etc/bashrc
-    # shellcheck disable=SC1091
-    [[ -f "/etc/profile.d/nix.sh" ]] && source /etc/profile.d/nix.sh
+    local candidate
+    unset __ETC_PROFILE_NIX_SOURCED
+    for candidate in \
+        /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh \
+        /etc/profile.d/nix.sh \
+        "${HOME}/.nix-profile/etc/profile.d/nix.sh"; do
+        if [[ -r "${candidate}" ]]; then
+            # shellcheck disable=SC1090,SC1091
+            source "${candidate}"
+            return
+        fi
+    done
 }
 
 # min-free/max-free/auto-optimise-store/extra-substituters etc. in

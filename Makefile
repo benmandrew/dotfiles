@@ -5,15 +5,17 @@ RESET     := \033[0m
 
 # Every shell script in the tree, split by dialect. shfmt and shellcheck both
 # need telling which one they are reading, and the two sets disagree: scripts/
-# is bash, and so is the one hook under dot_claude, while everything chezmoi
-# deploys into ~/.local/bin and ~/.config/tmux is #!/bin/sh. Twelve of these
-# were formatted and linted by nothing at all, because both targets globbed
-# scripts/*.sh alone.
+# is bash, and so are the hook under dot_claude and the chezmoi run_ scripts at
+# the root of home/, while everything chezmoi deploys into ~/.local/bin and
+# ~/.config/tmux is #!/bin/sh. Twelve of these were formatted and linted by
+# nothing at all, because both targets globbed scripts/*.sh alone.
 #
 # executable_ai-commit-msg is excluded: the executable_ prefix is chezmoi's,
 # but the file is a uv single-file Python script.
 INSTALL_SCRIPTS := $(wildcard scripts/*.sh)
-DEPLOYED_BASH   := $(wildcard home/dot_claude/*.sh)
+# The run_ glob stops short of the .sh.tmpl siblings on purpose: those are
+# chezmoi templates, and neither tool can read one until it is rendered.
+DEPLOYED_BASH   := $(wildcard home/dot_claude/*.sh) $(wildcard home/run_*.sh)
 DEPLOYED_SH     := $(filter-out home/dot_local/bin/executable_ai-commit-msg,$(wildcard home/dot_local/bin/executable_*)) \
                    $(wildcard home/dot_config/tmux/*.sh)
 

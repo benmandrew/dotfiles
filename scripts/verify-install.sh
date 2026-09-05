@@ -114,6 +114,47 @@ fi
 # loads it is what actually makes it do anything.
 check_file "nix-direnv wired into direnvrc" "${HOME}/.config/direnv/direnvrc"
 
+# nix-direnv's `use flake` refuses to run under bash older than 4.4, and macOS
+# ships 3.2.57 as /bin/bash. install_modern_bash puts 5.x in the nix profile,
+# which only counts if the login shell has ~/.nix-profile/bin on PATH — a macOS
+# update rewrote /etc/zshrc and took the whole nix block with it, and every
+# .envrc in a flake repository stopped loading. So resolve bash off a login
+# shell's PATH the way direnv does, not off the doctored one at the top of this
+# script, which would report every machine as fine.
+#
+# The probe starts from the system PATH with the environment cleared, because
+# nix-daemon.sh exports __ETC_PROFILE_NIX_SOURCED and returns early when it is
+# already set: inheriting it from the caller leaves the profile directory
+# wherever the caller happened to have it, and the answer says more about this
+# script's parent than about the machine. `zsh -lc` reads .zshenv, .zprofile
+# and .zlogin and skips .zshrc, so nothing interactive writes to the stdout
+# being read here. That understates the real PATH by whatever .zshrc prepends,
+# which can only move bash earlier, so a pass here is a pass in the interactive
+# shell direnv actually runs from.
+check_bash_version() {
+    local login_path bash_path version major minor
+    # Single-quoted on purpose in both: the PATH and the version are the inner
+    # shell's to expand, and expanding them here would report this one.
+    # shellcheck disable=SC2016
+    login_path="$(env -i "HOME=${HOME}" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+        zsh -lc 'printf "%s" "$PATH"' 2>/dev/null)"
+    bash_path="$(PATH="${login_path:-${PATH}}" command -v bash 2>/dev/null)"
+    # shellcheck disable=SC2016
+    version="$("${bash_path:-/nonexistent}" -c 'printf "%s.%s" "${BASH_VERSINFO[0]}" "${BASH_VERSINFO[1]}"' 2>/dev/null)"
+    major="${version%%.*}"
+    minor="${version##*.}"
+    if [[ -n "${version}" ]] && ((major > 4 || (major == 4 && minor >= 4))); then
+        printf "\033[1;32m[ok]\033[0m   bash >= 4.4 for nix-direnv (%s, %s)\n" "${version}" "${bash_path}"
+        ((ok++)) || true
+    else
+        printf "\033[1;31m[FAIL]\033[0m bash >= 4.4 for nix-direnv (login shell resolves bash to %s, version %s)\n" \
+            "${bash_path:-none}" "${version:-unknown}" >&2
+        ((fail++)) || true
+    fi
+}
+
+check_bash_version
+
 # Editor and formatter for OCaml, installed into the default opam switch.
 check_cmd ocamllsp
 check_cmd ocamlformat
@@ -207,10 +248,23 @@ check_dir "tpm" "${HOME}/.tmux/plugins/tpm"
 # tpm clones its plugins beside itself, so a declared plugin that is not there
 # means install_tmux_plugins cloned the manager and never ran it -- which is
 # what left history-limit at tmux's 2000-line default on every machine. Read
-# the declaration out of the rendered config rather than assume it, since the
-# plugin list is free to change.
-if [[ -f "${HOME}/.tmux.conf" ]] && grep -q "tmux-sensible" "${HOME}/.tmux.conf"; then
-    check_dir "tmux-sensible" "${HOME}/.tmux/plugins/tmux-sensible"
+# the declarations out of the rendered config rather than assume them, since
+# the plugin list is free to change.
+#
+# Anchored to a `set -g @plugin` line, and reading every plugin rather than
+# naming one. It used to grep the rendered config for the bare string
+# tmux-sensible, which matched the comment above the four options inlined when
+# that plugin was dropped, so it demanded a directory for a plugin the config
+# no longer declares and reported FAIL on a correctly provisioned machine.
+if [[ -f "${HOME}/.tmux.conf" ]]; then
+    tmux_plugins="$(sed -nE "s|^[[:space:]]*set[[:space:]]+-g[[:space:]]+@plugin[[:space:]]+'[^/']+/([^']+)'.*|\1|p" "${HOME}/.tmux.conf")"
+    while read -r plugin; do
+        # tpm is the manager, cloned by install_tmux_plugins and checked as
+        # itself above; it does not live beside its own plugins.
+        if [[ -n "${plugin}" && "${plugin}" != "tpm" ]]; then
+            check_dir "tmux plugin ${plugin}" "${HOME}/.tmux/plugins/${plugin}"
+        fi
+    done <<<"${tmux_plugins}"
 fi
 
 check_cmd nvim

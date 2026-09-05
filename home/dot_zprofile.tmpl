@@ -1,7 +1,36 @@
-# Login shells only. Homebrew and elan both want to be on PATH before .zshrc
-# runs, since .zshrc reads $HOMEBREW_BASE and ~/.fzf.zsh sources out of the
-# keg — a Mac provisioned from the install scripts with neither of these files
-# managed came up with no brew on PATH at all.
+# Login shells only. Homebrew, Nix and elan all want to be on PATH before
+# .zshrc runs, since .zshrc reads $HOMEBREW_BASE and ~/.fzf.zsh sources out of
+# the keg — a Mac provisioned from the install scripts with neither of these
+# files managed came up with no brew on PATH at all.
+
+# Nix. The installer writes this same block into /etc/zshrc, which is
+# root-owned and replaced wholesale by a macOS update: this machine's
+# /etc/zshrc came back byte-identical to the /etc/zshrc.backup-before-nix the
+# installer had left beside it, so nothing put `nix` or ~/.nix-profile/bin on
+# PATH any more. /etc/bashrc kept its copy, which is why only zsh lost it.
+# The profile directory held the bash 5.3 that `install_modern_bash` puts
+# there, so losing it dropped direnv back to /bin/bash 3.2.57, under the 4.4
+# that nix-direnv's `use flake` requires, and every .envrc in a flake
+# repository, this one included, stopped loading.
+#
+# Sourced ahead of the blocks below, so Homebrew keeps the front of PATH and
+# the ~/.local/bin entries in .zshrc keep the front of that. The profile holds
+# bash, bashbug and an `sh` symlink; /bin/sh on macOS is bash 3.2 in POSIX
+# mode, so shadowing it with bash 5.3 in POSIX mode takes nothing away.
+# nix-daemon.sh exports __ETC_PROFILE_NIX_SOURCED and returns early on a second
+# run, so a restored /etc/zshrc block costs nothing rather than prepending a
+# second copy. The second path covers a single-user install, which has no
+# /nix/var/nix/profiles/default.
+for _nix_profile in \
+    /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh \
+    "$HOME/.nix-profile/etc/profile.d/nix.sh"; do
+    if [ -r "$_nix_profile" ]; then
+        . "$_nix_profile"
+        break
+    fi
+done
+unset _nix_profile
+
 {{ if eq .chezmoi.os "darwin" -}}
 # `brew shellenv` sets PATH, MANPATH, INFOPATH and the HOMEBREW_* variables.
 # The path is fixed on Apple silicon, and this repo targets no Intel Mac.
