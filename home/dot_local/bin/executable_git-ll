@@ -1,0 +1,41 @@
+#!/bin/sh
+# Graph log, one line a commit, as `git ll` (git finds any git-* on PATH).
+#
+#     * 81774ed - (HEAD -> main) fix(scripts): restore nix on PATH - benmandrew (23 hours ago)
+#     * a366ad8 - fix(git): skip prose splitting for VS Code - benmandrew (2 days ago)
+#
+# --body keeps that header and indents each commit's message body under it,
+# which is what `git log` was for. `%-b` drops the preceding newline when the
+# body is empty, so a subject-only commit renders exactly as it does without
+# the flag, and `%w(0,4,4)` indents without reflowing: the bodies are already
+# wrapped, and re-wrapping them at a fixed width ran the first line of the
+# body onto the end of the header.
+#
+# A script rather than two aliases, so the header is written once. A git alias
+# appends its arguments to a fixed command line and cannot branch on one.
+
+header='%Cred%h%Creset -%C(yellow)%d%Creset %s - %Cblue%aN%Creset (%Cgreen%cr%Creset)'
+
+# Pull --body out of the arguments wherever it appears and pass the rest
+# through to git log, so `git ll --body -5` works in either order. The rotate
+# idiom rebuilds the positional parameters, POSIX sh having no arrays.
+# --body rather than -b, which git log already reads as --ignore-space-change.
+body=0
+argc=$#
+while [ "$argc" -gt 0 ]; do
+    arg=$1
+    shift
+    argc=$((argc - 1))
+    case $arg in
+        --body) body=1 ;;
+        *) set -- "$@" "$arg" ;;
+    esac
+done
+
+if [ "$body" -eq 1 ]; then
+    format="$header%n%w(0,4,4)%-b"
+else
+    format="$header"
+fi
+
+exec git log --graph --abbrev-commit --date=relative --pretty=format:"$format" "$@"

@@ -38,7 +38,7 @@
     autoSetupRemote = true
     followTags = true
 [branch]
-    # Matches the ordering the bv alias below already produces by hand.
+    # Matches the ordering ~/.local/bin/git-bv produces by hand.
     sort = -committerdate
 [tag]
     gpgsign = true
@@ -58,10 +58,10 @@
     cm = commit -m
     # rv is ~/.local/bin/git-rv, not an alias — git runs any git-* on PATH.
     ch = checkout
-    ll = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s - %Cblue%aN%Creset (%Cgreen%cr%Creset)' --abbrev-commit --date=relative
+    # ll is ~/.local/bin/git-ll, not an alias — git runs any git-* on PATH.
     d = diff
     sv = status -vv
-    bv = for-each-ref --sort=-committerdate refs/heads/ --format='%(HEAD) %(color:yellow)%(refname:short)%(color:reset) - %(color:red)%(objectname:short)%(color:reset) - %(contents:subject) - %(color:blue)%(authorname)%(color:reset) (%(color:green)%(committerdate:relative)%(color:reset))'
+    # bv is ~/.local/bin/git-bv, not an alias — git runs any git-* on PATH.
     dl = diff HEAD~1 HEAD
     # wt is ~/.local/bin/git-wt, not an alias — git runs any git-* on PATH.
 [init]

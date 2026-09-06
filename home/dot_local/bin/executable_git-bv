@@ -1,0 +1,38 @@
+#!/bin/sh
+# List branches newest commit first, as `git bv` (git finds any git-* on PATH).
+#
+#     * main - 81774ed - fix(scripts): restore nix on PATH - benmandrew (23 hours ago)
+#       audit-remediation - e63e96b - docs: record the audit findings - benmandrew (4 days ago)
+#
+# --all adds remote-tracking branches, interleaved by date and named
+# `origin/main` rather than `main`. This was an alias in dot_gitconfig.tmpl
+# until that flag needed somewhere to live: a git alias appends its arguments
+# to a fixed command line and cannot branch on one.
+
+format='%(HEAD) %(color:yellow)%(refname:short)%(color:reset) - %(color:red)%(objectname:short)%(color:reset) - %(contents:subject) - %(color:blue)%(authorname)%(color:reset) (%(color:green)%(committerdate:relative)%(color:reset))'
+
+# Pull --all out of the arguments wherever it appears and pass the rest through
+# to for-each-ref, so `git bv --all --count=10` works in either order. The
+# rotate idiom rebuilds the positional parameters, POSIX sh having no arrays.
+all=0
+argc=$#
+while [ "$argc" -gt 0 ]; do
+    arg=$1
+    shift
+    argc=$((argc - 1))
+    case $arg in
+        --all) all=1 ;;
+        *) set -- "$@" "$arg" ;;
+    esac
+done
+
+if [ "$all" -eq 1 ]; then
+    # refs/remotes/ also matches refs/remotes/origin/HEAD, the symbolic ref
+    # naming the remote's default branch, which would list as a bare `origin`
+    # row duplicating `origin/main`.
+    set -- '--exclude=refs/remotes/*/HEAD' refs/heads/ refs/remotes/ "$@"
+else
+    set -- refs/heads/ "$@"
+fi
+
+exec git for-each-ref --sort=-committerdate --format="$format" "$@"
