@@ -373,6 +373,15 @@ alias cz="chezmoi"
 # Shadow the C-compiler `cc` interactively only — Makefiles/build scripts that
 # exec `cc` still hit the real /usr/bin/cc, since aliases aren't expanded there.
 alias cc="claude"
+# The work account, on the same alias pattern. Claude Code keeps credentials,
+# settings, projects and history under $CLAUDE_CONFIG_DIR, so a second
+# directory holds a second login and both accounts stay signed in — there is no
+# built-in account switcher, and `claude auth login` replaces whichever
+# credentials the active directory holds. ~/.claude-work symlinks the shared
+# half of the config (agents, commands, skills, output-styles, CLAUDE.md and
+# friends) back to ~/.claude, so an agent written from either account is
+# visible to both. Single-quoted, so $HOME resolves when the alias runs.
+alias cc-work='CLAUDE_CONFIG_DIR=$HOME/.claude-work claude'
 
 alias gst="git st"
 alias gs="git st"

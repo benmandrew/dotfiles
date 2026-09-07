@@ -1,0 +1,1 @@
+../.claude/VOICE.md
