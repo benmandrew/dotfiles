@@ -12,14 +12,17 @@ session_id="$(echo "$input" | jq -r '.session_id // empty')"
 # matching what `gwt` lists and what the WezTerm tab already shows, so the
 # notification names the agent rather than a directory several agents share.
 # The session files are keyed by pid, so find ours by its recorded sessionId.
-sessions="${HOME}/.claude/sessions"
+# A session registers under CLAUDE_CONFIG_DIR, so the work account — the
+# `cc-work` alias points that at ~/.claude-work — has a session directory of its
+# own, and this hook fires from both. Search every profile's; a pattern matching
+# nothing is passed through literally and jq's complaint about it is discarded.
 name=""
 pid=""
-if [ -n "$session_id" ] && [ -d "$sessions" ]; then
+if [ -n "$session_id" ]; then
     # The pid comes back alongside the name because it keys the tab flag below.
     IFS=$'\t' read -r pid name <<<"$(jq -r --arg id "$session_id" \
         'select(.sessionId == $id) | [(.pid | tostring), (.name // "")] | @tsv' \
-        "$sessions"/*.json 2>/dev/null | head -n1 || true)"
+        "${HOME}"/.claude*/sessions/*.json 2>/dev/null | head -n1 || true)"
 fi
 
 label="${name:-$(basename "${cwd:-$PWD}")}"
@@ -49,7 +52,11 @@ if [ -n "$pid" ]; then
     # Drop flags whose session has exited, as claude-tab-title does for titles.
     for stale in "$bells"/*; do
         [ -f "$stale" ] || continue
-        [ -f "$sessions/${stale##*/}.json" ] || rm -f "$stale"
+        live=""
+        for session in "${HOME}"/.claude*/sessions/"${stale##*/}".json; do
+            if [ -f "$session" ]; then live=1; fi
+        done
+        [ -n "$live" ] || rm -f "$stale"
     done
     : >"$bells/$pid"
 fi

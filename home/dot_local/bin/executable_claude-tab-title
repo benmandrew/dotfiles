@@ -3,7 +3,7 @@
 # word describing what it is working on.
 #
 # Both terminals title a claude pane from the agent identifier in
-# ~/.claude/sessions/<pid>.json ("chezmoi-d8"), which says which agent the tab
+# <config dir>/sessions/<pid>.json ("chezmoi-d8"), which says which agent the tab
 # holds and nothing about what it is doing. This writes an override to
 # ~/.claude/tab-titles/<pid>, which wezterm.lua and claude-pane-session prefer
 # over that identifier, rendering "atuin:d8" -- the task, plus the suffix claude
@@ -18,7 +18,18 @@
 set -u
 
 titles="${HOME}/.claude/tab-titles"
-sessions="${HOME}/.claude/sessions"
+
+# A session registers under CLAUDE_CONFIG_DIR, so the work account -- the
+# `cc-work` alias points that at ~/.claude-work -- keeps its session files
+# somewhere else entirely, and a title set from a work session would find no
+# session at all. Look in every profile. The titles themselves stay in the one
+# directory, a pid being a machine-wide name that no two profiles can both claim.
+have_session() {
+    for f in "${HOME}"/.claude*/sessions/"$1".json; do
+        [ -f "$f" ] && return 0
+    done
+    return 1
+}
 
 die() {
     printf '%s\n' "$*" >&2
@@ -35,7 +46,7 @@ pid=$PPID
 claude_pid=
 hops=0
 while [ "$pid" -gt 1 ] && [ "$hops" -lt 8 ]; do
-    if [ -f "$sessions/$pid.json" ]; then
+    if have_session "$pid"; then
         claude_pid=$pid
         break
     fi
@@ -56,7 +67,7 @@ mkdir -p "$titles" || exit 1
 # glob does not match.
 for stale in "$titles"/*; do
     [ -f "$stale" ] || continue
-    [ -f "$sessions/${stale##*/}.json" ] || rm -f "$stale"
+    have_session "${stale##*/}" || rm -f "$stale"
 done
 
 if [ "$1" = --clear ]; then

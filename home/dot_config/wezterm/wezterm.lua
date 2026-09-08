@@ -66,7 +66,7 @@ config.tab_bar_at_bottom = false
 -- otherwise.
 config.hide_tab_bar_if_only_one_tab = false
 
--- Claude Code registers every live session in ~/.claude/sessions/<pid>.json,
+-- Claude Code registers every live session in <config dir>/sessions/<pid>.json,
 -- recording both the agent identifier it is known by (`gwt` lists agents under
 -- these names) and the cwd it is actually working in. The cwd diverges from the
 -- pane's once claude moves workspace — entering a worktree, say — because claude
@@ -74,25 +74,33 @@ config.hide_tab_bar_if_only_one_tab = false
 -- prompt to emit a fresh OSC 7. Since OSC 7 wins over process introspection once
 -- it has been seen, WezTerm otherwise keeps handing new panes the directory the
 -- shell reported before claude started.
-local claude_sessions = wezterm.home_dir .. "/.claude/sessions"
+-- Claude Code keeps its whole state under CLAUDE_CONFIG_DIR, so a second
+-- account — the `cc-work` alias points that at ~/.claude-work — registers its
+-- sessions in a directory of its own, which a single hard-coded path would never
+-- look in. Every profile's is read, so a work pane is titled, followed and
+-- flagged exactly as a personal one is. Globbed once as the config loads, so a
+-- profile created afterwards arrives with the next reload.
+local claude_session_dirs = wezterm.glob(wezterm.home_dir .. "/.claude*/sessions")
 
 local function read_session(pid)
-    local f = io.open(claude_sessions .. "/" .. pid .. ".json", "r")
-    if not f then
-        return nil
-    end
-    local body = f:read("*a")
-    f:close()
-    local ok, session = pcall(wezterm.json_parse, body)
-    if ok and type(session) == "table" then
-        return session
+    for _, dir in ipairs(claude_session_dirs) do
+        local f = io.open(dir .. "/" .. pid .. ".json", "r")
+        if f then
+            local body = f:read("*a")
+            f:close()
+            local ok, session = pcall(wezterm.json_parse, body)
+            if ok and type(session) == "table" then
+                return session
+            end
+        end
     end
     return nil
 end
 
 -- What the session is working on right now, set by `claude-tab-title` and keyed
 -- by the same pid. It is a file of its own because claude owns the session file
--- and rewrites it on every status change; see the script for the rest.
+-- and rewrites it on every status change; see the script for the rest. One
+-- directory for every profile, the pid being a machine-wide name.
 local claude_tab_titles = wezterm.home_dir .. "/.claude/tab-titles"
 
 local function read_tab_title(pid)
