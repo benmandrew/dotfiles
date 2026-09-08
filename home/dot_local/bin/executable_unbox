@@ -1,0 +1,223 @@
+#!/bin/sh
+# Turn a box-drawing table back into a markdown pipe table.
+#
+# Claude Code, gh, delta and friends render a markdown table as box drawing, so
+# what the terminal hands the clipboard is the picture rather than the source.
+# Pasting that into a .md file gives a preformatted block no renderer will read
+# as a table. This reverses the rendering.
+#
+# Reads files named on the command line, or stdin. Lines that are not part of a
+# table pass through untouched, so a whole pasted answer can go through it.
+#
+#   unbox < pasted.txt
+#   unbox -c            # convert the clipboard in place
+#
+# The first row of a table becomes the header, since that is what the box form
+# marks with a heavier rule. Column alignment is not recoverable — the renderer
+# centres by padding with spaces, which is indistinguishable from a cell whose
+# content happens to sit in the middle — so every column comes out left
+# aligned.
+
+usage() {
+    cat <<'EOF'
+usage: unbox [-c] [file ...]
+
+Convert box-drawing tables to markdown pipe tables.
+
+  -c, --clipboard   read the clipboard and write the result back to it
+  -h, --help        show this message
+EOF
+}
+
+clipboard=0
+while [ $# -gt 0 ]; do
+    case $1 in
+        -c | --clipboard)
+            clipboard=1
+            shift
+            ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            printf 'unbox: unknown option %s\n' "$1" >&2
+            usage >&2
+            exit 2
+            ;;
+        *) break ;;
+    esac
+done
+
+convert() {
+    # Every separator and rule character this understands, as regex
+    # alternations of whole literal strings. A bracket expression would be
+    # wrong: these are three bytes each, and the awk macOS ships is
+    # byte-oriented, so `[┌├└]` there is the set of six distinct bytes those
+    # characters are built from — 0xE2 leads every box-drawing character and a
+    # good deal of other punctuation besides, so it would match an em dash.
+    # Alternation of literals means the same thing to both awks.
+    awk '
+    BEGIN {
+        # Explicitly, because an awk array subscript is a string: `a[n++]` with
+        # n still unset writes to the key "" and a[0] then reads nothing back,
+        # which silently dropped the header row.
+        reset()
+
+        verticals = "│|┃|║"
+        row = "^[ \t]*(" verticals ")"
+
+        # Every character a horizontal rule can be drawn from. A rule line has
+        # to be built from these alone, because `tree` draws its output with
+        # the same characters: `├── main.c` opens on a tee and would otherwise
+        # be read as a rule and dropped, taking the filename with it.
+        rulechar = "┌|┬|┐|├|┼|┤|└|┴|┘|╭|╮|╰|╯|─|━|═" \
+                   "|┏|┳|┓|┣|╋|┫|┗|┻|┛|┡|╇|┩|┢|╈|┪" \
+                   "|╔|╦|╗|╠|╬|╣|╚|╩|╝|╞|╪|╡|╟|╫|╢"
+
+        # The junctions where a column boundary meets a rule. A table with two
+        # or more columns always draws one; a box around a diagram never does,
+        # which is what separates the two.
+        junction = "┬|┼|┴|┳|╋|┻|┯|┷|╈|╇|╤|╪|╧|╦|╬|╩|╥|╫|╨"
+    }
+
+    # A paste can carry colour if it came through something other than the
+    # terminal selection, and an escape sequence inside a cell would be
+    # counted as content.
+    { gsub(/\033\[[0-9;]*m/, "") }
+
+    $0 ~ row {
+        raw[nraw++] = $0
+        drawn[nrows] = $0
+        fenced[nrows] = (nrows == 0) ? 1 : pending
+
+        # A rule that has a row on both sides, and is not the one under the
+        # header, means this table fences every row. That is what says whether
+        # two adjacent drawn rows are two table rows or one row wrapped over
+        # two lines — the drawing is identical either way.
+        if (pending && nrows >= 2) fencedtable = 1
+
+        nrows++
+        pending = 0
+        next
+    }
+
+    is_rule($0) {
+        raw[nraw++] = $0
+        if ($0 ~ junction) istable = 1
+        pending = 1
+        next
+    }
+
+    { flush(); print }
+    END { flush() }
+
+    function flush(   i, g, c, n, f, first, last, col, line) {
+        # Box drawing that never resolves into a table — a diagram, a `tree`
+        # listing, a rule with no rows under it — is handed back exactly as it
+        # came in rather than half-converted.
+        if (nrows == 0 || !istable) {
+            for (i = 0; i < nraw; i++) print raw[i]
+            reset()
+            return
+        }
+
+        for (i = 0; i < nrows; i++) {
+            # Without fences the only reading available is one row per line,
+            # which is right except for a wrapped cell, where the wrap becomes
+            # a row of its own.
+            if (i == 0 || !fencedtable || fenced[i]) ngroups++
+
+            n = split(drawn[i], f, verticals)
+            first = (trim(f[1]) == "") ? 2 : 1
+            last = (trim(f[n]) == "") ? n - 1 : n
+
+            col = 0
+            for (c = first; c <= last; c++) append(ngroups, ++col, trim(f[c]))
+            if (col > ncols) ncols = col
+        }
+
+        for (g = 1; g <= ngroups; g++) {
+            line = "|"
+            for (c = 1; c <= ncols; c++) line = line " " escape(cell[g, c]) " |"
+            print line
+
+            if (g == 1) {
+                line = "|"
+                for (c = 1; c <= ncols; c++) line = line " --- |"
+                print line
+            }
+        }
+        reset()
+    }
+
+    # Cells are appended rather than assigned, so a cell wrapped over several
+    # drawn lines is rejoined with the space the wrap replaced.
+    function append(g, c, text) {
+        if (text == "") return
+        cell[g, c] = (cell[g, c] == "") ? text : cell[g, c] " " text
+    }
+
+    function reset() {
+        split("", cell)
+        split("", drawn)
+        split("", fenced)
+        split("", raw)
+        nrows = 0; nraw = 0; ngroups = 0; ncols = 0
+        pending = 0; fencedtable = 0; istable = 0
+    }
+
+    # A rule is a line with nothing on it but rule characters and whitespace.
+    function is_rule(line,   stripped) {
+        stripped = line
+        gsub(rulechar, "", stripped)
+        gsub(/[ \t]/, "", stripped)
+        return (stripped == "" && line ~ rulechar)
+    }
+
+    # A pipe inside a cell would end the cell early. Markdown spells the
+    # literal one as a backslash escape, even inside a code span.
+    function escape(s) {
+        gsub(/\|/, "\\|", s)
+        return s
+    }
+
+    function trim(s) {
+        sub(/^[ \t]+/, "", s)
+        sub(/[ \t]+$/, "", s)
+        return s
+    }
+    ' "$@"
+}
+
+if [ "$clipboard" -eq 0 ]; then
+    convert "$@"
+    exit
+fi
+
+# Clipboard round trip. Wayland and X11 both appear on one Linux machine often
+# enough that the paste command is chosen by what is on PATH rather than by
+# WAYLAND_DISPLAY, and pbpaste settles macOS.
+if command -v pbpaste >/dev/null 2>&1; then
+    paste_cmd="pbpaste"
+    copy_cmd="pbcopy"
+elif command -v wl-paste >/dev/null 2>&1; then
+    paste_cmd="wl-paste --no-newline"
+    copy_cmd="wl-copy"
+elif command -v xclip >/dev/null 2>&1; then
+    paste_cmd="xclip -selection clipboard -o"
+    copy_cmd="xclip -selection clipboard -i"
+elif command -v xsel >/dev/null 2>&1; then
+    paste_cmd="xsel --clipboard --output"
+    copy_cmd="xsel --clipboard --input"
+else
+    echo "unbox: no clipboard tool found (pbpaste, wl-paste, xclip, xsel)" >&2
+    exit 1
+fi
+
+# Unquoted on purpose: both hold a command and its flags, and need splitting.
+$paste_cmd | convert | $copy_cmd

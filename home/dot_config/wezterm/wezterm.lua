@@ -815,17 +815,84 @@ end
 -- Leader (mirrors tmux C-a prefix)
 config.leader = { key = "a", mods = "CTRL", timeout_milliseconds = 1000 }
 
+-- A copied selection goes through unbox, which turns a rendered box-drawing
+-- table back into a markdown pipe table. Claude Code, gh and glow all draw a
+-- markdown table, so a selection copies the picture rather than the source and
+-- pastes into a .md file as a block no renderer reads as a table.
+--
+-- The vertical box characters are tested for here so that the fork stays off
+-- every ordinary copy: run_child_process costs 8.5 ms +/- 3.2, and almost no
+-- selection contains one. The script decides the rest, handing back a `tree`
+-- listing or a diagram drawn in the same characters byte for byte.
+local UNBOX = wezterm.home_dir .. "/.local/bin/unbox"
+
+local function unboxed(text)
+    if not (text:find("\u{2502}", 1, true) or text:find("\u{2503}", 1, true) or text:find("\u{2551}", 1, true)) then
+        return text
+    end
+
+    -- run_child_process takes no stdin, so the selection is passed as an argv
+    -- element and printf feeds it in. sh -c reads $0 as the name, so the
+    -- script path is $1 and the text $2.
+    local ok, stdout = wezterm.run_child_process({
+        "sh",
+        "-c",
+        'printf %s "$2" | "$1"',
+        "unbox",
+        UNBOX,
+        text,
+    })
+    if not ok or stdout == "" then
+        return text
+    end
+
+    -- awk terminates its last line whether or not the selection was.
+    if not text:match("\n$") then
+        stdout = stdout:gsub("\n$", "")
+    end
+    return stdout
+end
+
+-- Runs after the stock copy action, which has already put the raw selection on
+-- the clipboard, and overwrites it only when the conversion changed something.
+-- Ordering it this way leaves CopyTo and CompleteSelection to do their own
+-- work -- completing a drag gesture, deciding there is nothing to copy -- so
+-- the only behaviour that changes is what ends up on the clipboard.
+local function unbox_clipboard(dest)
+    return wezterm.action_callback(function(window, pane)
+        local ok, text = pcall(function()
+            return window:get_selection_text_for_pane(pane)
+        end)
+        if not ok or not text or #text == 0 then
+            return
+        end
+
+        local converted = unboxed(text)
+        if converted ~= text then
+            window:copy_to_clipboard(converted, dest)
+        end
+    end)
+end
+
 -- Wrap a copy action so it also flashes the indicator. Ctrl+Shift+C copies
 -- nothing when there's no selection, so it uses the guarded event; EmitEvent
 -- runs after the copy, while the selection is still live for the handler.
 local function copy_and_flash(dest)
-    return act.Multiple({ act.CopyTo(dest), act.EmitEvent("copied-if-selection") })
+    return act.Multiple({
+        act.CopyTo(dest),
+        unbox_clipboard(dest),
+        act.EmitEvent("copied-if-selection"),
+    })
 end
 
 -- Double/triple-click always select something, so they flash unconditionally
 -- via the plain "copied" event (no selection read to race against).
 local function complete_selection_and_flash(dest)
-    return act.Multiple({ act.CompleteSelection(dest), act.EmitEvent("copied") })
+    return act.Multiple({
+        act.CompleteSelection(dest),
+        unbox_clipboard(dest),
+        act.EmitEvent("copied"),
+    })
 end
 
 -- `variant` names a spawn action taking a SpawnCommand: SplitHorizontal,
@@ -1066,6 +1133,7 @@ config.key_tables = key_tables
 -- so the "copied-if-selection" flash would be a lie about a stale selection.
 local complete_only_and_flash = act.Multiple({
     act.CompleteSelection("ClipboardAndPrimarySelection"),
+    unbox_clipboard("ClipboardAndPrimarySelection"),
     act.EmitEvent("copied-if-selection"),
 })
 

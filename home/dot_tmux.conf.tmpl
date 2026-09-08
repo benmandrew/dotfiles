@@ -158,15 +158,12 @@ setw -g mode-keys vi
 # Clipboard integration (OS-specific)
 bind-key -T copy-mode-vi v send-keys -X begin-selection
 
-{{ if eq .chezmoi.os "darwin" }}
-bind-key -T copy-mode-vi y send-keys -X copy-pipe-and-cancel 'pbcopy'
-bind-key -T copy-mode-vi Enter send-keys -X copy-pipe-and-cancel 'pbcopy'
-bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel 'pbcopy'
-{{ else if eq .chezmoi.os "linux" }}
+# One copy command on both platforms: copy.sh chooses the clipboard tool by
+# what is on PATH, and runs the selection through unbox first so a copied table
+# pastes into a .md file as a markdown table.
 bind-key -T copy-mode-vi y send-keys -X copy-pipe-and-cancel '~/.config/tmux/copy.sh'
 bind-key -T copy-mode-vi Enter send-keys -X copy-pipe-and-cancel '~/.config/tmux/copy.sh'
 bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel '~/.config/tmux/copy.sh'
-{{ end }}
 
 # The four options tmux-sensible sets that this file does not already set for
 # itself (escape-time and focus-events are above). They are inlined rather than
