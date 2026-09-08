@@ -1,4 +1,4 @@
-.PHONY: all clean test fmt fmt-ci lint lint-sh lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-ssh deps hooks pins
+.PHONY: all clean test fmt fmt-ci lint lint-sh lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-ssh lint-secrets lint-secrets-history deps hooks pins
 
 BOLD_BLUE := \033[1;34m
 RESET     := \033[0m
@@ -66,7 +66,25 @@ fmt-ci:
 	@shfmt -ln bash -i 4 -ci -d $(BASH_SCRIPTS)
 	@shfmt -ln posix -i 4 -ci -d $(SH_SCRIPTS)
 
-lint: lint-sh lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-ssh
+lint: lint-sh lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-ssh lint-secrets
+
+# gitleaks was pinned, installed by both platform scripts and checked for by
+# verify-install.sh, and then run against nothing: it appeared in no target
+# here, in no hook and in no workflow. This is the working tree, which is what
+# a local run wants to know about — 625 KB in 51 ms, so it costs nothing to
+# have in `lint`. --redact so a finding names the file and the rule without
+# printing the secret into a CI log a wider audience can read.
+lint-secrets:
+	@printf '$(BOLD_BLUE)[scanning for secrets]$(RESET)\n'
+	@gitleaks dir . --no-banner --redact
+
+# History, which the tree scan cannot see: a secret committed and then deleted
+# leaves nothing on disk and stays in every clone. Kept out of `lint` because
+# it needs the full history, and a shallow checkout would report clean without
+# having looked. CI runs it from a fetch-depth 0 checkout.
+lint-secrets-history:
+	@printf '$(BOLD_BLUE)[scanning history for secrets]$(RESET)\n'
+	@gitleaks git . --no-banner --redact
 
 lint-make:
 	@printf '$(BOLD_BLUE)[linting Makefile]$(RESET)\n'

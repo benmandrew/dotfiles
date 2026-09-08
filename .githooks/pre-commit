@@ -129,6 +129,12 @@ fi
 # list worth building.
 check typos typos
 
+# Staged content only, which is the one place a secret can still be stopped
+# without a history rewrite. `gitleaks git --staged` reads the same diff this
+# hook has already filtered, so no file list is passed. --redact keeps a
+# finding out of the terminal scrollback it would otherwise sit in.
+check gitleaks gitleaks git --staged --no-banner --redact
+
 if ((${#skipped[@]} > 0)); then
     printf 'pre-commit: skipped (not on PATH): %s\n' "${skipped[*]}" >&2
     printf 'pre-commit: run inside the nix devShell for the full set.\n' >&2

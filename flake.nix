@@ -48,6 +48,10 @@
             typos
             checkmake
             sshconfig-lint
+            # 8.30.1 in nixpkgs-unstable, the same version GITLEAKS_VERSION
+            # pins for the install scripts, so a local run and a CI run read
+            # the same rule set.
+            gitleaks
           ];
         };
       }

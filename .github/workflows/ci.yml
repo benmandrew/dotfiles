@@ -59,6 +59,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Full history, for the gitleaks history scan below. The default
+          # shallow fetch gives it one commit to look at, which would report
+          # clean without having read the history it exists to read. 378
+          # commits and 745 KB, so the whole clone is cheaper than the step.
+          fetch-depth: 0
 
       - name: Install Nix
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
@@ -94,6 +100,13 @@ jobs:
 
       - name: Lint check
         run: nix develop --command make lint
+
+      # `make lint` scans the working tree. This reads every commit, so a
+      # secret that was committed and then deleted is still caught; it is kept
+      # out of `lint` because it needs the full history a local checkout does
+      # not always have.
+      - name: Secret scan (history)
+        run: nix develop --command make lint-secrets-history
 
   install:
     runs-on: ubuntu-latest
