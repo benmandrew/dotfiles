@@ -1,8 +1,8 @@
 .claude/
 .direnv/
 
-# uv runs executable_ai-commit-msg as a PEP 723 script, and CPython writes the
-# bytecode cache beside the source. Tracked once by accident (bfb5d0c), which
-# then deployed a stale .pyc to every machine through chezmoi.
+# No Python remains in the tree, but a stray bytecode cache was tracked once
+# by accident (bfb5d0c) and chezmoi then deployed the stale .pyc to every
+# machine, so the patterns stay as a guard.
 __pycache__/
 *.pyc

@@ -16,3 +16,7 @@
 # still run: it would re-require the plugins these specs now lazy-load, undoing
 # the deferral, and re-add the gi/gr maps that shadow the 0.11 builtins.
 .config/nvim/after
+
+# ai-commit-msg is gone: an open-interpreter script that asked a local Qwen
+# endpoint for a commit message, superseded by the commit-message agent.
+.local/bin/ai-commit-msg

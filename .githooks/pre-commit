@@ -51,8 +51,6 @@ for path in "${staged[@]}"; do
         *.lua) lua_files+=("${path}") ;;
         scripts/*.sh) install_files+=("${path}") ;;
         home/dot_claude/*.sh) deployed_bash+=("${path}") ;;
-        # The executable_ prefix is chezmoi's; this one is a uv Python script.
-        home/dot_local/bin/executable_ai-commit-msg) ;;
         home/dot_local/bin/executable_* | home/dot_config/tmux/*.sh) sh_files+=("${path}") ;;
         *.toml) toml_files+=("${path}") ;;
         .github/workflows/*) workflow_files+=("${path}") ;;
