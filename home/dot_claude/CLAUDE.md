@@ -42,15 +42,16 @@ Group related changes into a single commit — a bug fix and its test, a refacto
 
 Unrelated changes belong in separate commits even if they were made in the same session.
 
-## Subagents by default
+## Subagents
 
-Delegate most non-trivial work to subagents via the Agent tool, proactively, without waiting for an explicit request to do so. This overrides any default "don't spawn agents unless asked" behavior — for this user, spawning is the default, not the exception.
+Spawning is authorised without an explicit request, which overrides any default "don't spawn agents unless asked" behaviour. It is not the default action. A subagent pays a cold start and then re-reads its own growing context every turn, so delegate on one of two grounds: the work would otherwise dump tool output into this conversation and sit there for the rest of the session, or several independent pieces can run at once.
 
-- `quick-search` — cheap lookups: locating a file, symbol, or config key, or any question whose answer is a path or a couple of sentences. No `Bash`.
-- Skip delegation only for genuinely trivial one-step actions: a single file read, a one-line edit, a quick question with an immediate answer.
+- `quick-search` — cheap lookups: locating a file, symbol, or config key, or any question whose answer is a path or a couple of sentences. No `Bash`. Reach for it freely; measured at 4% of subagent spend.
+- Long or wide work — a build, a broad sweep, an implementation in a worktree — amortises the cold start. Delegate it.
+- Anything reachable in two or three tool calls goes inline, whether or not it is trivial. Agents in the 10–60 turn band were 48% of subagent spend over 7–8 September, and most of that was work the main session could have done directly.
 
-For read-only delegations that still need `Explore` or `general-purpose`, pin a cheaper model — pass `model: haiku`. Reserve the session model for agents that write code or make judgement calls. `effort` cannot be overridden per call; it is fixed in the agent definition and otherwise inherits the session's `effortLevel`.
+Pin a cheaper model on any agent that does not write code or make judgement calls: pass `model: haiku`, or `sonnet` where haiku is too weak. `effort` cannot be overridden per call; it is fixed in the agent definition and otherwise inherits the session's `effortLevel`.
 
-Subagents start cold — they do not see the main context — so long tool output and intermediate reasoning stays out of your conversation entirely. Brief them like a colleague who just walked in: state the goal, relevant file paths, and what's already been ruled out.
+Subagents start cold and do not see the main context. Brief them like a colleague who just walked in: the goal, the relevant file paths, and what has already been ruled out.
 
 Subagents do not summarise automatically. Ask for a short response explicitly in the prompt, otherwise a verbose agent response pollutes context just as much as doing the work inline.
