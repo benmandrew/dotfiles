@@ -1,4 +1,4 @@
-.PHONY: all clean test fmt fmt-ci lint lint-sh lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-ssh lint-secrets lint-secrets-history deps hooks pins
+.PHONY: all clean test fmt fmt-ci lint lint-sh lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-templates lint-secrets lint-secrets-history deps hooks pins
 
 BOLD_BLUE := \033[1;34m
 RESET     := \033[0m
@@ -13,10 +13,14 @@ INSTALL_SCRIPTS := $(wildcard scripts/*.sh)
 # The run_ glob stops short of the .sh.tmpl siblings on purpose: those are
 # chezmoi templates, and neither tool can read one until it is rendered.
 DEPLOYED_BASH   := $(wildcard home/dot_claude/*.sh) $(wildcard home/run_*.sh)
+# The git hook is bash and was in no glob here, so nothing read it: it carried
+# an SC2054 from the day it was written, in the one file whose job is to stop
+# exactly that reaching a commit.
+REPO_BASH       := .githooks/pre-commit
 DEPLOYED_SH     := $(wildcard home/dot_local/bin/executable_*) \
                    $(wildcard home/dot_config/tmux/*.sh)
 
-BASH_SCRIPTS := $(INSTALL_SCRIPTS) $(DEPLOYED_BASH)
+BASH_SCRIPTS := $(INSTALL_SCRIPTS) $(DEPLOYED_BASH) $(REPO_BASH)
 SH_SCRIPTS   := $(DEPLOYED_SH)
 
 # scripts/ is held to the whole of shellcheck's optional set. The deployed
@@ -66,7 +70,7 @@ fmt-ci:
 	@shfmt -ln bash -i 4 -ci -d $(BASH_SCRIPTS)
 	@shfmt -ln posix -i 4 -ci -d $(SH_SCRIPTS)
 
-lint: lint-sh lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-ssh lint-secrets
+lint: lint-sh lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-templates lint-secrets
 
 # gitleaks was pinned, installed by both platform scripts and checked for by
 # verify-install.sh, and then run against nothing: it appeared in no target
@@ -107,6 +111,11 @@ lint-actions:
 	@printf '$(BOLD_BLUE)[linting GitHub Actions]$(RESET)\n'
 	@actionlint
 
+# The unrendered pass, which reads what a rendering cannot: sed deletes the
+# {{ ... }} and leaves both arms of an OS branch in place, so the darwin side
+# is still read on a Linux CI runner. The cost is that the result is not valid
+# shell, hence --severity=error. lint-templates is the other half; see the
+# header of scripts/lint-templates.sh for the division.
 lint-zsh:
 	@printf '$(BOLD_BLUE)[linting zsh templates]$(RESET)\n'
 	@for f in home/dot_zshrc.tmpl home/dot_fzf.zsh.tmpl home/*.sh.tmpl home/.chezmoitemplates/*.sh.tmpl; do \
@@ -116,19 +125,17 @@ lint-zsh:
 
 lint-sh:
 	@printf '$(BOLD_BLUE)[linting shell]$(RESET)\n'
-	@shellcheck --external-sources --shell bash --enable all $(INSTALL_SCRIPTS)
+	@shellcheck --external-sources --shell bash --enable all $(INSTALL_SCRIPTS) $(REPO_BASH)
 	@shellcheck --external-sources --shell bash --enable all $(DEPLOYED_EXCLUDE) $(DEPLOYED_BASH)
 	@shellcheck --external-sources --shell sh --enable all $(DEPLOYED_EXCLUDE) $(DEPLOYED_SH)
 
-# The template renders to a temporary file the linter then reads. mktemp rather
-# than a fixed /tmp path, and a trap rather than a trailing rm, because make
-# abandons the target as soon as the linter exits non-zero and the cleanup line
-# never ran.
-lint-ssh:
-	@printf '$(BOLD_BLUE)[linting ssh config]$(RESET)\n'
-	@tmp=$$(mktemp); trap 'rm -f "$$tmp"' EXIT INT TERM; \
-		chezmoi execute-template < home/private_dot_ssh/private_config.tmpl > "$$tmp"; \
-		sshconfig-lint --config "$$tmp"
+# Renders every template and lints each rendering with the real linter for the
+# language it produces. This absorbed the old lint-ssh target, which rendered
+# one template by hand in a mktemp-and-trap dance and — lacking --source —
+# would have rendered a different file on a CI runner than the one shipped.
+lint-templates:
+	@printf '$(BOLD_BLUE)[linting rendered templates]$(RESET)\n'
+	@./scripts/lint-templates.sh
 
 lint-lua:
 	@printf '$(BOLD_BLUE)[linting lua]$(RESET)\n'

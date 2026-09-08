@@ -32,6 +32,10 @@ if tmux ls >/dev/null 2>&1; then
         # already there and Enter runs the pair of them. C-u is
         # kill-whole-line under zsh's emacs bindings, which is what this
         # config uses.
+        # shellcheck disable=SC2312  # the process substitution masks tmux's
+        # status. A tmux that failed here lists no panes, the loop runs zero
+        # times and nothing is sent, which is the wanted behaviour rather than
+        # something to propagate.
         while read -r pane_id pane_in_mode pane_command; do
             if [[ "${pane_command}" == "zsh" ]]; then
                 if [[ "${pane_in_mode}" == "1" ]]; then

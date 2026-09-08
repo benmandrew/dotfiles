@@ -38,8 +38,8 @@ CHEZMOI_SEEDED_SETTINGS
 
 # Without jq we cannot merge; fall back to asserting our keys only.
 if ! command -v jq >/dev/null 2>&1; then
-	cat "$tmpdir/managed"
-	exit 0
+    cat "$tmpdir/managed"
+    exit 0
 fi
 
 # Empty stdin is a target that does not exist yet — a machine being
@@ -48,7 +48,7 @@ fi
 # of the output, so each time Claude Code reordered the file the merge would
 # reorder it back and the prompt this script exists to remove would return.
 if [ ! -s "$tmpdir/current" ]; then
-	cp "$tmpdir/defaults" "$tmpdir/current"
+    cp "$tmpdir/defaults" "$tmpdir/current"
 fi
 
 # Recursive merge, managed keys winning. Objects merge key by key, so a plugin
@@ -58,4 +58,4 @@ fi
 # back to our keys rather than erroring out and leaving chezmoi unable to
 # apply.
 jq -s '.[0] * .[1]' "$tmpdir/current" "$tmpdir/managed" 2>/dev/null ||
-	cat "$tmpdir/managed"
+    cat "$tmpdir/managed"

@@ -52,6 +52,15 @@
             # pins for the install scripts, so a local run and a CI run read
             # the same rule set.
             gitleaks
+            # scripts/lint-templates.sh reads a rendered template with each of
+            # these: zsh -n parses the rendered zsh, which shellcheck has no
+            # mode for; jq parses the rendered settings JSON; git parses the
+            # rendered gitconfig. All three resolved from the ambient PATH
+            # before, so the check ran against whatever the machine happened to
+            # have, and against nothing at all on a runner without zsh.
+            zsh
+            jq
+            git
           ];
         };
       }

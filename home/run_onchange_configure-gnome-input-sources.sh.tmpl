@@ -22,6 +22,11 @@ fi
 
 # A schema is present only if something installed it, so check rather than
 # assume: a GNOME box without ibus is a normal configuration, not an error.
+#
+# Every call sits in an `if`, which disables set -e for the test, and that is
+# the point rather than an oversight: a missing schema is the answer being
+# asked for, not a failure to propagate. Hence the SC2310 disable at each of
+# the three call sites.
 has_schema() {
     gsettings list-schemas 2>/dev/null | grep -qx "$1"
 }
@@ -33,10 +38,12 @@ has_schema() {
 # resolves an xkb-only source in mutter without telling ibus, so the daemon
 # comes up on its default every login regardless of what these keys say. The
 # systemd drop-in beside this script corrects that at the point ibus starts.
+# shellcheck disable=SC2310
 if has_schema org.gnome.desktop.input-sources; then
     gsettings set org.gnome.desktop.input-sources sources "[('xkb', 'gb')]"
 fi
 
+# shellcheck disable=SC2310
 if has_schema org.freedesktop.ibus.general; then
     gsettings set org.freedesktop.ibus.general preload-engines "['xkb:gb::eng']"
     gsettings set org.freedesktop.ibus.general engines-order "['xkb:gb::eng']"
@@ -44,6 +51,7 @@ fi
 
 # Right Alt as the level-3 shift, which is what reaches the gb layout's
 # dead-key columns and the currency symbols above them.
+# shellcheck disable=SC2310
 if has_schema org.gnome.desktop.input-sources; then
     gsettings set org.gnome.desktop.input-sources xkb-options "['lv3:ralt_switch']"
 fi

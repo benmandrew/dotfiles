@@ -2,6 +2,8 @@
 
 How `scripts/` is organised. Loaded when working with files under this directory.
 
+Everything here is an install script bar one: `scripts/lint-templates.sh`, which `make lint-templates` calls. It renders every chezmoi template and lints each rendering with the real linter for the language it produces — shellcheck and shfmt for the bash and sh renders, `zsh -n` for the zsh ones, `jq` for the settings JSON, `git config --file` for the gitconfig, `sshconfig-lint` for the ssh config. It lives here rather than beside the Makefile so that `scripts/*.sh` lints and formats it like everything else in this directory. Read its header for why it runs beside `make lint-zsh` rather than replacing it, and why `--source` is not optional.
+
 All scripts are idempotent — each step checks whether the tool is already present and skips if so. Pass `--upgrade` to upgrade already-installed tools to their latest versions instead of skipping them. Pass `--verbose` to see the stdout of what each step runs, which is dropped by default.
 
 ## Output and failure reporting

@@ -35,7 +35,10 @@ fi
 # Three shellcheck styles for the same reason the Makefile has them: scripts/
 # takes the whole optional set, and the deployed scripts take it without the
 # three checks that only comment on brace and bracket style.
-deployed_exclude=(--exclude SC2250,SC2249,SC2292)
+# Repeated flags rather than one comma-separated argument: shellcheck reads
+# both, and the comma form is an unquoted comma inside an array literal,
+# which is what SC2054 exists to catch.
+deployed_exclude=(--exclude SC2250 --exclude SC2249 --exclude SC2292)
 
 lua_files=()
 install_files=()
@@ -44,7 +47,7 @@ sh_files=()
 toml_files=()
 workflow_files=()
 makefile_staged=false
-ssh_template_staged=false
+template_staged=false
 
 for path in "${staged[@]}"; do
     case "${path}" in
@@ -55,21 +58,16 @@ for path in "${staged[@]}"; do
         *.toml) toml_files+=("${path}") ;;
         .github/workflows/*) workflow_files+=("${path}") ;;
         Makefile) makefile_staged=true ;;
-        home/private_dot_ssh/private_config.tmpl) ssh_template_staged=true ;;
+        *) ;;
+    esac
+    # Not part of the case above: a .sh.tmpl is matched by one of the arms
+    # already and still needs rendering, and one staged template is enough to
+    # run the whole set, which renders in about two seconds.
+    case "${path}" in
+        *.tmpl) template_staged=true ;;
         *) ;;
     esac
 done
-
-# Render the ssh template to a temporary file for the linter to read.
-# shellcheck disable=SC2329  # called indirectly, through check
-lint_ssh() {
-    local tmp
-    tmp="$(mktemp)"
-    # shellcheck disable=SC2064  # expand tmp now, not when the trap fires
-    trap "rm -f '${tmp}'" RETURN
-    chezmoi execute-template <home/private_dot_ssh/private_config.tmpl >"${tmp}" || return 1
-    sshconfig-lint --config "${tmp}"
-}
 
 status=0
 skipped=()
@@ -121,8 +119,11 @@ if [[ "${makefile_staged}" == true ]]; then
     check checkmake checkmake Makefile
 fi
 
-if [[ "${ssh_template_staged}" == true ]]; then
-    check sshconfig-lint lint_ssh
+# Renders every template and lints each rendering. Gated on chezmoi rather than
+# on the linters it calls, since it is chezmoi that has to be there for any of
+# it to run; the script skips nothing itself.
+if [[ "${template_staged}" == true ]]; then
+    check chezmoi ./scripts/lint-templates.sh
 fi
 
 # The whole tree, since a typo is cheap to check and the tool takes no file

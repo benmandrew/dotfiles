@@ -20,8 +20,8 @@ CHEZMOI_MANAGED_SETTINGS
 
 # Without jq or node we cannot merge; fall back to asserting our keys only.
 if ! command -v jq >/dev/null 2>&1 || ! command -v node >/dev/null 2>&1; then
-	cat "$tmpdir/managed"
-	exit 0
+    cat "$tmpdir/managed"
+    exit 0
 fi
 
 # settings.json is JSONC — comments and trailing commas are legal there but not
@@ -62,4 +62,4 @@ node -e '
 # (hand-mangled, half-written), fall back to our keys rather than erroring out
 # and leaving chezmoi unable to apply.
 jq -s '.[0] * .[1]' "$tmpdir/clean" "$tmpdir/managed" 2>/dev/null ||
-	cat "$tmpdir/managed"
+    cat "$tmpdir/managed"
