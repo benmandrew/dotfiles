@@ -346,6 +346,25 @@ alias la="ls -la"
 
 mkcd() { mkdir -p -- "$1" && cd -- "$1"; }
 
+# Copy the working directory with no trailing newline, which `pwd | xclip`
+# would carry into whatever it is pasted into. A function rather than an alias
+# so one definition serves every machine, picking the clipboard tool by what
+# is on PATH in the same order as unbox.
+cpwd() {
+  if command -v pbcopy > /dev/null 2>&1; then
+    print -rn -- "$PWD" | pbcopy
+  elif command -v wl-copy > /dev/null 2>&1; then
+    print -rn -- "$PWD" | wl-copy
+  elif command -v xclip > /dev/null 2>&1; then
+    print -rn -- "$PWD" | xclip -selection clipboard
+  elif command -v xsel > /dev/null 2>&1; then
+    print -rn -- "$PWD" | xsel --clipboard --input
+  else
+    print -u2 "cpwd: no clipboard tool found (pbcopy, wl-copy, xclip, xsel)"
+    return 1
+  fi
+}
+
 # AUTO_PUSHD makes each of these a dirstack entry, so `cd -` walks back up.
 # `..` needs no alias: AUTO_CD reads a bare directory name as a cd already.
 alias ...="cd ../.."
