@@ -2,8 +2,8 @@
 # ibus-dropin-hash: {{ include "dot_config/systemd/user/org.freedesktop.IBus.session.GNOME.service.d/gb-engine.conf" | sha256sum }}
 
 set -euo pipefail
+{{- if eq .chezmoi.os "linux" }}
 
-{{ if eq .chezmoi.os "linux" -}}
 # gsettings ships with glib, so it exists on any Linux box and its presence is
 # not evidence of a desktop. Two things then go wrong on a headless server.
 # Without a session bus every write fails to commit to dconf, and the ibus
@@ -68,4 +68,4 @@ fi
 if command -v ibus >/dev/null 2>&1; then
     ibus engine xkb:gb::eng >/dev/null 2>&1 || true
 fi
-{{ end -}}
+{{- end }}
