@@ -13,14 +13,30 @@ os_name="$(uname -s)"
 ok=0
 fail=0
 
+# check_cmd <name> [probe args...]
+#
+# Being on PATH is not enough: an upgrade once left ~/.local/bin/claude pointing
+# at npm's placeholder stub, which exits 1, and `command -v` passed it. So run
+# the command too, with the probe arguments (default --version), and tell a
+# missing command apart from one that is there but broken. `--no-probe` skips
+# the run, for tools with no invocation that exits 0 without side effects.
+#
+# The probe runs from / with stdin closed: rustup proxies read a
+# rust-toolchain.toml in the working directory and may install what it names,
+# cross runs `cargo metadata` there, and nothing should wait on input.
 check_cmd() {
-    local name="$1"
-    if command -v "${name}" >/dev/null 2>&1; then
+    local name="$1" path
+    shift
+    [[ $# -eq 0 ]] && set -- --version
+    if ! path="$(command -v "${name}" 2>/dev/null)"; then
+        printf "\033[1;31m[FAIL]\033[0m %s (not found)\n" "${name}" >&2
+        ((fail++)) || true
+    elif [[ "$1" != "--no-probe" ]] && ! (cd / && "${name}" "$@") </dev/null >/dev/null 2>&1; then
+        printf "\033[1;31m[FAIL]\033[0m %s (found at %s but \`%s\` fails)\n" "${name}" "${path}" "${name} $*" >&2
+        ((fail++)) || true
+    else
         printf "\033[1;32m[ok]\033[0m   %s\n" "${name}"
         ((ok++)) || true
-    else
-        printf "\033[1;31m[FAIL]\033[0m %s\n" "${name}" >&2
-        ((fail++)) || true
     fi
 }
 
@@ -50,22 +66,30 @@ check_file() {
 
 # perf (linux-tools-generic) depends on an exact-version kernel-tools package
 # that isn't always available on cloud/CI kernels, so its absence is a
-# warning rather than a failure.
+# warning rather than a failure. Takes the same probe arguments as check_cmd.
 check_cmd_optional() {
-    local name="$1"
-    if command -v "${name}" >/dev/null 2>&1; then
+    local name="$1" path
+    shift
+    [[ $# -eq 0 ]] && set -- --version
+    if ! path="$(command -v "${name}" 2>/dev/null)"; then
+        printf "\033[1;33m[warn]\033[0m %s (optional, not installed)\n" "${name}"
+    elif [[ "$1" != "--no-probe" ]] && ! (cd / && "${name}" "$@") </dev/null >/dev/null 2>&1; then
+        printf "\033[1;33m[warn]\033[0m %s (optional, found at %s but \`%s\` fails)\n" "${name}" "${path}" "${name} $*"
+    else
         printf "\033[1;32m[ok]\033[0m   %s\n" "${name}"
         ((ok++)) || true
-    else
-        printf "\033[1;33m[warn]\033[0m %s (optional, not installed)\n" "${name}"
     fi
 }
 
 check_cmd git
 check_cmd curl
 check_cmd zsh
-check_cmd tmux
-check_cmd entr
+check_cmd tmux -V
+# entr has no version flag, and every invocation without a file list on stdin
+# exits 1, so there is nothing to tell a working one from a stub.
+check_cmd entr --no-probe
+# Ubuntu's /usr/bin/perf is a wrapper that exits non-zero when no perf matches
+# the running kernel, which is the broken case this should warn about.
 check_cmd_optional perf
 
 check_dir "zinit" "${HOME}/.local/share/zinit/zinit.git"
@@ -107,7 +131,7 @@ check_cmd tailscale
 
 # Go installs on Linux only; macOS takes it from brew when a project needs it.
 if [[ "${os_name}" == "Linux" ]]; then
-    check_cmd go
+    check_cmd go version
 fi
 
 # nix-direnv is a nix profile entry rather than a command, and the line that
@@ -163,15 +187,19 @@ check_cmd git-absorb
 check_cmd gitleaks
 check_cmd sccache
 check_cmd rga
-check_cmd rga-preproc
+# rga-preproc takes only an input file and exits 1 on any it has no adapter
+# for, so the rga probe above stands in for the binary shipped beside it.
+check_cmd rga-preproc --no-probe
 check_cmd difft
-check_cmd ansible-lint
+# --version asks GitHub for a newer release unless told it is offline.
+check_cmd ansible-lint --offline --version
 check_cmd cargo-nextest
 check_cmd elan
 
 check_cmd cargo-audit
 check_cmd cargo-fuzz
-check_cmd cargo-llvm-cov
+# Run directly, it expects cargo's subcommand name as its first argument.
+check_cmd cargo-llvm-cov llvm-cov --version
 check_cmd cross
 check_cmd samply
 
@@ -237,8 +265,9 @@ fi
 
 # Optional (opted into per machine) and, even when opted in, the `obsidian`
 # command only appears after the app's GUI registration step — so absence is
-# never a failure.
-check_cmd_optional obsidian
+# never a failure. The CLI works only by talking to the running app, exiting 1
+# when it is closed, so any probe would test the GUI rather than the install.
+check_cmd_optional obsidian --no-probe
 
 # Also optional per machine, and skipped outright on headless Linux even when
 # opted into.

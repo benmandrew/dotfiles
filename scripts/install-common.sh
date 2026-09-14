@@ -201,6 +201,53 @@ require_cmd() {
     fi
 }
 
+# An installer's exit status says nothing about the binary it leaves behind. On
+# 14 September 2026 `claude update` upgraded an npm install through npm, left the
+# package's placeholder where the native binary belongs, and exited 0; the step
+# passed, its log was deleted, and the next `claude` failed. So every path that
+# installs or upgrades an executable ends by running it. The probe must print and
+# exit: no network, no GUI, nothing written. `hash -r` first, since bash keeps
+# the path it last ran a command from, which an install can move.
+require_runs() {
+    local cmd="$1"
+    shift
+    if (($# == 0)); then
+        set -- --version
+    fi
+    hash -r
+    if ! "${cmd}" "$@" </dev/null >/dev/null 2>&1; then
+        local resolved
+        resolved="$(command -v "${cmd}" 2>/dev/null)" || resolved="not on PATH"
+        err "${cmd} does not run after installing (${resolved}; probed with '$*')"
+        return 1
+    fi
+}
+
+# For vendor self-updaters, which fetch on their own rather than through
+# download() and its curl retries. In the same 14 September run `rustup update`
+# failed on one dropped download of a nightly component, rolled back cleanly,
+# and succeeded when retried by hand. These updaters leave the old version in
+# place on failure, so a second attempt is safe.
+retry_once() {
+    "$@" && return 0
+    log "$1 failed; retrying once"
+    "$@"
+}
+
+# A step that installs to a fixed path can still lose to another copy earlier on
+# PATH, one from a different install method, which then answers for the tool on
+# every call. Name that copy rather than delete it: unlike the old starship in
+# /usr/local/bin, it may belong to a package manager. Nothing is said when the
+# command is not on PATH at all, as on a machine that has not run chezmoi apply.
+note_shadowed() {
+    local cmd="$1" target="$2" found
+    hash -r
+    found="$(command -v "${cmd}" 2>/dev/null)" || return 0
+    if [[ "${found}" != "${target}" ]]; then
+        log "Note: ${cmd} on PATH is ${found}, which shadows the copy just installed at ${target}"
+    fi
+}
+
 # Every fetch here goes to a third-party host that rate-limits, and one bad
 # minute takes a whole step down — a GitHub codeload 429 is what prompted this.
 # curl retries transient HTTP status on its own (408, 429 and the 5xx family,
@@ -921,7 +968,8 @@ install_rust() {
             return
         fi
         log "Upgrading Rust"
-        rustup update
+        retry_once rustup update || return 1
+        require_runs cargo
         return
     fi
     log "Installing Rust"
@@ -932,6 +980,7 @@ install_rust() {
     rm -f "${script_path}"
 
     load_cargo_env
+    require_runs cargo
 }
 
 install_rust_analyzer() {
@@ -946,7 +995,8 @@ install_rust_analyzer() {
         log "Installing rust-analyzer"
     fi
     require_cmd rustup
-    rustup component add rust-analyzer
+    retry_once rustup component add rust-analyzer || return 1
+    require_runs rust-analyzer
 }
 
 install_btop() {
@@ -960,11 +1010,13 @@ install_btop() {
                 return
             fi
             log "Upgrading btop"
-            brew upgrade btop
+            brew upgrade btop || return 1
+            require_runs btop
             return
         fi
         log "Installing btop"
-        brew install btop
+        brew install btop || return 1
+        require_runs btop
         return
     fi
 
@@ -1043,7 +1095,9 @@ install_btop() {
     # The apt package supplied themes via /usr/share/btop/themes, which the purge
     # above removes; ship them to the user theme dir so theme selection still works.
     mkdir -p "${HOME}/.config/btop/themes"
-    install -m644 "${src_dir}"/themes/*.theme "${HOME}/.config/btop/themes/"
+    install -m644 "${src_dir}"/themes/*.theme "${HOME}/.config/btop/themes/" || return 1
+    note_shadowed btop "${HOME}/.local/bin/btop"
+    require_runs "${HOME}/.local/bin/btop"
 }
 
 install_jq() {
@@ -1056,20 +1110,22 @@ install_jq() {
         local os_name
         os_name="$(uname -s)"
         if [[ "${os_name}" == "Darwin" ]]; then
-            brew upgrade jq
+            brew upgrade jq || return 1
         else
-            sudo apt-get install -y jq
+            sudo apt-get install -y jq || return 1
         fi
+        require_runs jq
         return
     fi
     log "Installing jq"
     local os_name
     os_name="$(uname -s)"
     if [[ "${os_name}" == "Darwin" ]]; then
-        brew install jq
+        brew install jq || return 1
     else
-        sudo apt-get install -y jq
+        sudo apt-get install -y jq || return 1
     fi
+    require_runs jq
 }
 
 # apt splits zstd across two packages: `zstd` is the CLI (which GNU tar shells
@@ -1087,11 +1143,13 @@ install_zstd() {
                 return
             fi
             log "Upgrading zstd"
-            brew upgrade zstd
+            brew upgrade zstd || return 1
+            require_runs zstd
             return
         fi
         log "Installing zstd"
-        brew install zstd
+        brew install zstd || return 1
+        require_runs zstd
         return
     fi
     if command -v zstd >/dev/null 2>&1 && dpkg -s libzstd-dev >/dev/null 2>&1; then
@@ -1103,7 +1161,8 @@ install_zstd() {
     else
         log "Installing zstd"
     fi
-    sudo apt-get install -y zstd libzstd-dev
+    sudo apt-get install -y zstd libzstd-dev || return 1
+    require_runs zstd
 }
 
 install_clangd() {
@@ -1116,19 +1175,39 @@ install_clangd() {
         local os_name
         os_name="$(uname -s)"
         if [[ "${os_name}" == "Darwin" ]]; then
-            brew upgrade llvm
+            brew upgrade llvm || return 1
         else
-            sudo apt-get install -y clangd
+            sudo apt-get install -y clangd || return 1
         fi
+        local clangd_bin
+        clangd_bin="$(_clangd_path)" || return 1
+        require_runs "${clangd_bin}"
         return
     fi
     log "Installing clangd"
     local os_name
     os_name="$(uname -s)"
     if [[ "${os_name}" == "Darwin" ]]; then
-        brew install llvm
+        brew install llvm || return 1
     else
-        sudo apt-get install -y clangd
+        sudo apt-get install -y clangd || return 1
+    fi
+    local clangd_bin
+    clangd_bin="$(_clangd_path)" || return 1
+    require_runs "${clangd_bin}"
+}
+
+# brew's llvm is keg-only, so the clangd it installs is off PATH, and by name
+# the probe would find Xcode's /usr/bin/clangd instead.
+_clangd_path() {
+    local os_name
+    os_name="$(uname -s)"
+    if [[ "${os_name}" == "Darwin" ]]; then
+        local llvm_prefix
+        llvm_prefix="$(brew --prefix llvm)" || return 1
+        printf '%s/bin/clangd\n' "${llvm_prefix}"
+    else
+        printf 'clangd\n'
     fi
 }
 
@@ -1153,10 +1232,11 @@ install_cmake() {
             log "Installing cmake"
         fi
         if brew list --formula cmake >/dev/null 2>&1; then
-            brew upgrade cmake
+            brew upgrade cmake || return 1
         else
-            brew install cmake
+            brew install cmake || return 1
         fi
+        require_runs cmake
         return
     fi
 
@@ -1207,7 +1287,9 @@ install_cmake() {
     download_verified "${cmake_base}/${installer}" "${tmp_dir}/${installer}" \
         "${cmake_base}/cmake-${install_version}-SHA-256.txt" || return 1
     chmod +x "${tmp_dir}/${installer}"
-    sudo sh "${tmp_dir}/${installer}" --prefix=/usr/local --skip-license
+    sudo sh "${tmp_dir}/${installer}" --prefix=/usr/local --skip-license || return 1
+    note_shadowed cmake /usr/local/bin/cmake
+    require_runs /usr/local/bin/cmake
 }
 
 # The seven tools routed through install_cargo_tool were compiled from source
@@ -1371,6 +1453,8 @@ _install_rust_tool_binary() {
     # other way round, and a stale build answering for the tool on every check
     # is exactly the shadowing install_starship had to unpick for /usr/local.
     rm -f "${HOME}/.cargo/bin/${cmd}"
+    note_shadowed "${cmd}" "${HOME}/.local/bin/${cmd}"
+    require_runs "${HOME}/.local/bin/${cmd}"
 }
 
 _install_cargo_tool_from_source() {
@@ -1429,7 +1513,16 @@ install_cargo_tool() {
     fi
 
     if [[ -z "${triple}" ]]; then
-        _install_cargo_tool_from_source "${crate}"
+        _install_cargo_tool_from_source "${crate}" || return 1
+        local built="${CARGO_HOME:-${HOME}/.cargo}/bin/${cmd}"
+        note_shadowed "${cmd}" "${built}"
+        # Run directly, a cargo subcommand takes its own name first, as cargo
+        # passes it; cargo-llvm-cov rejects a bare --version.
+        if [[ "${cmd}" == cargo-* ]]; then
+            require_runs "${built}" "${cmd#cargo-}" --version
+        else
+            require_runs "${built}"
+        fi
         return
     fi
     _install_rust_tool_binary "${cmd}" "${repo}" "${template}" "${triple}" \
@@ -1447,7 +1540,9 @@ install_pyright() {
         log "Installing pyright"
     fi
     require_cmd npm
-    npm_install_g pyright
+    npm_install_g pyright || return 1
+    note_shadowed pyright "${HOME}/.local/bin/pyright"
+    require_runs "${HOME}/.local/bin/pyright"
 }
 
 install_eza() { install_cargo_tool eza; }
@@ -1467,11 +1562,13 @@ install_gh() {
                 return
             fi
             log "Upgrading GitHub CLI"
-            brew upgrade gh
+            brew upgrade gh || return 1
+            require_runs gh
             return
         fi
         log "Installing GitHub CLI"
-        brew install gh
+        brew install gh || return 1
+        require_runs gh
         return
     fi
     # Linux: install from GitHub's official apt repo — Ubuntu's `gh` package is
@@ -1497,7 +1594,8 @@ install_gh() {
     echo "deb [arch=${arch} signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" |
         sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
     sudo apt-get update
-    sudo apt-get install -y gh
+    sudo apt-get install -y gh || return 1
+    require_runs gh
 }
 
 # Both gh-stack steps hit the GitHub API — to resolve the extension's release
@@ -1525,7 +1623,7 @@ install_gh_stack() {
             return
         fi
         log "Upgrading gh-stack extension"
-        gh extension upgrade gh-stack
+        retry_once gh extension upgrade gh-stack
         return
     fi
     log "Installing gh-stack extension"
@@ -1548,7 +1646,7 @@ install_gh_stack_skill() {
             return
         fi
         log "Upgrading gh-stack skill"
-        gh skill update gh-stack --all
+        retry_once gh skill update gh-stack --all
         return
     fi
     log "Installing gh-stack skill for Claude Code"
@@ -1567,7 +1665,9 @@ install_fzf() {
         if [[ -d "${HOME}/.fzf" ]]; then
             ensure_user_owns "${HOME}/.fzf"
             safe_git "${HOME}/.fzf" pull || return 1
-            "${HOME}/.fzf/install" --bin --no-update-rc --no-bash --no-fish
+            "${HOME}/.fzf/install" --bin --no-update-rc --no-bash --no-fish || return 1
+            note_shadowed fzf "${HOME}/.fzf/bin/fzf"
+            require_runs "${HOME}/.fzf/bin/fzf"
         fi
         return
     fi
@@ -1577,7 +1677,9 @@ install_fzf() {
     else
         log "fzf already cloned; skipping"
     fi
-    "${HOME}/.fzf/install" --bin --no-update-rc --no-bash --no-fish
+    "${HOME}/.fzf/install" --bin --no-update-rc --no-bash --no-fish || return 1
+    note_shadowed fzf "${HOME}/.fzf/bin/fzf"
+    require_runs "${HOME}/.fzf/bin/fzf"
 }
 
 # atuin keeps shell history in its own SQLite database and syncs it one command
@@ -1596,11 +1698,13 @@ install_atuin() {
                 return
             fi
             log "Upgrading atuin"
-            brew upgrade atuin
+            brew upgrade atuin || return 1
+            require_runs atuin
             return
         fi
         log "Installing atuin"
-        brew install atuin
+        brew install atuin || return 1
+        require_runs atuin
         return
     fi
 
@@ -1672,7 +1776,9 @@ install_atuin() {
         "${atuin_base}/${tarball}.sha256" || return 1
     tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}" || return 1
     mkdir -p "${HOME}/.local/bin"
-    install -m755 "${tmp_dir}/atuin-${triple}/atuin" "${HOME}/.local/bin/atuin"
+    install -m755 "${tmp_dir}/atuin-${triple}/atuin" "${HOME}/.local/bin/atuin" || return 1
+    note_shadowed atuin "${HOME}/.local/bin/atuin"
+    require_runs "${HOME}/.local/bin/atuin"
 }
 
 enable_nix_flakes() {
@@ -1755,7 +1861,8 @@ install_nix() {
         log "Upgrading Nix"
         sudo -i nix upgrade-nix
         enable_nix_flakes
-        configure_nix_trusted_user
+        configure_nix_trusted_user || return 1
+        require_runs nix
         return
     fi
     log "Installing Nix"
@@ -1768,7 +1875,8 @@ install_nix() {
     source_nix_profile
 
     enable_nix_flakes
-    configure_nix_trusted_user
+    configure_nix_trusted_user || return 1
+    require_runs nix
 }
 
 install_direnv() {
@@ -1787,6 +1895,8 @@ install_direnv() {
     download https://direnv.net/install.sh "${script_path}" || return 1
     bin_path="${HOME}/.local/bin" bash "${script_path}" || return 1
     rm -f "${script_path}"
+    note_shadowed direnv "${HOME}/.local/bin/direnv"
+    require_runs "${HOME}/.local/bin/direnv"
 }
 
 _nix_profile_has() {
@@ -1806,19 +1916,21 @@ install_modern_bash() {
     if _nix_profile_has bash; then
         if [[ -n "${UPGRADE:-}" ]]; then
             log "Upgrading bash"
-            nix profile upgrade bash
+            nix profile upgrade bash || return 1
+            require_runs "${HOME}/.nix-profile/bin/bash"
         else
             log "Modern bash already installed; skipping"
         fi
         return
     fi
     log "Installing modern bash (nix-direnv requires >= 4.4)"
-    nix profile install nixpkgs#bash
+    nix profile install nixpkgs#bash || return 1
+    require_runs "${HOME}/.nix-profile/bin/bash"
 }
 
 install_nix_direnv() {
     require_cmd nix
-    install_modern_bash
+    install_modern_bash || return 1
     local direnvrc="${HOME}/.config/direnv/direnvrc"
     # shellcheck disable=SC2016
     local source_line='source $HOME/.nix-profile/share/nix-direnv/direnvrc'
@@ -1865,6 +1977,8 @@ install_starship() {
     sh "${script_path}" -y -b "${STARSHIP_BIN_DIR}" || return 1
     rm -f "${script_path}"
     remove_shadowing_starship
+    note_shadowed starship "${STARSHIP_BIN_DIR}/starship"
+    require_runs "${STARSHIP_BIN_DIR}/starship"
 }
 
 # A copy left in the old location is dead weight at best. ~/.local/bin now leads
@@ -1894,7 +2008,21 @@ install_claude_code() {
         log "Upgrading Claude Code"
         # Use the native updater, not npm -g: npm would install a second copy
         # under /usr/lib/node_modules that shadows the native one on PATH.
-        claude update
+        # `claude update` follows the recorded install method, so an npm
+        # install still upgrades through npm, which has left the package's
+        # placeholder in place of the native binary and exited 0. Name that
+        # layout, and fail the step unless the upgraded binary runs.
+        local claude_link
+        claude_link="$(readlink "$(command -v claude)" || true)"
+        if [[ "${claude_link}" == */node_modules/* ]]; then
+            log "Claude Code is an npm install (${claude_link}); run 'claude install' to switch to the native build"
+        fi
+        retry_once claude update || return 1
+        note_shadowed claude "${HOME}/.local/bin/claude"
+        if ! require_runs claude; then
+            err "Reinstall Claude Code with https://claude.ai/install.sh"
+            return 1
+        fi
         return
     fi
     log "Installing Claude Code"
@@ -1903,6 +2031,8 @@ install_claude_code() {
     download https://claude.ai/install.sh "${script_path}" || return 1
     bash "${script_path}" || return 1
     rm -f "${script_path}"
+    note_shadowed claude "${HOME}/.local/bin/claude"
+    require_runs "${HOME}/.local/bin/claude"
 }
 
 install_rtk() {
@@ -1920,6 +2050,9 @@ install_rtk() {
     download https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh "${script_path}" || return 1
     sh "${script_path}" || return 1
     rm -f "${script_path}"
+    # The installer's default; RTK_INSTALL_DIR would move it.
+    note_shadowed rtk "${HOME}/.local/bin/rtk"
+    require_runs "${HOME}/.local/bin/rtk"
 }
 
 install_uv() {
@@ -1929,7 +2062,8 @@ install_uv() {
             return
         fi
         log "Upgrading uv"
-        uv self update
+        retry_once uv self update || return 1
+        require_runs uv
         return
     fi
     log "Installing uv"
@@ -1939,21 +2073,23 @@ install_uv() {
     sh "${script_path}" || return 1
     rm -f "${script_path}"
     export PATH="${HOME}/.local/bin:${PATH}"
+    require_runs "${HOME}/.local/bin/uv"
 }
 
 install_ccusage() {
     require_cmd npm
     if command -v ccusage >/dev/null 2>&1; then
-        if [[ -n "${UPGRADE:-}" ]]; then
-            log "Upgrading ccusage"
-            npm_install_g ccusage
-        else
+        if [[ -z "${UPGRADE:-}" ]]; then
             log "ccusage already installed; skipping"
+            return
         fi
+        log "Upgrading ccusage"
     else
         log "Installing ccusage"
-        npm_install_g ccusage
     fi
+    npm_install_g ccusage || return 1
+    note_shadowed ccusage "${HOME}/.local/bin/ccusage"
+    require_runs "${HOME}/.local/bin/ccusage"
 }
 
 install_tmux_from_source() {
@@ -2020,7 +2156,9 @@ install_tmux_from_source() {
             "${build_env[@]}" ./configure &&
             "${build_env[@]}" make -j"${jobs}" &&
             sudo make install
-    )
+    ) || return 1
+    note_shadowed tmux /usr/local/bin/tmux
+    require_runs /usr/local/bin/tmux -V
 }
 
 install_tmux_plugins() {
@@ -2089,13 +2227,16 @@ install_wezterm() {
             if ! brew upgrade --cask wezterm@nightly; then
                 log "WezTerm nightly upgrade failed (likely upstream cask bug); keeping existing install; skipping"
             fi
+            # Either way: the reverted install has to run too.
+            require_runs wezterm
             return
         fi
         # Linux: fall through to re-download latest
     else
         log "Installing WezTerm"
         if [[ "${os_name}" == "Darwin" ]]; then
-            brew install --cask wezterm@nightly
+            brew install --cask wezterm@nightly || return 1
+            require_runs wezterm
             return
         fi
     fi
@@ -2133,7 +2274,8 @@ install_wezterm() {
     local wezterm_base="https://github.com/wezterm/wezterm/releases/download/nightly"
     download_verified "${wezterm_base}/${deb}" "${tmp_dir}/${deb}" \
         "${wezterm_base}/${deb}.sha256" || return 1
-    sudo apt-get install -y "${tmp_dir}/${deb}"
+    sudo apt-get install -y "${tmp_dir}/${deb}" || return 1
+    require_runs wezterm
 }
 
 install_nerd_font() {
@@ -2228,6 +2370,8 @@ install_tailscale() {
     download https://tailscale.com/install.sh "${script_path}" || return 1
     sh "${script_path}" || return 1
     rm -f "${script_path}"
+    # `version` prints the client's own version without asking tailscaled.
+    require_runs tailscale version
 }
 
 install_lua_ls() {
@@ -2241,14 +2385,16 @@ install_lua_ls() {
         fi
         log "Upgrading lua-language-server"
         if [[ "${os_name}" == "Darwin" ]]; then
-            brew upgrade lua-language-server
+            brew upgrade lua-language-server || return 1
+            require_runs lua-language-server
             return
         fi
         # Linux: fall through to re-download latest
     else
         log "Installing lua-language-server"
         if [[ "${os_name}" == "Darwin" ]]; then
-            brew install lua-language-server
+            brew install lua-language-server || return 1
+            require_runs lua-language-server
             return
         fi
     fi
@@ -2282,7 +2428,9 @@ install_lua_ls() {
         "${tmp_dir}/${archive}" || return 1
     tar -xf "${tmp_dir}/${archive}" -C "${install_dir}" || return 1
     mkdir -p "${HOME}/.local/bin"
-    ln -sf "${install_dir}/bin/lua-language-server" "${HOME}/.local/bin/lua-language-server"
+    ln -sf "${install_dir}/bin/lua-language-server" "${HOME}/.local/bin/lua-language-server" || return 1
+    note_shadowed lua-language-server "${HOME}/.local/bin/lua-language-server"
+    require_runs "${HOME}/.local/bin/lua-language-server"
 }
 
 _opam_sandboxing_works() {
@@ -2321,29 +2469,34 @@ install_opam() {
         mkdir -p "${install_dir}"
         download "https://github.com/ocaml/opam/releases/download/${tag}/${binary}" \
             "${install_dir}/opam" || return 1
-        chmod +x "${install_dir}/opam"
+        chmod +x "${install_dir}/opam" || return 1
+        note_shadowed opam "${install_dir}/opam"
+        require_runs "${install_dir}/opam"
     }
 
+    # Collected rather than returned, so the nested function is still unset.
+    local rc=0
     if command -v opam >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then
             log "opam already installed; skipping"
         else
             log "Upgrading opam"
             if [[ "${os_name}" == "Darwin" ]]; then
-                brew upgrade opam
+                { brew upgrade opam && require_runs opam; } || rc=1
             else
-                _install_opam_linux_binary
+                _install_opam_linux_binary || rc=1
             fi
         fi
     else
         log "Installing opam"
         if [[ "${os_name}" == "Darwin" ]]; then
-            brew install opam
+            { brew install opam && require_runs opam; } || rc=1
         else
-            _install_opam_linux_binary
+            _install_opam_linux_binary || rc=1
         fi
     fi
     unset -f _install_opam_linux_binary
+    ((rc == 0)) || return 1
 
     # Initialise opam root (idempotent: skip if ~/.opam already exists)
     if [[ -d "${HOME}/.opam" ]]; then
@@ -2446,7 +2599,7 @@ install_ocaml_tools() {
             return
         fi
         log "Upgrading ocaml-lsp-server and ocamlformat"
-        opam upgrade --switch default --yes ocaml-lsp-server ocamlformat || return 1
+        retry_once opam upgrade --switch default --yes ocaml-lsp-server ocamlformat || return 1
         return
     fi
     log "Installing ${missing[*]} into the default opam switch"
@@ -2540,6 +2693,9 @@ install_go() {
     fi
     sudo rm -rf /usr/local/go.old
     export PATH="/usr/local/go/bin:${PATH}"
+    # GOTOOLCHAIN=local, or a go.mod in the working directory asking for a
+    # newer Go would have `go version` download one.
+    GOTOOLCHAIN=local require_runs /usr/local/go/bin/go version
 }
 
 install_moor() {
@@ -2553,11 +2709,13 @@ install_moor() {
                 return
             fi
             log "Upgrading moor"
-            brew upgrade moor
+            brew upgrade moor || return 1
+            require_runs moor
             return
         fi
         log "Installing moor"
-        brew install moor
+        brew install moor || return 1
+        require_runs moor
         return
     fi
 
@@ -2579,7 +2737,14 @@ install_moor() {
         # No official arm64 binary; build from source. install_go ensures a
         # modern Go is available; GOTOOLCHAIN=auto downloads a newer toolchain
         # if go.mod requires one beyond what's installed.
-        GOTOOLCHAIN=auto go install github.com/walles/moor/v2/cmd/moor@latest
+        GOTOOLCHAIN=auto go install github.com/walles/moor/v2/cmd/moor@latest || return 1
+        local gobin
+        gobin="$(go env GOBIN)" || return 1
+        if [[ -z "${gobin}" ]]; then
+            gobin="$(go env GOPATH)/bin"
+        fi
+        note_shadowed moor "${gobin}/moor"
+        require_runs "${gobin}/moor"
         return
     fi
 
@@ -2593,7 +2758,9 @@ install_moor() {
     download "https://github.com/walles/moor/releases/download/${tag}/moor-${tag}-linux-amd64" \
         "${tmp_dir}/moor" || return 1
     mkdir -p "${HOME}/.local/bin"
-    install -m755 "${tmp_dir}/moor" "${HOME}/.local/bin/moor"
+    install -m755 "${tmp_dir}/moor" "${HOME}/.local/bin/moor" || return 1
+    note_shadowed moor "${HOME}/.local/bin/moor"
+    require_runs "${HOME}/.local/bin/moor"
 }
 
 install_glow() {
@@ -2607,11 +2774,13 @@ install_glow() {
                 return
             fi
             log "Upgrading glow"
-            brew upgrade glow
+            brew upgrade glow || return 1
+            require_runs glow
             return
         fi
         log "Installing glow"
-        brew install glow
+        brew install glow || return 1
+        require_runs glow
         return
     fi
 
@@ -2649,7 +2818,9 @@ install_glow() {
         "${glow_base}/checksums.txt" || return 1
     tar -C "${tmp_dir}" -xf "${tmp_dir}/${dir_name}.tar.gz" || return 1
     mkdir -p "${HOME}/.local/bin"
-    install -m755 "${tmp_dir}/${dir_name}/glow" "${HOME}/.local/bin/glow"
+    install -m755 "${tmp_dir}/${dir_name}/glow" "${HOME}/.local/bin/glow" || return 1
+    note_shadowed glow "${HOME}/.local/bin/glow"
+    require_runs "${HOME}/.local/bin/glow"
 }
 
 install_treehouse() {
@@ -2710,7 +2881,9 @@ install_treehouse() {
         "${treehouse_base}/checksums.txt" || return 1
     tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}" || return 1
     mkdir -p "${HOME}/.local/bin"
-    install -m755 "${tmp_dir}/treehouse" "${HOME}/.local/bin/treehouse"
+    install -m755 "${tmp_dir}/treehouse" "${HOME}/.local/bin/treehouse" || return 1
+    note_shadowed treehouse "${HOME}/.local/bin/treehouse"
+    require_runs "${HOME}/.local/bin/treehouse"
 }
 
 # Prebuilt release binaries where upstream publishes one for this platform, and
@@ -2735,11 +2908,13 @@ install_git_absorb() {
             return
         fi
         log "Upgrading git-absorb"
-        brew upgrade git-absorb
+        brew upgrade git-absorb || return 1
+        require_runs git-absorb
         return
     fi
     log "Installing git-absorb"
-    brew install git-absorb
+    brew install git-absorb || return 1
+    require_runs git-absorb
 }
 
 # rga is two binaries, not one: `rga` shells out to `rga-preproc` for every
@@ -2757,11 +2932,13 @@ install_ripgrep_all() {
                 return
             fi
             log "Upgrading ripgrep-all"
-            brew upgrade ripgrep-all
+            brew upgrade ripgrep-all || return 1
+            require_runs rga
             return
         fi
         log "Installing ripgrep-all"
-        brew install ripgrep-all
+        brew install ripgrep-all || return 1
+        require_runs rga
         return
     fi
 
@@ -2808,6 +2985,9 @@ install_ripgrep_all() {
         fi
         install -m755 "${binary}" "${HOME}/.local/bin/${name}" || return 1
     done
+    # rga alone: rga-preproc wants a file and exits 1 on --version.
+    note_shadowed rga "${HOME}/.local/bin/rga"
+    require_runs "${HOME}/.local/bin/rga"
 }
 
 install_gitleaks() {
@@ -2821,11 +3001,13 @@ install_gitleaks() {
                 return
             fi
             log "Upgrading gitleaks"
-            brew upgrade gitleaks
+            brew upgrade gitleaks || return 1
+            require_runs gitleaks version
             return
         fi
         log "Installing gitleaks"
-        brew install gitleaks
+        brew install gitleaks || return 1
+        require_runs gitleaks version
         return
     fi
 
@@ -2865,6 +3047,8 @@ install_gitleaks() {
     tar -C "${tmp_dir}" -xf "${tmp_dir}/${tarball}" || return 1
     mkdir -p "${HOME}/.local/bin"
     install -m755 "${tmp_dir}/gitleaks" "${HOME}/.local/bin/gitleaks" || return 1
+    note_shadowed gitleaks "${HOME}/.local/bin/gitleaks"
+    require_runs "${HOME}/.local/bin/gitleaks" version
 }
 
 # ansible-lint is a Python package, so brew on macOS and a uv-managed tool
@@ -2881,11 +3065,13 @@ install_ansible_lint() {
                 return
             fi
             log "Upgrading ansible-lint"
-            brew upgrade ansible-lint
+            brew upgrade ansible-lint || return 1
+            require_runs ansible-lint --offline --version
             return
         fi
         log "Installing ansible-lint"
-        brew install ansible-lint
+        brew install ansible-lint || return 1
+        require_runs ansible-lint --offline --version
         return
     fi
 
@@ -2896,11 +3082,16 @@ install_ansible_lint() {
             return
         fi
         log "Upgrading ansible-lint"
-        uv tool upgrade ansible-lint
-        return
+        uv tool upgrade ansible-lint || return 1
+    else
+        log "Installing ansible-lint"
+        uv tool install ansible-lint || return 1
     fi
-    log "Installing ansible-lint"
-    uv tool install ansible-lint
+    local tool_bin
+    tool_bin="$(uv tool dir --bin)" || return 1
+    note_shadowed ansible-lint "${tool_bin}/ansible-lint"
+    # --offline: otherwise --version asks GitHub for the newest release.
+    require_runs "${tool_bin}/ansible-lint" --offline --version
 }
 
 # elan is Lean's toolchain manager, the equivalent of rustup: it installs `lean`
@@ -2914,7 +3105,8 @@ install_elan() {
             return
         fi
         log "Upgrading elan"
-        "${HOME}/.elan/bin/elan" self update || return 1
+        retry_once "${HOME}/.elan/bin/elan" self update || return 1
+        require_runs "${HOME}/.elan/bin/elan"
         return
     fi
 
@@ -2950,6 +3142,8 @@ install_elan() {
     # --no-modify-path: ~/.elan/bin goes on PATH from the shell config, not from
     # a line elan-init appends to a profile file chezmoi owns.
     "${tmp_dir}/elan-init" -y --no-modify-path || return 1
+    note_shadowed elan "${HOME}/.elan/bin/elan"
+    require_runs "${HOME}/.elan/bin/elan"
 }
 
 # fzf-git.sh binds git objects -- branches, tags, hashes, remotes, stashes --
@@ -3437,6 +3631,7 @@ install_zathura() {
         # returns 0, so letting it run last would mask a link failure and report
         # a clean install that renders nothing.
         link_zathura_pdf_plugin || return 1
+        require_runs zathura --version || return 1
         print_zathura_app_hint
         return 0
     fi
@@ -3456,7 +3651,8 @@ install_zathura() {
     else
         log "Installing zathura"
     fi
-    sudo apt-get install -y zathura zathura-pdf-poppler
+    sudo apt-get install -y zathura zathura-pdf-poppler || return 1
+    require_runs zathura --version
 }
 
 link_zathura_pdf_plugin() {
