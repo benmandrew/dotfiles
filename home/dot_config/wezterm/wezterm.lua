@@ -417,10 +417,18 @@ end)
 
 -- System metrics (CPU / RAM / uptime) in the right status: a local mirror of
 -- the tmux remote-host status-right. The values move slowly but are relatively
--- costly to source, so we recompute at most once a second and cache the
--- formatted string; the tab bar itself repaints at 10Hz (status_update_interval).
--- os.time's 1s resolution is also exactly the window the Linux CPU delta samples.
+-- costly to source, so we recompute at most every METRICS_REFRESH_SECONDS and
+-- cache the formatted string; the tab bar itself repaints at 10Hz
+-- (status_update_interval).
+--
+-- On macOS every refresh forks, and syspolicyd verifies the signature of each
+-- child wezterm spawns, missing its cache every time. At five forks a second
+-- that held syspolicyd at 56% CPU, falling to 0% with the refresh paused. So the
+-- values fixed for the life of the boot (core count, memory size, boot time) are
+-- read once at config load, leaving two forks per refresh, and the refresh runs
+-- every 10s rather than every second.
 local IS_MACOS = wezterm.target_triple:find("apple%-darwin") ~= nil
+local METRICS_REFRESH_SECONDS = 10
 
 -- Status icons, by codepoint so an editor can't mangle the literal glyphs.
 -- CPU is the MDI chip, RAM the MDI memory stick, uptime the MDI clock. All three
@@ -460,10 +468,18 @@ local function capture(argv)
     return nil
 end
 
+-- macOS values fixed until reboot, read once here rather than per refresh.
+local MACOS_NCPU, MACOS_MEMSIZE, MACOS_BOOTTIME
+if IS_MACOS then
+    MACOS_NCPU = tonumber((capture({ "sysctl", "-n", "hw.ncpu" }) or ""):match("%d+")) or 1
+    MACOS_MEMSIZE = tonumber((capture({ "sysctl", "-n", "hw.memsize" }) or ""):match("%d+"))
+    MACOS_BOOTTIME = tonumber((capture({ "sysctl", "-n", "kern.boottime" }) or ""):match("sec%s*=%s*(%d+)"))
+end
+
 -- Linux CPU: diff two /proc/stat snapshots taken across calls. Since the refresh
--- cadence is ~1s (see the cache below), the delta spans ~1s without the blocking
--- `sleep 0.2` the tmux status scripts used to need. No baseline on the first
--- call -> nil.
+-- cadence is METRICS_REFRESH_SECONDS, the delta spans that window without the
+-- blocking `sleep 0.2` the tmux status scripts used to need. No baseline on the
+-- first call -> nil.
 local prev_cpu_linux = nil
 local function cpu_linux()
     local f = io.open("/proc/stat", "r")
@@ -509,8 +525,7 @@ local function cpu_macos()
     for n in out:gmatch("[%d.]+") do
         sum = sum + tonumber(n)
     end
-    local ncpu = tonumber((capture({ "sysctl", "-n", "hw.ncpu" }) or ""):match("%d+")) or 1
-    return math.min(100, math.floor(sum / ncpu + 0.5))
+    return math.min(100, math.floor(sum / MACOS_NCPU + 0.5))
 end
 
 -- Linux RAM: used = MemTotal - MemAvailable (kB), rendered in GiB, matching
@@ -542,20 +557,16 @@ end
 -- macOS RAM: used = (active + wired + compressed) pages * page size; total from
 -- hw.memsize. Rendered in GiB.
 local function ram_macos()
-    local total_out = capture({ "sysctl", "-n", "hw.memsize" })
+    local total = MACOS_MEMSIZE
     local vm = capture({ "vm_stat" })
-    if not (total_out and vm) then
+    if not (total and vm) then
         return nil
     end
-    local total = tonumber(total_out:match("%d+"))
     local pagesize = tonumber(vm:match("page size of (%d+) bytes")) or 4096
     local function pages(label)
         return tonumber(vm:match(label .. "%D-(%d+)")) or 0
     end
     local used = (pages("Pages active") + pages("Pages wired down") + pages("Pages occupied by compressor")) * pagesize
-    if not total then
-        return nil
-    end
     return string.format("%5.1fG/%5.1fG", used / 1073741824, total / 1073741824)
 end
 
@@ -570,17 +581,16 @@ local function uptime_linux()
 end
 
 local function uptime_macos()
-    local out = capture({ "sysctl", "-n", "kern.boottime" })
-    local boot = out and tonumber(out:match("sec%s*=%s*(%d+)"))
-    return boot and fmt_uptime(os.time() - boot) or nil
+    return MACOS_BOOTTIME and fmt_uptime(os.time() - MACOS_BOOTTIME) or nil
 end
 
--- Cached formatted right-status text; refreshed at most once a second.
+-- Cached formatted right-status text; refreshed at most every
+-- METRICS_REFRESH_SECONDS.
 local metrics_cache = { at = -1, text = nil }
 local function metrics_text()
     local now = os.time()
     local age = now - metrics_cache.at
-    if metrics_cache.text and age >= 0 and age < 1 then
+    if metrics_cache.text and age >= 0 and age < METRICS_REFRESH_SECONDS then
         return metrics_cache.text
     end
     local cpu, ram, up
@@ -789,7 +799,7 @@ end)
 -- so the stock 1000ms makes the "copied" flash appear
 -- up to a second late (and linger as long again). This bounds both to 100ms, at
 -- the cost of running format-tab-title 10x more often. The metric values are
--- cached to ~1s regardless (see metrics_text), so this only affects the flash.
+-- cached regardless (see metrics_text), so this only affects the flash.
 config.status_update_interval = 100
 config.scrollback_lines = 10000
 config.audible_bell = "Disabled"
