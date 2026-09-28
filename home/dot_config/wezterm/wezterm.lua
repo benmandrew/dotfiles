@@ -861,12 +861,13 @@ local function unboxed(text)
     return stdout
 end
 
--- Runs after the stock copy action, which has already put the raw selection on
--- the clipboard, and overwrites it only when the conversion changed something.
--- Ordering it this way leaves CopyTo and CompleteSelection to do their own
--- work -- completing a drag gesture, deciding there is nothing to copy -- so
--- the only behaviour that changes is what ends up on the clipboard.
-local function unbox_clipboard(dest)
+-- Copies the selection, converted, in place of the stock copy action. It must
+-- be the only write to `dest` for the input event: on Wayland each clipboard
+-- write carries the serial of the click or key that caused it, and the
+-- compositor ignores a write whose serial is no newer than the current
+-- selection's. A stock copy followed by an overwrite from here therefore
+-- leaves the raw selection on the clipboard.
+local function copy_unboxed(dest)
     return wezterm.action_callback(function(window, pane)
         local ok, text = pcall(function()
             return window:get_selection_text_for_pane(pane)
@@ -874,11 +875,7 @@ local function unbox_clipboard(dest)
         if not ok or not text or #text == 0 then
             return
         end
-
-        local converted = unboxed(text)
-        if converted ~= text then
-            window:copy_to_clipboard(converted, dest)
-        end
+        window:copy_to_clipboard(unboxed(text), dest)
     end)
 end
 
@@ -887,18 +884,17 @@ end
 -- runs after the copy, while the selection is still live for the handler.
 local function copy_and_flash(dest)
     return act.Multiple({
-        act.CopyTo(dest),
-        unbox_clipboard(dest),
+        copy_unboxed(dest),
         act.EmitEvent("copied-if-selection"),
     })
 end
 
 -- Double/triple-click always select something, so they flash unconditionally
--- via the plain "copied" event (no selection read to race against).
+-- via the plain "copied" event (no selection read to race against). They skip
+-- unbox: a word or a line is never a table, which needs a rule to be one.
 local function complete_selection_and_flash(dest)
     return act.Multiple({
         act.CompleteSelection(dest),
-        unbox_clipboard(dest),
         act.EmitEvent("copied"),
     })
 end
@@ -1139,9 +1135,13 @@ config.key_tables = key_tables
 -- the cost of unifying on ctrl: <C-LeftMouse> no longer reaches nvim.
 -- No copy indicator on the link bindings: ctrl-click opens, it never copies,
 -- so the "copied-if-selection" flash would be a lie about a stale selection.
+--
+-- The drag release still needs CompleteSelection to finish the gesture, so it
+-- writes the primary selection and copy_unboxed takes the clipboard, one write
+-- each. Middle-click pastes the selection as drawn.
 local complete_only_and_flash = act.Multiple({
-    act.CompleteSelection("ClipboardAndPrimarySelection"),
-    unbox_clipboard("ClipboardAndPrimarySelection"),
+    act.CompleteSelection("PrimarySelection"),
+    copy_unboxed("Clipboard"),
     act.EmitEvent("copied-if-selection"),
 })
 
