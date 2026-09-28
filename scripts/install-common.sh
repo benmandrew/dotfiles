@@ -375,7 +375,7 @@ BAT_VERSION="v0.26.1"
 CARGO_NEXTEST_VERSION="cargo-nextest-0.9.143"
 CMAKE_VERSION="v4.4.3"
 DELTA_VERSION="0.19.2"
-DIFFTASTIC_VERSION="0.70.0"
+DIFFTASTIC_VERSION="0.71.0"
 ELAN_VERSION="v4.2.4"
 EZA_VERSION="v0.23.5"
 FD_VERSION="v10.5.0"
@@ -1324,7 +1324,7 @@ _rust_tool_spec() {
         delta) echo "dandavison/delta|delta-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin||${DELTA_VERSION}" ;;
         hyperfine) echo "sharkdp/hyperfine|hyperfine-%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin||${HYPERFINE_VERSION}" ;;
         zoxide) echo "ajeetdsouza/zoxide|zoxide-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin||${ZOXIDE_VERSION}" ;;
-        difft) echo "Wilfred/difftastic|difft-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin x86_64-apple-darwin||${DIFFTASTIC_VERSION}" ;;
+        difft) echo "Wilfred/difftastic|difft-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin x86_64-apple-darwin||${DIFFTASTIC_VERSION}" ;;
         sccache) echo "mozilla/sccache|sccache-%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin x86_64-apple-darwin|%ASSET%.sha256|${SCCACHE_VERSION}" ;;
         # Upstream publishes one fat macOS binary rather than a per-arch pair,
         # which is why universal-apple-darwin is in the triple list at all.
