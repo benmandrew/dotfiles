@@ -392,6 +392,7 @@ RIPGREP_ALL_VERSION="v0.10.10"
 RIPGREP_VERSION="15.2.0"
 SCCACHE_VERSION="v0.17.0"
 TREEHOUSE_VERSION="v2.3.0"
+TYPST_VERSION="v0.15.1"
 ZOXIDE_VERSION="v0.10.0"
 
 # btop is pinned for a reason of its own rather than for reproducibility: >=
@@ -442,6 +443,7 @@ print_pin_updates() {
         "SCCACHE_VERSION|mozilla/sccache" \
         "TMUX_VERSION|tmux/tmux" \
         "TREEHOUSE_VERSION|kunchenguid/treehouse" \
+        "TYPST_VERSION|typst/typst" \
         "ZOXIDE_VERSION|ajeetdsouza/zoxide"; do
         name="${spec%%|*}"
         repo="${spec#*|}"
@@ -931,6 +933,7 @@ install_zsh_completions() {
         "delta|--generate-completion zsh" \
         "rustup|completions zsh" \
         "atuin|gen-completions --shell zsh" \
+        "typst|completions zsh" \
         "chezmoi|completion zsh"; do
         cmd="${spec%%|*}"
         args="${spec#*|}"
@@ -1332,6 +1335,9 @@ _rust_tool_spec() {
         # No aarch64 asset for either platform, so an ARM machine takes the
         # cargo fallback; git-absorb is a small crate and builds in seconds.
         git-absorb) echo "tummychow/git-absorb|git-absorb-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl x86_64-apple-darwin||${GIT_ABSORB_VERSION}" ;;
+        # .tar.xz, which tar -xf detects on its own. No checksum manifest is
+        # published; the binary sits in a typst-<triple>/ directory.
+        typst) echo "typst/typst|typst-%TRIPLE%.tar.xz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin x86_64-apple-darwin||${TYPST_VERSION}" ;;
         *) return 1 ;;
     esac
 }
@@ -3679,6 +3685,190 @@ print_zathura_app_hint() {
     log "zathura on macOS is a command-line tool. To also get a /Applications bundle"
     log "  that opens PDFs on double-click, run the tap's convert-into-app.sh:"
     log "  https://github.com/homebrew-zathura/homebrew-zathura"
+}
+
+# typst ships prebuilt static (musl) binaries for both Linux arches and both
+# macOS arches, so it goes through the same path as the Rust CLIs above. The
+# crate is typst-cli; a copy built by `cargo install` is replaced.
+install_typst() { install_cargo_tool typst typst-cli; }
+
+# TeX Live. Linux takes the distro packages a thesis or paper build here needs,
+# short of texlive-full's multi-gigabyte language and documentation packs.
+# macOS takes MacTeX without its GUI apps: the full TeX Live scheme, which
+# already carries latexmk and biber. BasicTeX is a tenth of the size but lacks
+# most of what the Linux list pulls in, and tlmgr-installing the gap by hand
+# would make the two platforms drift.
+LATEX_APT_PACKAGES=(texlive-latex-extra texlive-fonts-extra texlive-fonts-recommended
+    texlive-extra-utils texlive-bibtex-extra texlive-science latexmk biber)
+
+install_latex() {
+    local os_name
+    os_name="$(uname -s)"
+
+    if [[ "${os_name}" == "Darwin" ]]; then
+        # The pkg installer puts binaries in /Library/TeX/texbin and adds that
+        # to PATH through /etc/paths.d/TeX, which a running shell has not read.
+        local texbin="/Library/TeX/texbin"
+        if brew list --cask mactex-no-gui >/dev/null 2>&1; then
+            if [[ -z "${UPGRADE:-}" ]]; then
+                log "MacTeX already installed; skipping"
+                return
+            fi
+            log "Upgrading MacTeX"
+            brew upgrade --cask mactex-no-gui || return 1
+        else
+            log "Installing MacTeX (no GUI); this is a download of several gigabytes"
+            brew install --cask mactex-no-gui || return 1
+        fi
+        require_runs "${texbin}/latexmk" -v || return 1
+        require_runs "${texbin}/biber" --version
+        return
+    fi
+
+    if [[ -n "${UPGRADE:-}" ]]; then
+        log "Upgrading LaTeX packages"
+        sudo apt-get update || return 1
+        sudo apt-get install -y "${LATEX_APT_PACKAGES[@]}" || return 1
+    else
+        local missing=() package
+        for package in "${LATEX_APT_PACKAGES[@]}"; do
+            if ! dpkg -s "${package}" >/dev/null 2>&1; then
+                missing+=("${package}")
+            fi
+        done
+        if ((${#missing[@]} == 0)); then
+            log "LaTeX packages already installed; skipping"
+            return
+        fi
+        log "Installing LaTeX packages: ${missing[*]}"
+        sudo apt-get update || return 1
+        sudo apt-get install -y "${missing[@]}" || return 1
+    fi
+    require_runs latexmk -v || return 1
+    require_runs biber --version
+}
+
+# Docker's own repository rather than Ubuntu's docker.io, which lags upstream
+# and ships no buildx or compose plugins. The layout matches Docker's install
+# guide: an ASCII-armoured key in /etc/apt/keyrings/docker.asc and a deb822
+# docker.sources, so a machine set up by hand from that guide is a no-op here.
+DOCKER_APT_PACKAGES=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
+# Docker's release signing key, as download.docker.com/linux/ubuntu/gpg serves
+# it. Pinned because the key is fetched over TLS with nothing else to check it.
+DOCKER_KEY_FINGERPRINT="9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
+
+# One field of /etc/os-release, unquoted; empty when absent.
+_os_release_field() {
+    awk -F= -v k="$1" '$1 == k { gsub(/"/, "", $2); print $2; exit }' /etc/os-release 2>/dev/null
+}
+
+install_docker() {
+    local os_name
+    os_name="$(uname -s)"
+
+    if [[ "${os_name}" == "Darwin" ]]; then
+        # Docker Desktop: macOS has no native container runtime, and the cask
+        # links the docker CLI and compose plugin into /usr/local. The daemon
+        # runs only once the app has been opened and its licence accepted,
+        # which cannot be scripted, so only the client is probed.
+        if brew list --cask docker-desktop >/dev/null 2>&1; then
+            if [[ -z "${UPGRADE:-}" ]]; then
+                log "Docker Desktop already installed; skipping"
+                return
+            fi
+            log "Upgrading Docker Desktop"
+            brew upgrade --cask docker-desktop || return 1
+        else
+            log "Installing Docker Desktop"
+            brew install --cask docker-desktop || return 1
+            log "Open Docker.app once to start the engine and accept its licence"
+        fi
+        require_runs /usr/local/bin/docker --version
+        return
+    fi
+
+    local id ubuntu_codename codename
+    id="$(_os_release_field ID)"
+    ubuntu_codename="$(_os_release_field UBUNTU_CODENAME)"
+    codename="$(_os_release_field VERSION_CODENAME)"
+    # UBUNTU_CODENAME wins, so a derivative such as Mint resolves to the Ubuntu
+    # suite Docker actually publishes.
+    if [[ -n "${ubuntu_codename}" ]]; then
+        id="ubuntu"
+        codename="${ubuntu_codename}"
+    elif [[ "${id}" != "debian" ]]; then
+        log "Docker: no apt repository for ${id:-this distro}; skipping"
+        return
+    fi
+    if [[ -z "${codename}" ]]; then
+        log "Docker: no release codename in /etc/os-release; skipping"
+        return
+    fi
+
+    local keyring="/etc/apt/keyrings/docker.asc"
+    local sources="/etc/apt/sources.list.d/docker.sources"
+    if [[ ! -f "${keyring}" ]]; then
+        log "Adding Docker's apt signing key"
+        local tmp key_info
+        tmp="$(mktemp)"
+        download "https://download.docker.com/linux/${id}/gpg" "${tmp}" || return 1
+        key_info="$(gpg --show-keys --with-colons "${tmp}" 2>/dev/null)" || key_info=""
+        if ! grep -qx "fpr:*${DOCKER_KEY_FINGERPRINT}:" <<<"${key_info}"; then
+            rm -f "${tmp}"
+            err "Docker's apt key does not carry the pinned fingerprint"
+            return 1
+        fi
+        sudo mkdir -p -m 755 /etc/apt/keyrings || return 1
+        sudo install -m 644 "${tmp}" "${keyring}" || return 1
+        rm -f "${tmp}"
+    fi
+    if [[ ! -f "${sources}" ]]; then
+        log "Adding Docker's apt repository"
+        printf 'Types: deb\nURIs: https://download.docker.com/linux/%s\nSuites: %s\nComponents: stable\nSigned-By: %s\n' \
+            "${id}" "${codename}" "${keyring}" |
+            sudo tee "${sources}" >/dev/null || return 1
+    fi
+
+    local missing=() package
+    for package in "${DOCKER_APT_PACKAGES[@]}"; do
+        if ! dpkg -s "${package}" >/dev/null 2>&1; then
+            missing+=("${package}")
+        fi
+    done
+    if [[ -n "${UPGRADE:-}" ]]; then
+        log "Upgrading Docker"
+        sudo apt-get update || return 1
+        sudo apt-get install -y "${DOCKER_APT_PACKAGES[@]}" || return 1
+        require_runs docker --version || return 1
+    elif ((${#missing[@]} > 0)); then
+        log "Installing Docker packages: ${missing[*]}"
+        sudo apt-get update || return 1
+        sudo apt-get install -y "${missing[@]}" || return 1
+        require_runs docker --version || return 1
+    else
+        log "Docker packages already installed; skipping"
+    fi
+
+    # The docker group grants root-equivalent access to the daemon's socket.
+    # Opting into this step is the consent for that on this machine.
+    local user groups
+    user="$(id -un)" || return 1
+    groups="$(id -nG "${user}")" || return 1
+    if [[ " ${groups} " != *" docker "* ]]; then
+        log "Adding ${user} to the docker group; log out and back in for it to apply"
+        sudo usermod -aG docker "${user}" || return 1
+    fi
+
+    # Containers and WSL often run without systemd, where the unit cannot be
+    # enabled and the daemon is started some other way.
+    if [[ ! -d /run/systemd/system ]]; then
+        log "Docker: systemd is not running; not enabling docker.service"
+        return 0
+    fi
+    if ! systemctl is-enabled --quiet docker.service 2>/dev/null; then
+        log "Enabling docker.service"
+        sudo systemctl enable --now docker.service || return 1
+    fi
 }
 
 print_chezmoi_init_hint() {

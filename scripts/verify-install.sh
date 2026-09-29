@@ -273,6 +273,15 @@ check_cmd_optional obsidian --no-probe
 # opted into.
 check_cmd_optional zathura
 
+# Optional per machine. latexmk and biber stand for the whole TeX install; on
+# macOS they sit in /Library/TeX/texbin, on PATH through /etc/paths.d. docker
+# probes only the client, since the daemon may be stopped or, on macOS, not yet
+# started through Docker Desktop.
+check_cmd_optional latexmk -v
+check_cmd_optional biber
+check_cmd_optional typst
+check_cmd_optional docker
+
 check_dir "tpm" "${HOME}/.tmux/plugins/tpm"
 # tpm clones its plugins beside itself, so a declared plugin that is not there
 # means install_tmux_plugins cloned the manager and never ran it -- which is

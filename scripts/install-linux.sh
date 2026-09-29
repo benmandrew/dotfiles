@@ -296,6 +296,18 @@ main() {
         "zathura: keyboard-driven PDF viewer, with SyncTeX inverse search into VS Code. A GUI app — noise on a server." \
         install_zathura
 
+    run_optional_step latex \
+        "LaTeX: TeX Live with latexmk and biber, for building papers. Several gigabytes, and pointless where no one writes documents." \
+        install_latex
+
+    run_optional_step typst \
+        "Typst: markup typesetting compiler, a single binary in ~/.local/bin. For writing documents, not for a server." \
+        install_typst
+
+    run_optional_step docker \
+        "Docker: container engine with the buildx and compose plugins. Adds you to the docker group, which is root-equivalent." \
+        install_docker
+
     run_step install_neovim_if_missing
 
     # After every other step: it runs each tool to get its completion script.
