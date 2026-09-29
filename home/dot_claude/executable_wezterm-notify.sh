@@ -35,8 +35,12 @@ case "$(uname -s)" in
             "$label"
         ;;
     Linux)
+        # Transient, so GNOME shows the banner but keeps no copy in the
+        # notification list. Every idle prompt of every agent fires this, and
+        # the kept copies piled up until the list lagged when opened. The tab
+        # flag below already records which session is waiting.
         if command -v notify-send >/dev/null 2>&1; then
-            notify-send "Claude Code" "$label"
+            notify-send --hint=int:transient:1 "Claude Code" "$label"
         fi
         ;;
 esac
