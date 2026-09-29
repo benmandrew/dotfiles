@@ -1,0 +1,65 @@
+#!/bin/bash
+
+set -euo pipefail
+{{- if eq .chezmoi.os "linux" }}
+
+# Same headless guards as the input-sources script: gsettings ships with glib,
+# and without a session bus every write fails to commit.
+if ! command -v gsettings >/dev/null 2>&1; then
+    exit 0
+fi
+
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] &&
+    [ -z "${DISPLAY:-}" ] &&
+    [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    exit 0
+fi
+
+# Set a key only where its schema is installed and new enough to have it:
+# color-scheme arrived in GNOME 42, and dash-to-dock, ding and nemo are absent
+# outside Ubuntu's desktop. `gsettings range` fails on a missing schema or key.
+gset() {
+    if gsettings range "$1" "$2" >/dev/null 2>&1; then
+        gsettings set "$1" "$2" "$3"
+    fi
+}
+
+# Appearance. The Yaru accent variants ship with Ubuntu's yaru-theme packages;
+# pointing gtk-theme at a missing theme drops GTK 3 back to unstyled Adwaita.
+gset org.gnome.desktop.interface color-scheme 'prefer-dark'
+if [ -d /usr/share/themes/Yaru-prussiangreen-dark ]; then
+    gset org.gnome.desktop.interface gtk-theme 'Yaru-prussiangreen-dark'
+fi
+if [ -d /usr/share/icons/Yaru-prussiangreen ]; then
+    gset org.gnome.desktop.interface icon-theme 'Yaru-prussiangreen'
+fi
+gset org.gnome.desktop.interface enable-animations false
+gset org.gnome.desktop.interface clock-show-weekday true
+gset org.gnome.desktop.wm.preferences button-layout ':minimize,maximize,close'
+gset org.gnome.mutter workspaces-only-on-primary false
+
+# Input and sound.
+gset org.gnome.desktop.peripherals.mouse accel-profile 'flat'
+gset org.gnome.desktop.sound allow-volume-above-100-percent true
+
+# Never blank, dim or suspend on mains power.
+gset org.gnome.desktop.session idle-delay 0
+gset org.gnome.desktop.screensaver lock-delay 0
+gset org.gnome.settings-daemon.plugins.power idle-dim false
+gset org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing'
+
+# Dock and desktop icons.
+gset org.gnome.shell.extensions.dash-to-dock dash-max-icon-size 48
+gset org.gnome.shell.extensions.dash-to-dock show-mounts false
+gset org.gnome.shell.extensions.dash-to-dock show-trash false
+gset org.gnome.shell.extensions.ding icon-size 'small'
+
+# Search and privacy.
+gset org.gnome.desktop.search-providers disabled "['org.gnome.Characters.desktop', 'org.gnome.seahorse.Application.desktop', 'org.gnome.Software.desktop', 'org.gnome.Calendar.desktop']"
+gset org.gnome.system.location enabled false
+
+# File choosers and file manager.
+gset org.gtk.Settings.FileChooser show-hidden true
+gset org.gtk.Settings.FileChooser sort-directories-first true
+gset org.nemo.preferences date-format 'iso'
+{{- end }}
