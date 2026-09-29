@@ -128,6 +128,26 @@ fs.inotify.max_user_instances = 512"
     sudo sysctl -p "${conf}" >/dev/null
 }
 
+set_default_terminal_wezterm() {
+    # GNOME's Ctrl+Alt+T and "Open in Terminal" run x-terminal-emulator, which
+    # otherwise points at whichever terminal registered the highest priority.
+    # The wezterm-nightly deb registers open-wezterm-here; without it (headless,
+    # or arm64, where install_wezterm skips) there is nothing to point at.
+    local target="/usr/bin/open-wezterm-here"
+    local query
+    query="$(update-alternatives --query x-terminal-emulator 2>/dev/null)"
+    if ! grep -qxF "Alternative: ${target}" <<<"${query}"; then
+        log "x-terminal-emulator: ${target} not registered; skipping"
+        return
+    fi
+    if grep -qxF "Value: ${target}" <<<"${query}"; then
+        log "x-terminal-emulator already WezTerm; skipping"
+        return
+    fi
+    log "Setting x-terminal-emulator to WezTerm"
+    sudo update-alternatives --set x-terminal-emulator "${target}"
+}
+
 remove_conflicting_libnode_dev() {
     # The distro-provided libnode-dev ships headers (e.g. common.gypi) that
     # the NodeSource nodejs package also ships, so dpkg refuses to unpack
@@ -265,6 +285,7 @@ main() {
     run_step install_starship
     run_step install_tmux_plugins
     run_step install_wezterm
+    run_step set_default_terminal_wezterm
     run_step install_nerd_font
 
     run_optional_step obsidian \
