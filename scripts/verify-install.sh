@@ -274,6 +274,7 @@ check_cmd_optional obsidian --no-probe
 check_cmd_optional zathura
 
 # Optional per machine. latexmk and biber stand for the whole TeX install; on
+# Linux they are links in ~/.local/bin into ~/.local/texlive/<year>, and on
 # macOS they sit in /Library/TeX/texbin, on PATH through /etc/paths.d. docker
 # probes only the client, since the daemon may be stopped or, on macOS, not yet
 # started through Docker Desktop.

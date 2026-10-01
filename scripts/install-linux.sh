@@ -319,7 +319,7 @@ main() {
         install_zathura
 
     run_optional_step latex \
-        "LaTeX: TeX Live with latexmk and biber, for building papers. Several gigabytes, and pointless where no one writes documents." \
+        "LaTeX: upstream TeX Live in ~/.local/texlive with latexmk and biber, for building papers. Several gigabytes, and pointless where no one writes documents." \
         install_latex
 
     run_optional_step typst \

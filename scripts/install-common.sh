@@ -3692,14 +3692,141 @@ print_zathura_app_hint() {
 # crate is typst-cli; a copy built by `cargo install` is replaced.
 install_typst() { install_cargo_tool typst typst-cli; }
 
-# TeX Live. Linux takes the distro packages a thesis or paper build here needs,
-# short of texlive-full's multi-gigabyte language and documentation packs.
+# TeX Live. Linux takes upstream TeX Live through install-tl, since apt pins
+# it to the distro's release year: Ubuntu 22.04 ships TeX Live 2021 and biber
+# 2.17, and a biber that lags biblatex refuses the .bcf files it writes. The
+# collections match the apt packages this replaced (texlive-latex-extra,
+# -fonts-extra, -fonts-recommended, -extra-utils, -bibtex-extra, -science)
+# short of texlive-full's language packs; docs and sources are skipped.
 # macOS takes MacTeX without its GUI apps: the full TeX Live scheme, which
 # already carries latexmk and biber. BasicTeX is a tenth of the size but lacks
-# most of what the Linux list pulls in, and tlmgr-installing the gap by hand
+# most of what the Linux set pulls in, and tlmgr-installing the gap by hand
 # would make the two platforms drift.
-LATEX_APT_PACKAGES=(texlive-latex-extra texlive-fonts-extra texlive-fonts-recommended
-    texlive-extra-utils texlive-bibtex-extra texlive-science latexmk biber)
+TEXLIVE_REPOSITORY="https://mirror.ctan.org/systems/texlive/tlnet"
+TEXLIVE_ROOT="${HOME}/.local/texlive"
+TEXLIVE_COLLECTIONS=(collection-basic collection-latex collection-latexrecommended
+    collection-latexextra collection-fontsrecommended collection-fontsextra
+    collection-binextra collection-bibtexextra collection-mathscience
+    collection-pictures collection-plaingeneric collection-luatex)
+
+# The newest year directory under TEXLIVE_ROOT holding a tlmgr; empty when none.
+texlive_installed_year() {
+    local dir bin_dir year=""
+    for dir in "${TEXLIVE_ROOT}"/20[0-9][0-9]; do
+        bin_dir="$(texlive_bin_dir "${dir}")" || continue
+        if [[ -x "${bin_dir}/tlmgr" ]]; then
+            year="${dir##*/}"
+        fi
+    done
+    printf '%s\n' "${year}"
+}
+
+# bin/<platform> of a TEXDIR. install-tl names the platform itself
+# (x86_64-linux, aarch64-linux), so it is globbed rather than derived.
+texlive_bin_dir() {
+    local candidate
+    for candidate in "$1"/bin/*; do
+        if [[ -d "${candidate}" ]]; then
+            printf '%s\n' "${candidate}"
+            return
+        fi
+    done
+    return 1
+}
+
+# mirror.ctan.org redirects each request to a mirror of its choosing, so the
+# tarball and its checksum fetched separately can come from two mirrors at
+# different points in a sync; on 1 October 2026 they did, and disagreed. The
+# redirect is resolved once here and every later request, install-tl's own
+# included, goes to that mirror. Only headers are fetched, so this is the one
+# request that bypasses download().
+resolve_texlive_mirror() {
+    local url
+    url="$(curl -fsSLI --proto '=https' --tlsv1.2 "${_CURL_RETRY_OPTS[@]}" \
+        -o /dev/null -w '%{url_effective}' "${TEXLIVE_REPOSITORY}/")" || {
+        err "Could not resolve a CTAN mirror from ${TEXLIVE_REPOSITORY}"
+        return 1
+    }
+    TEXLIVE_MIRROR="${url%/}"
+}
+
+# Fetch and unpack install-tl into $1, leaving its directory in
+# TEXLIVE_INSTALLER and its release year in TEXLIVE_INSTALLER_YEAR. Upstream
+# publishes a SHA-512 rather than a SHA-256, so the check is done here instead
+# of through download_verified.
+fetch_texlive_installer() {
+    local work="$1" tarball="$1/install-tl-unx.tar.gz" expected actual
+    resolve_texlive_mirror || return 1
+    download "${TEXLIVE_MIRROR}/install-tl-unx.tar.gz" "${tarball}" || return 1
+    download "${TEXLIVE_MIRROR}/install-tl-unx.tar.gz.sha512" "${tarball}.sha512" || return 1
+    expected="$(awk '{ print $1; exit }' "${tarball}.sha512")"
+    actual="$(sha512sum "${tarball}")" || return 1
+    if [[ "${actual%% *}" != "${expected}" ]]; then
+        err "Checksum mismatch for install-tl-unx.tar.gz from ${TEXLIVE_MIRROR}"
+        return 1
+    fi
+    tar -xf "${tarball}" -C "${work}" || return 1
+    # The tarball unpacks to install-tl-<date>.
+    local dir release=""
+    for dir in "${work}"/install-tl-*/; do
+        TEXLIVE_INSTALLER="${dir%/}"
+    done
+    # release-texlive.txt opens with "TeX Live (https://tug.org/texlive) version 2026".
+    read -r release <"${TEXLIVE_INSTALLER}/release-texlive.txt" || return 1
+    TEXLIVE_INSTALLER_YEAR="${release##* }"
+    if [[ ! "${TEXLIVE_INSTALLER_YEAR}" =~ ^20[0-9][0-9]$ ]]; then
+        err "Could not read the TeX Live year from ${TEXLIVE_INSTALLER}/release-texlive.txt"
+        return 1
+    fi
+}
+
+# A per-user install, so tlmgr runs without sudo. instopt_adjustpath links
+# every binary into ~/.local/bin, which .zshrc puts ahead of /usr/bin, so the
+# year directory never appears on PATH and a new year only relinks: install-tl
+# replaces an existing symlink and warns past a regular file. install-tl leaves
+# tlmgr on the mirror it installed from (instopt_adjustrepo covers only a DVD
+# install), so tlmgr is pointed back at mirror.ctan.org afterwards.
+run_texlive_installer() {
+    local installer="$1" texdir="$2" profile="$1/dotfiles.profile" collection
+    {
+        printf 'selected_scheme scheme-custom\n'
+        printf 'TEXDIR %s\n' "${texdir}"
+        printf 'TEXMFLOCAL %s\n' "${TEXLIVE_ROOT}/texmf-local"
+        printf 'TEXMFSYSVAR %s\n' "${texdir}/texmf-var"
+        printf 'TEXMFSYSCONFIG %s\n' "${texdir}/texmf-config"
+        printf 'TEXMFHOME ~/texmf\n'
+        for collection in "${TEXLIVE_COLLECTIONS[@]}"; do
+            printf '%s 1\n' "${collection}"
+        done
+        printf 'instopt_adjustpath 1\n'
+        printf 'instopt_letter 0\n'
+        printf 'tlpdbopt_sys_bin %s\n' "${HOME}/.local/bin"
+        printf 'tlpdbopt_sys_man %s\n' "${HOME}/.local/share/man"
+        printf 'tlpdbopt_sys_info %s\n' "${HOME}/.local/share/info"
+        printf 'tlpdbopt_install_docfiles 0\n'
+        printf 'tlpdbopt_install_srcfiles 0\n'
+        printf 'tlpdbopt_autobackup 0\n'
+    } >"${profile}"
+    mkdir -p "${HOME}/.local/bin" || return 1
+    perl "${installer}/install-tl" --profile="${profile}" \
+        --repository="${TEXLIVE_MIRROR}" || return 1
+    local bin_dir
+    bin_dir="$(texlive_bin_dir "${texdir}")" || return 1
+    "${bin_dir}/tlmgr" option repository "${TEXLIVE_REPOSITORY}" || return 1
+}
+
+# Links in ~/.local/bin left dangling by a removed TeX Live year.
+remove_stale_texlive_links() {
+    local link
+    for link in "${HOME}/.local/bin"/*; do
+        if [[ -L "${link}" && ! -e "${link}" ]]; then
+            case "$(readlink "${link}")" in
+                "${TEXLIVE_ROOT}"/*) rm -f "${link}" ;;
+                *) ;;
+            esac
+        fi
+    done
+}
 
 install_latex() {
     local os_name
@@ -3725,27 +3852,49 @@ install_latex() {
         return
     fi
 
-    if [[ -n "${UPGRADE:-}" ]]; then
-        log "Upgrading LaTeX packages"
-        sudo apt-get update || return 1
-        sudo apt-get install -y "${LATEX_APT_PACKAGES[@]}" || return 1
-    else
-        local missing=() package
-        for package in "${LATEX_APT_PACKAGES[@]}"; do
-            if ! dpkg -s "${package}" >/dev/null 2>&1; then
-                missing+=("${package}")
-            fi
-        done
-        if ((${#missing[@]} == 0)); then
-            log "LaTeX packages already installed; skipping"
-            return
-        fi
-        log "Installing LaTeX packages: ${missing[*]}"
-        sudo apt-get update || return 1
-        sudo apt-get install -y "${missing[@]}" || return 1
+    local installed bin_dir
+    installed="$(texlive_installed_year)"
+    if [[ -n "${installed}" && -z "${UPGRADE:-}" ]]; then
+        log "TeX Live ${installed} already installed; skipping"
+        return
     fi
-    require_runs latexmk -v || return 1
-    require_runs biber --version
+
+    local work
+    work="$(mktemp -d "${TMPDIR:-/tmp}/install-tl.XXXXXX")" || return 1
+    if ! fetch_texlive_installer "${work}"; then
+        rm -rf "${work}"
+        return 1
+    fi
+
+    if [[ "${installed}" == "${TEXLIVE_INSTALLER_YEAR}" ]]; then
+        rm -rf "${work}"
+        bin_dir="$(texlive_bin_dir "${TEXLIVE_ROOT}/${installed}")" || return 1
+        log "Upgrading TeX Live ${installed} packages"
+        retry_once "${bin_dir}/tlmgr" update --self --all || return 1
+    else
+        # tlmgr cannot cross a release year, so a new year is a fresh install
+        # beside the old one, which goes only once the new one runs.
+        log "Installing TeX Live ${TEXLIVE_INSTALLER_YEAR} into ${TEXLIVE_ROOT}; this is a download of several gigabytes"
+        if ! run_texlive_installer "${TEXLIVE_INSTALLER}" "${TEXLIVE_ROOT}/${TEXLIVE_INSTALLER_YEAR}"; then
+            rm -rf "${work}"
+            return 1
+        fi
+        rm -rf "${work}"
+        bin_dir="$(texlive_bin_dir "${TEXLIVE_ROOT}/${TEXLIVE_INSTALLER_YEAR}")" || return 1
+    fi
+
+    require_runs "${bin_dir}/latexmk" -v || return 1
+    require_runs "${bin_dir}/biber" --version || return 1
+    if [[ -n "${installed}" && "${installed}" != "${TEXLIVE_INSTALLER_YEAR}" ]]; then
+        log "Removing TeX Live ${installed}"
+        rm -rf "${TEXLIVE_ROOT:?}/${installed}" || return 1
+        remove_stale_texlive_links
+    fi
+    note_shadowed latexmk "${HOME}/.local/bin/latexmk"
+    if dpkg -s texlive-base >/dev/null 2>&1; then
+        log "Note: the apt TeX Live is still installed, behind this one on PATH. To reclaim its space:"
+        log "  sudo apt-get purge 'texlive*' latexmk biber && sudo apt-get autoremove"
+    fi
 }
 
 # Docker's own repository rather than Ubuntu's docker.io, which lags upstream

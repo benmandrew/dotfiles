@@ -4,3 +4,6 @@ thm = "thm"
 # gpg's colon-listing record type for a fingerprint line, matched by
 # install_git in scripts/install-linux.sh
 fpr = "fpr"
+# TeX Live installer tarball, install-tl-unx.tar.gz, fetched by install_latex
+# in scripts/install-common.sh
+unx = "unx"
