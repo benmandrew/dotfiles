@@ -4,6 +4,9 @@
   "explorer.confirmDelete": false,
   "explorer.confirmDragAndDrop": false,
   "update.showReleaseNotes": false,
+{{- if eq .chezmoi.os "linux" }}
+  "update.mode": "none",
+{{- end }}
   "editor.minimap.autohide": "mouseover",
   "editor.minimap.enabled": false,
   "markdown.preview.scrollEditorWithPreview": false,

@@ -128,6 +128,27 @@ fs.inotify.max_user_instances = 512"
     sudo sysctl -p "${conf}" >/dev/null
 }
 
+install_vscode_unattended_upgrades() {
+    # The code .deb adds Microsoft's apt repository, but unattended-upgrades
+    # only takes Ubuntu origins, so VS Code fell behind and prompted for a
+    # manual .deb download. Allow the repository's origin; the managed
+    # "update.mode": "none" stops VS Code's own prompt.
+    if ! command -v unattended-upgrade >/dev/null 2>&1; then
+        log "unattended-upgrades not installed; skipping VS Code origin"
+        return
+    fi
+    local conf="/etc/apt/apt.conf.d/51unattended-upgrades-vscode"
+    local desired='Unattended-Upgrade::Origins-Pattern { "origin=code stable,archive=stable"; };'
+    local current=""
+    [[ -f "${conf}" ]] && current="$(<"${conf}")"
+    if [[ "${current}" == "${desired}" ]]; then
+        log "unattended-upgrades already allows VS Code; skipping"
+        return
+    fi
+    log "Allowing unattended-upgrades to update VS Code"
+    printf '%s\n' "${desired}" | sudo tee "${conf}" >/dev/null
+}
+
 set_default_terminal_wezterm() {
     # GNOME's Ctrl+Alt+T and "Open in Terminal" run x-terminal-emulator, which
     # otherwise points at whichever terminal registered the highest priority.
@@ -232,6 +253,7 @@ main() {
     # newer git rather than jammy's 2.34.1.
     run_step install_git
     run_step install_inotify_limits
+    run_step install_vscode_unattended_upgrades
     run_step install_tmux_from_source
     run_step install_cmake
     run_step install_nix
