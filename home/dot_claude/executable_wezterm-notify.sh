@@ -35,12 +35,28 @@ case "$(uname -s)" in
             "$label"
         ;;
     Linux)
-        # Transient, so GNOME shows the banner but keeps no copy in the
-        # notification list. Every idle prompt of every agent fires this, and
-        # the kept copies piled up until the list lagged when opened. The tab
+        # Every idle prompt of every agent fires this, and the kept copies piled
+        # up in GNOME's notification list until it lagged when opened. The tab
         # flag below already records which session is waiting.
-        if command -v notify-send >/dev/null 2>&1; then
-            notify-send --hint=int:transient:1 "Claude Code" "$label"
+        #
+        # Transient, so GNOME keeps no copy once the banner hides. That alone
+        # leaks: GNOME 42 queues at most three banners, and a notification
+        # arriving past that goes straight to the list with no banner to hide,
+        # so it stays. Each one therefore replaces the last by its id, keeping
+        # one entry at most. notify-send 0.7.9 has no --replace-id, hence gdbus.
+        if command -v gdbus >/dev/null 2>&1; then
+            id_file="${XDG_RUNTIME_DIR:-/tmp}/claude-notify-id"
+            (
+                flock 9
+                last="$(cat "$id_file" 2>/dev/null || true)"
+                gdbus call --session \
+                    --dest org.freedesktop.Notifications \
+                    --object-path /org/freedesktop/Notifications \
+                    --method org.freedesktop.Notifications.Notify \
+                    "Claude Code" "uint32 ${last:-0}" "" "Claude Code" "$label" \
+                    "[]" "{'transient': <true>}" "int32 -1" |
+                    sed -n 's/^(uint32 \([0-9]*\),)$/\1/p' >"$id_file"
+            ) 9>"${id_file}.lock"
         fi
         ;;
 esac
