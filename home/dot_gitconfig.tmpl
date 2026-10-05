@@ -1,8 +1,11 @@
-{{- /* zdiff3 landed in git 2.35; the [merge] block below needs the version. */ -}}
-{{- $gitVersion := "0.0.0" -}}
-{{- if lookPath "git" -}}
-{{-   $gitVersion = (output "git" "--version") | regexFind `[0-9]+\.[0-9]+\.[0-9]+` | default "0.0.0" -}}
-{{- end -}}
+{{- /* zdiff3 landed in git 2.35; the [merge] block below needs the version.
+     Probed with a fixed PATH rather than chezmoi's own, which inside this repo
+     carries direnv's flake git (2.54) and rendered zdiff3 for a machine whose
+     /usr/bin/git is 22.04's 2.34. The order is the login shell's: Homebrew's
+     git ahead of Apple's on macOS, and on Linux /usr/bin, where install_git
+     puts the git-core PPA's. `|| true` keeps a machine without git rendering,
+     with the 0.0.0 fallback. */ -}}
+{{- $gitVersion := output "sh" "-c" "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin git --version 2>/dev/null || true" | regexFind `[0-9]+\.[0-9]+\.[0-9]+` | default "0.0.0" -}}
 [user]
     name = benmandrew
     email = benmandrew@gmail.com
@@ -32,8 +35,9 @@
     # and falls back to diff3.
     conflictStyle = {{ if semverCompare ">=2.35.0" $gitVersion }}zdiff3{{ else }}diff3{{ end }}
 [fetch]
+    # Not pruneTags: it deletes every local tag the remote lacks, including
+    # ones not yet pushed.
     prune = true
-    pruneTags = true
 [push]
     autoSetupRemote = true
     followTags = true
@@ -95,11 +99,11 @@
     # checks for it, but the pager should not be what discovers it is missing.
     # A subshell rather than a brace group: git's config parser reads ";" as a
     # start-of-comment, so the "; }" a brace group needs truncates the value.
-{{- if eq .chezmoi.os "darwin" }}
-    pager = (command -v delta >/dev/null 2>&1 && delta --paging=never || cat) | moor
-{{- else if eq .chezmoi.os "linux" }}
-    pager = (command -v delta >/dev/null 2>&1 && delta --paging=never || cat) | moor --wrap --tab-size=4
-{{- end }}
+    # moor is guarded too, since a missing pager prints nothing just the same,
+    # and falls back to less. Both exec, so a non-zero exit from moor cannot
+    # start less on what is left of its input; `a || b && c` groups as
+    # `(a || b) && c`, and the exec in b means c never runs after it.
+    pager = (command -v delta >/dev/null 2>&1 && delta --paging=never || cat) | (command -v moor >/dev/null 2>&1 || exec less -FRX && exec moor --wrap --tab-size=4 --quit-if-one-screen)
 [diff "prose"]
     # One sentence per line, so a one-word edit in a paragraph-per-line file
     # stops reading as the whole paragraph replaced. Display only — git turns

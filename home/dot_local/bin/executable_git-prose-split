@@ -13,12 +13,18 @@
 # cache is keyed on the blob rather than on this script, so it would serve
 # stale splits after every edit here, and an awk pass over prose is cheap.
 
-# VSCode fetches the "original" side of its editor gutter diff with
-# `git show --textconv`, then compares that against the unsplit editor buffer,
-# so every paragraph reads as a change even on a clean worktree. Its git child
-# processes all carry these variables, so hand the file back unsplit there and
-# leave the terminal diffs alone.
-if [ -n "${VSCODE_GIT_IPC_HANDLE-}" ] || [ -n "${VSCODE_GIT_ASKPASS_NODE-}" ]; then
+# Split only when git is paging. textconv also applies to `git diff > x.patch`
+# and `git diff | git apply`, and a split patch names lines the file does not
+# have, so it does not apply. git exports GIT_PAGER_IN_USE to its children only
+# once it has started a pager, which a redirect or a pipe stops it doing.
+#
+# This also covers VSCode, which fetches the "original" side of its editor
+# gutter diff with `git show --textconv` and compares that against the unsplit
+# editor buffer, so every paragraph read as a change even on a clean worktree.
+# Its git runs with no terminal and so no pager. The VSCode variables stay as a
+# second test, in case a user's pager settings force one on.
+if [ -z "${GIT_PAGER_IN_USE-}" ] || [ -n "${VSCODE_GIT_IPC_HANDLE-}" ] ||
+    [ -n "${VSCODE_GIT_ASKPASS_NODE-}" ]; then
     exec cat "$1"
 fi
 

@@ -1,23 +1,15 @@
-# Title: Summary, imperative, start upper case, don't end with a period
-# No more than 50 chars. #### 50 chars is here:  #
+# type(scope): summary, lower case, imperative, no full stop
+# No more than 72 chars. ########################### 72 chars is here: #
+#
+# type:  feat, fix, perf, refactor, docs, test, build, ci, chore
+# scope: the area touched, e.g. zsh, git, nvim, scripts (optional)
+# e.g.   fix(git): stop pruning unpushed local tags
 
-# Remember blank line between title and body.
+# Leave a blank line between the subject and the body.
 
-# Body: Explain *what* and *why* (not *how*). Include task ID (Jira issue).
-# Wrap at 72 chars. ################################## which is here:  #
+# Body: what was wrong and why this fixes it, not how. Say what was
+# checked. Wrap at 72 chars. ########################## which is here: #
 
 
-# At the end: Include Co-authored-by for all contributors.
-# Include at least one empty line before it. Format:
+# At the end, after a blank line, credit any co-authors:
 # Co-authored-by: name <user@users.noreply.github.com>
-#
-# How to Write a Git Commit Message:
-# https://chris.beams.io/posts/git-commit/
-#
-# 1. Separate subject from body with a blank line
-# 2. Limit the subject line to 50 characters
-# 3. Capitalize the subject line
-# 4. Do not end the subject line with a period
-# 5. Use the imperative mood in the subject line
-# 6. Wrap the body at 72 characters
-# 7. Use the body to explain what and why vs. how

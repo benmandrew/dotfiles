@@ -25,7 +25,8 @@
 # entry outgrows it.
 #
 # The last column names the Claude Code sessions working in each worktree.
-# Claude registers every live session in ~/.claude/sessions/<pid>.json with the
+# Claude registers every live session in ~/.claude*/sessions/<pid>.json (one
+# directory per profile, so the work account counts too) with the
 # cwd it is actually working in, so each session is credited to the deepest
 # worktree containing that cwd: matching on the parent alone would credit a
 # session inside a nested .claude/worktrees/* checkout to both.
@@ -66,16 +67,16 @@ reset=$(colour sgr0)
 # One "cwd<tab>name<tab>status" line per live session. The pid is the file name,
 # which saves parsing it back out, and registrations outlive the process that
 # wrote them, so drop the ones whose process is gone.
-sessions="${HOME}/.claude/sessions"
 agents=""
-if [ -d "$sessions" ] && command -v jq >/dev/null 2>&1; then
+if command -v jq >/dev/null 2>&1; then
     # Gather the live files first, then read them in one jq. Forking jq per
     # file cost a process for every registered session on an interactive
     # command; claude-pane-session already reads the same set in a single
     # pass. The argument-parsing loop above consumed "$@", so the positional
     # parameters are free to hold the list — this is /bin/sh, with no arrays.
+    # An unmatched glob stays literal, which the -e test drops.
     set --
-    for file in "$sessions"/*.json; do
+    for file in "$HOME"/.claude*/sessions/*.json; do
         [ -e "$file" ] || continue
         pid=${file##*/}
         pid=${pid%.json}
@@ -83,9 +84,15 @@ if [ -d "$sessions" ] && command -v jq >/dev/null 2>&1; then
         kill -0 "$pid" 2>/dev/null || continue
         set -- "$@" "$file"
     done
-    # jq exits non-zero if any file is malformed, so ask for one record per
-    # input and let a bad file lose only its own row.
-    [ "$#" -eq 0 ] || agents=$(jq -r '[.cwd, .name, .status] | @tsv' "$@" 2>/dev/null)
+    # A file caught half-written, or malformed, made jq exit at the first parse
+    # error and drop every row after it. So awk joins each file onto a line of
+    # its own, and jq parses each line with fromjson?, which yields nothing for
+    # a bad one: a file loses only its own row. Joining is safe because JSON
+    # cannot hold a raw newline inside a string, and it keeps a pretty-printed
+    # file whole, where reading files line by line would split it.
+    [ "$#" -eq 0 ] ||
+        agents=$(awk 'FNR == 1 && NR > 1 { print "" } { printf "%s ", $0 } END { print "" }' "$@" |
+            jq -rR 'fromjson? | [.cwd, .name, .status] | @tsv' 2>/dev/null)
 fi
 
 list=$(git worktree list --porcelain) || exit $?

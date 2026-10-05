@@ -9,3 +9,10 @@
 *.txt      diff=prose
 *.rst      diff=prose
 *.org      diff=prose
+
+# Plain-text files that are code or data rather than prose, which *.txt above
+# would otherwise send through the splitter. !diff unsets the attribute back to
+# unspecified, so git diffs them as ordinary text; -diff would mark them
+# binary.
+CMakeLists.txt      !diff
+requirements*.txt   !diff
