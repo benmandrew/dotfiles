@@ -1,3 +1,12 @@
+# Dotfiles audit, 5 October 2026
+
+Second audit, covering the 48 commits since 2 September plus anything the first pass missed. 57 findings across provisioning, shell and git, editor and terminal, and chezmoi/Claude/VS Code. All fixed and committed on 5 October 2026 except where listed below. `make lint` and `make fmt-ci` pass. `chezmoi apply` has not been run; the first apply will ask about the existing unmanaged `~/.zlogin`. Measured: login shell 257 ± 49 ms → 69 ± 14 ms, `starship prompt` 62.7 → 20.1 ms. On this machine the stale nvim-lspconfig checkout was deleted and every plugin restored to `lazy-lock.json`; `lua_ls` now attaches.
+
+- [ ] `ocamllsp` and `ocamlformat` live only in the `default` opam switch, and the active switch is `oxcaml`, a custom repository fork with no compiler listed. Installing into it risks the rollback damage noted above `install_ocaml_tools`, so it was left. Either install them into `oxcaml` by hand or point nvim's `ocamllsp` at `~/.opam/default/bin`.
+- [ ] The unmanaged `~/.profile` and `~/.bashrc` still add `~/.rvm/bin` and source rvm, so the desktop session's PATH carries it.
+- [ ] `bash-language-server` has an installer now but is not installed here, so `verify-install.sh` fails until the next install run.
+- [ ] A Claude bell that arrives on the tmux window already in view clears only when focus or the window changes.
+
 # Dotfiles audit — remediation plan
 
 Audit run 2 September 2026 across shell, editor, terminal, git and provisioning. Full report with measurements: https://claude.ai/code/artifact/50a7d944-8a0d-48b7-8e8f-b8c4515d48ae

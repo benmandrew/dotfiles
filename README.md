@@ -1,3 +1,35 @@
+## Bootstrap
+
+A new machine takes two commands. The install script below puts chezmoi and every other tool in place, and then chezmoi clones this repository into `~/.local/share/chezmoi` and applies it.
+
+```bash
+$ ./scripts/install.sh
+$ chezmoi init --apply git@github.com:benmandrew/dotfiles.git
+```
+
+The GNOME scripts need a desktop session to write to. Applied over Secure Shell (SSH) to a desktop nobody is logged in to, they fail on purpose, and the next `chezmoi apply` from the desktop runs them.
+
+A few steps hold secrets or accounts, so chezmoi leaves them to be done by hand. Shell history syncs through *atuin*, which needs an account and then the history already on the machine:
+
+```bash
+$ atuin register    # or `atuin login` on every machine after the first
+$ atuin import auto
+```
+
+The encryption key lands in `~/.local/share/atuin/key`, which chezmoi does not manage. Back it up in a password manager, since history synced under a lost key cannot be read back.
+
+The work Claude Code profile in `~/.claude-work` shares agents, commands and skills with `~/.claude` through symlinks, but it keeps its own plugins. Install them once per machine:
+
+```bash
+$ CLAUDE_CONFIG_DIR=~/.claude-work claude plugin marketplace add isaaccorley/skills
+$ CLAUDE_CONFIG_DIR=~/.claude-work claude plugin install bib-audit@isaaccorley-skills --scope user
+$ CLAUDE_CONFIG_DIR=~/.claude-work claude plugin install clangd-lsp@claude-plugins-official --scope user
+$ CLAUDE_CONFIG_DIR=~/.claude-work claude plugin install pyright-lsp@claude-plugins-official --scope user
+$ CLAUDE_CONFIG_DIR=~/.claude-work claude plugin install lua-lsp@claude-plugins-official --scope user
+```
+
+The default profile gets the same plugins from `run_onchange_install-claude-plugins.sh` on every apply. The work profile has no such script yet.
+
 ## Dependencies
 
 The install script bootstraps all required tools for a given platform. It auto-detects the OS and architecture and delegates to the appropriate platform script.
