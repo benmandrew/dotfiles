@@ -14,10 +14,28 @@ if ! command -v gsettings >/dev/null 2>&1; then
     exit 0
 fi
 
+# No session bus in the environment is the usual case over SSH. The user's
+# bus socket often exists anyway, since systemd starts it with any login, and
+# then the writes can go through it. Where there is none, exiting 0 would be
+# wrong on a desktop: chezmoi records a run_ script that succeeded and never
+# runs it again, so a desktop first applied over SSH would never get these
+# settings. So the script fails there instead, and the next apply from the
+# desktop runs it. gnome-shell is the test for a desktop because gsettings and
+# its schemas are not: glib and gsettings-desktop-schemas both turn up on
+# servers. A server without it exits 0, or every server apply would fail.
 if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] &&
     [ -z "${DISPLAY:-}" ] &&
     [ -z "${WAYLAND_DISPLAY:-}" ]; then
-    exit 0
+    bus="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus"
+    if [ -S "${bus}" ]; then
+        export DBUS_SESSION_BUS_ADDRESS="unix:path=${bus}"
+    elif command -v gnome-shell >/dev/null 2>&1; then
+        echo "${0##*/}: GNOME is installed but no session bus is reachable;" >&2
+        echo "  log in to the desktop, then run chezmoi apply again." >&2
+        exit 1
+    else
+        exit 0
+    fi
 fi
 
 # A schema is present only if something installed it, so check rather than

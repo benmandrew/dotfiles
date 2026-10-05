@@ -3,8 +3,9 @@
 set -euo pipefail
 {{- if eq .chezmoi.os "linux" }}
 
-# Same headless guards as the input-sources script: gsettings ships with glib,
-# and without a session bus every write fails to commit.
+# Same headless guards as the input-sources script, which explains them:
+# gsettings ships with glib, and without a session bus every write fails to
+# commit.
 if ! command -v gsettings >/dev/null 2>&1; then
     exit 0
 fi
@@ -12,7 +13,16 @@ fi
 if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] &&
     [ -z "${DISPLAY:-}" ] &&
     [ -z "${WAYLAND_DISPLAY:-}" ]; then
-    exit 0
+    bus="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus"
+    if [ -S "${bus}" ]; then
+        export DBUS_SESSION_BUS_ADDRESS="unix:path=${bus}"
+    elif command -v gnome-shell >/dev/null 2>&1; then
+        echo "${0##*/}: GNOME is installed but no session bus is reachable;" >&2
+        echo "  log in to the desktop, then run chezmoi apply again." >&2
+        exit 1
+    else
+        exit 0
+    fi
 fi
 
 # Set a key only where its schema is installed and new enough to have it:

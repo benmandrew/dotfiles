@@ -3,16 +3,43 @@
 set -euo pipefail
 {{- if eq .chezmoi.os "linux" }}
 
+# Same headless guards as the input-sources script, which explains them:
+# gsettings ships with glib, and without a session bus every write fails to
+# commit.
 if ! command -v gsettings >/dev/null 2>&1; then
     exit 0
 fi
+
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] &&
+    [ -z "${DISPLAY:-}" ] &&
+    [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    bus="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus"
+    if [ -S "${bus}" ]; then
+        export DBUS_SESSION_BUS_ADDRESS="unix:path=${bus}"
+    elif command -v gnome-shell >/dev/null 2>&1; then
+        echo "${0##*/}: GNOME is installed but no session bus is reachable;" >&2
+        echo "  log in to the desktop, then run chezmoi apply again." >&2
+        exit 1
+    else
+        exit 0
+    fi
+fi
+
+# Set a key only where its schema is installed and has it, as in the
+# preferences script: a server with glib but no GNOME schemas would otherwise
+# fail `gsettings set` and, under set -e, the whole apply.
+gset() {
+    if gsettings range "$1" "$2" >/dev/null 2>&1; then
+        gsettings set "$1" "$2" "$3"
+    fi
+}
 
 # Split monitor vs workspace movement for a vertically stacked two-monitor
 # setup: Up/Down moves the window between monitors, Left/Right between
 # workspaces. Both previously shared <Control><Shift><Alt>{Up,Down}, so only
 # one action could ever fire for a given keypress.
-gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-up "[]"
-gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-down "[]"
-gsettings set org.gnome.desktop.wm.keybindings move-to-monitor-up "['<Control><Shift><Alt>Up']"
-gsettings set org.gnome.desktop.wm.keybindings move-to-monitor-down "['<Control><Shift><Alt>Down']"
+gset org.gnome.desktop.wm.keybindings move-to-workspace-up "[]"
+gset org.gnome.desktop.wm.keybindings move-to-workspace-down "[]"
+gset org.gnome.desktop.wm.keybindings move-to-monitor-up "['<Control><Shift><Alt>Up']"
+gset org.gnome.desktop.wm.keybindings move-to-monitor-down "['<Control><Shift><Alt>Down']"
 {{- end }}
