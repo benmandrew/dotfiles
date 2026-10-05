@@ -160,6 +160,37 @@ jobs:
           restore-keys: |
             install-${{ runner.os }}-${{ steps.pins.outputs.hash }}-
 
+      # The opam root, cached on its own. Outside the cache above, every run
+      # rebuilt it: 437s of a 521s install job on 5 September, the runner
+      # having no OCaml, so the switch compiles ocaml-base-compiler before
+      # ocaml-lsp-server and ocamlformat. The key covers only what decides the
+      # switch's contents (the opam pin, the two functions that build it, and
+      # the runner image), so it hits across unrelated script edits, and a hit
+      # saves nothing. No restore-keys: a change to that code should rebuild
+      # from scratch, which is what it needs testing against. install_opam
+      # skips init and both builds when ~/.opam exists, so a hit here with a
+      # miss above only re-downloads the opam binary.
+      - name: Hash opam setup
+        id: opam
+        if: github.event_name != 'schedule'
+        run: |
+          hash="$({
+            echo "${ImageOS:-}"
+            grep -h '^OPAM_VERSION=' scripts/install-common.sh
+            sed -n '/^install_opam()/,/^}/p;/^install_ocaml_tools()/,/^}/p' scripts/install-common.sh
+          } | sha256sum | cut -c1-16)"
+          echo "hash=${hash}" >> "${GITHUB_OUTPUT}"
+
+      - name: Cache opam root
+        if: github.event_name != 'schedule'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          # The download cache is only source tarballs for builds already done.
+          path: |
+            ~/.opam
+            !~/.opam/download-cache
+          key: opam-${{ runner.os }}-${{ steps.opam.outputs.hash }}
+
       - name: Run install script
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
