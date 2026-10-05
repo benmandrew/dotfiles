@@ -428,8 +428,12 @@ cpu_count() {
 # strip what they need rather than the constants guessing.
 ATUIN_VERSION="v18.21.0"
 BAT_VERSION="v0.26.1"
+CARGO_AUDIT_VERSION="cargo-audit/v0.22.2"
+CARGO_FUZZ_VERSION="0.13.2"
+CARGO_LLVM_COV_VERSION="v0.9.1"
 CARGO_NEXTEST_VERSION="cargo-nextest-0.9.143"
 CMAKE_VERSION="v4.4.3"
+CROSS_VERSION="v0.2.5"
 DELTA_VERSION="0.19.2"
 DIFFTASTIC_VERSION="0.71.0"
 ELAN_VERSION="v4.2.4"
@@ -448,6 +452,7 @@ NERD_FONTS_VERSION="v3.5.1"
 OPAM_VERSION="2.5.2"
 RIPGREP_ALL_VERSION="v0.10.10"
 RIPGREP_VERSION="15.2.0"
+SAMPLY_VERSION="samply-v0.13.1"
 SCCACHE_VERSION="v0.17.0"
 TREEHOUSE_VERSION="v2.3.0"
 TYPST_VERSION="v0.15.1"
@@ -482,8 +487,12 @@ print_pin_updates() {
         "ATUIN_VERSION|atuinsh/atuin" \
         "BAT_VERSION|sharkdp/bat" \
         "BTOP_VERSION|aristocratos/btop" \
+        "CARGO_AUDIT_VERSION|rustsec/rustsec:cargo-audit/" \
+        "CARGO_FUZZ_VERSION|rust-fuzz/cargo-fuzz" \
+        "CARGO_LLVM_COV_VERSION|taiki-e/cargo-llvm-cov" \
         "CARGO_NEXTEST_VERSION|nextest-rs/nextest" \
         "CMAKE_VERSION|Kitware/CMake" \
+        "CROSS_VERSION|cross-rs/cross" \
         "DELTA_VERSION|dandavison/delta" \
         "DIFFTASTIC_VERSION|Wilfred/difftastic" \
         "ELAN_VERSION|leanprover/elan" \
@@ -500,6 +509,7 @@ print_pin_updates() {
         "OPAM_VERSION|ocaml/opam" \
         "RIPGREP_ALL_VERSION|phiresky/ripgrep-all" \
         "RIPGREP_VERSION|BurntSushi/ripgrep" \
+        "SAMPLY_VERSION|mstange/samply" \
         "SCCACHE_VERSION|mozilla/sccache" \
         "TMUX_VERSION|tmux/tmux" \
         "TREEHOUSE_VERSION|kunchenguid/treehouse" \
@@ -845,7 +855,10 @@ _github_api_failure() {
 }
 
 github_latest_tag() {
-    local repo="$1"
+    # `owner/repo:prefix` takes the newest release whose tag starts with the
+    # prefix, for a monorepo whose releases/latest may be another crate's.
+    local repo="${1%%:*}" prefix=""
+    [[ "$1" == *:* ]] && prefix="${1#*:}"
     local tmp headers
     tmp="$(mktemp)"
     headers="$(mktemp)"
@@ -855,7 +868,9 @@ github_latest_tag() {
     # Checked here rather than at each call site: a rate-limited or unreachable
     # API returns an empty tag, which the callers then paste into an asset URL
     # and download a 404 page with. Three of the ten guarded it, seven did not.
-    if ! github_api_curl "https://api.github.com/repos/${repo}/releases/latest" \
+    local endpoint="releases/latest"
+    [[ -n "${prefix}" ]] && endpoint="releases?per_page=50"
+    if ! github_api_curl "https://api.github.com/repos/${repo}/${endpoint}" \
         -D "${headers}" -o "${tmp}"; then
         local reason
         reason="$(_github_api_failure "${headers}")"
@@ -866,8 +881,10 @@ github_latest_tag() {
     # one line, for others. A literal `"tag_name": "` strip missed the compact
     # form and left the line's leading `{` as the tag.
     local tag
+    # The list endpoint is newest first, so the first match is the latest.
     tag="$(grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' "${tmp}" |
-        head -n1 | sed 's/.*"\([^"]*\)"$/\1/' || true)"
+        sed 's/.*"\([^"]*\)"$/\1/' |
+        awk -v p="${prefix}" 'index($0, p) == 1 { print; exit }' || true)"
     if [[ -z "${tag}" ]]; then
         err "No release tag for ${repo} in the GitHub API response"
         return 1
@@ -1439,6 +1456,17 @@ _rust_tool_spec() {
         # Upstream publishes one fat macOS binary rather than a per-arch pair,
         # which is why universal-apple-darwin is in the triple list at all.
         cargo-nextest) echo "nextest-rs/nextest|%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl universal-apple-darwin|%TAG%-%TRIPLE%.sha256|${CARGO_NEXTEST_VERSION}" ;;
+        # The five install_cargo_extras tools, built from source until October
+        # 2026 at 389s of an 1,086s cold CI run, cargo-audit alone 164s.
+        # rustsec/rustsec is a monorepo whose newest release may belong to
+        # another crate (cvss/v3.0.0 when this was written), so its repo field
+        # carries a tag prefix for github_latest_tag to filter on.
+        cargo-audit) echo "rustsec/rustsec:cargo-audit/|cargo-audit-%TRIPLE%-v%VER%.tgz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin x86_64-apple-darwin||${CARGO_AUDIT_VERSION}" ;;
+        cargo-llvm-cov) echo "taiki-e/cargo-llvm-cov|cargo-llvm-cov-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin x86_64-apple-darwin||${CARGO_LLVM_COV_VERSION}" ;;
+        samply) echo "mstange/samply|samply-%TRIPLE%.tar.xz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin x86_64-apple-darwin|%ASSET%.sha256|${SAMPLY_VERSION}" ;;
+        # x86_64 only, so ARM machines keep the cargo fallback for these two.
+        cargo-fuzz) echo "rust-fuzz/cargo-fuzz|cargo-fuzz-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl x86_64-apple-darwin||${CARGO_FUZZ_VERSION}" ;;
+        cross) echo "cross-rs/cross|cross-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl x86_64-apple-darwin||${CROSS_VERSION}" ;;
         # No aarch64 asset for either platform, so an ARM machine takes the
         # cargo fallback; git-absorb is a small crate and builds in seconds.
         git-absorb) echo "tummychow/git-absorb|git-absorb-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl x86_64-apple-darwin||${GIT_ABSORB_VERSION}" ;;
@@ -1471,9 +1499,23 @@ _rust_tool_triples() {
 # a regex rather than by field, because the seven disagree there too: eza
 # prints a bare `v0.23.5`, rg and eza print several lines, and some wrap the
 # number in escape sequences. This is the same read install_btop makes.
+# A cargo subcommand run directly takes its own name first, as cargo passes
+# it; cargo-llvm-cov rejects a bare --version. The other cargo-* tools here
+# accept both forms. Set in an array rather than printed, so the callers need
+# no command substitution to split.
+_RUST_TOOL_PROBE=()
+_rust_tool_probe() {
+    if [[ "$1" == cargo-* ]]; then
+        _RUST_TOOL_PROBE=("${1#cargo-}" --version)
+    else
+        _RUST_TOOL_PROBE=(--version)
+    fi
+}
+
 _rust_tool_version() {
     local output
-    output="$("$1" --version 2>/dev/null)" || return 1
+    _rust_tool_probe "$1"
+    output="$("$1" "${_RUST_TOOL_PROBE[@]}" 2>/dev/null)" || return 1
     [[ "${output}" =~ ([0-9]+\.[0-9]+\.[0-9]+) ]] || return 1
     echo "${BASH_REMATCH[1]}"
 }
@@ -1483,11 +1525,13 @@ _install_rust_tool_binary() {
 
     local tag version
     tag="$(pinned_tag "${pin}" "${repo}")" || return 1
-    # nextest-rs tags the crate name into the tag (`cargo-nextest-0.9.143`), so
-    # strip that as well as a leading `v` before comparing against what the
-    # installed binary reports.
-    version="${tag#v}"
-    version="${version#"${cmd}-"}"
+    # nextest-rs and samply tag the crate name into the tag
+    # (`cargo-nextest-0.9.143`, `samply-v0.13.1`) and rustsec as a path
+    # (`cargo-audit/v0.22.2`), so strip those and then a leading `v` before
+    # comparing against what the installed binary reports.
+    version="${tag#"${cmd}-"}"
+    version="${version#"${cmd}/"}"
+    version="${version#v}"
     if [[ -z "${version}" ]]; then
         err "Could not resolve the ${cmd} release to install"
         return 1
@@ -1507,7 +1551,8 @@ _install_rust_tool_binary() {
     asset="${asset//%VER%/${version}}"
     asset="${asset//%TRIPLE%/${triple}}"
 
-    local base_url="https://github.com/${repo}/releases/download/${tag}"
+    # ${repo%%:*} drops a tag prefix (see _rust_tool_spec) from the URL.
+    local base_url="https://github.com/${repo%%:*}/releases/download/${tag}"
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
@@ -1567,7 +1612,8 @@ _install_rust_tool_binary() {
     # is exactly the shadowing install_starship had to unpick for /usr/local.
     rm -f "${HOME}/.cargo/bin/${cmd}"
     note_shadowed "${cmd}" "${HOME}/.local/bin/${cmd}"
-    require_runs "${HOME}/.local/bin/${cmd}"
+    _rust_tool_probe "${cmd}"
+    require_runs "${HOME}/.local/bin/${cmd}" "${_RUST_TOOL_PROBE[@]}"
 }
 
 _install_cargo_tool_from_source() {
@@ -1629,13 +1675,8 @@ install_cargo_tool() {
         _install_cargo_tool_from_source "${crate}" || return 1
         local built="${CARGO_HOME:-${HOME}/.cargo}/bin/${cmd}"
         note_shadowed "${cmd}" "${built}"
-        # Run directly, a cargo subcommand takes its own name first, as cargo
-        # passes it; cargo-llvm-cov rejects a bare --version.
-        if [[ "${cmd}" == cargo-* ]]; then
-            require_runs "${built}" "${cmd#cargo-}" --version
-        else
-            require_runs "${built}"
-        fi
+        _rust_tool_probe "${cmd}"
+        require_runs "${built}" "${_RUST_TOOL_PROBE[@]}"
         return
     fi
     _install_rust_tool_binary "${cmd}" "${repo}" "${template}" "${triple}" \
@@ -3332,10 +3373,11 @@ install_fzf_git() {
     git clone --depth 1 https://github.com/junegunn/fzf-git.sh.git "${fzf_git_home}"
 }
 
-# The cargo tools with no prebuilt binary upstream. Every one of these is a
-# source build, so this is the slowest step on a fresh machine; it is one step
-# rather than five so a single failure is reported as one line, and each tool
-# is skipped individually once installed.
+# Cargo tools for Rust work rather than for the shell. Each goes through
+# install_cargo_tool, so it arrives as a prebuilt binary where _rust_tool_spec
+# lists the platform and is built from source elsewhere (cargo-fuzz and cross
+# on ARM). One step rather than five, so a failure is reported as one line, and
+# each tool is skipped individually once installed.
 install_cargo_extras() {
     local tool failed=()
     # Every tool is tried, so one broken build does not leave the rest
