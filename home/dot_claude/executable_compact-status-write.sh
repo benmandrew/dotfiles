@@ -16,11 +16,13 @@ cwd="$(jq -r '.cwd // empty' <<<"$input")"
 # reported against a compaction that otherwise worked.
 [ -n "$summary" ] || exit 0
 
-# Kept under ~/.claude and keyed on the working directory, rather than written
-# into the project. A file in the repository would show up untracked in every
-# `git status`, and `make lint-secrets` would then scan a summary that can quote
-# a secret straight out of the transcript.
-dir="${HOME}/.claude/compact-status"
+# Kept under the profile's config directory and keyed on the working directory,
+# rather than written into the project. A file in the repository would show up
+# untracked in every `git status`, and `make lint-secrets` would then scan a
+# summary that can quote a secret straight out of the transcript. The config
+# directory is CLAUDE_CONFIG_DIR when set, as it is for the work profile, so
+# each profile resumes from its own summaries and never from the other's.
+dir="${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/compact-status"
 mkdir -p "$dir"
 slug="$(printf '%s' "${cwd:-$PWD}" | tr '/.' '-')"
 

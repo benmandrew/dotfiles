@@ -60,7 +60,9 @@
     "ctest": true
   },
   "claudeCode.preferredLocation": "panel",
+{{- if eq .chezmoi.os "darwin" }}
   "dafny.dotnetExecutablePath": "/usr/local/share/dotnet/dotnet",
+{{- end }}
   "manim-sideview.focusOutputOnRun": false,
   "manim-sideview.outputToTerminal": true,
   "editor.fontFamily": "'CodeNewRoman Nerd Font Mono', Menlo, Monaco, 'Courier New', monospace",

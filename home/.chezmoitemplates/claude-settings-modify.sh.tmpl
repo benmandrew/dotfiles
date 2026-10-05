@@ -36,10 +36,31 @@ cat >"$tmpdir/defaults" <<'CHEZMOI_SEEDED_SETTINGS'
 }
 CHEZMOI_SEEDED_SETTINGS
 
-# Without jq we cannot merge; fall back to asserting our keys only.
-if ! command -v jq >/dev/null 2>&1; then
-    cat "$tmpdir/managed"
+# Whatever this script prints replaces settings.json, so every path that cannot
+# merge must hand back the file it was given rather than our keys alone: those
+# would silently drop model, theme, outputStyle, effortLevel and anything else
+# Claude Code wrote. Only a target with nothing in it can take less than that.
+keep_current() {
+    echo "claude-settings: $1; leaving settings.json unchanged" >&2
+    cat "$tmpdir/current"
     exit 0
+}
+
+# A file holding only whitespace is as empty as a missing one: there is nothing
+# in it to keep, so it takes the same seeding.
+is_empty=false
+if ! grep -q '[^[:space:]]' "$tmpdir/current"; then
+    is_empty=true
+fi
+
+# Without jq we cannot merge. A new target gets our keys, which is all we have;
+# an existing one is left as it is until jq turns up.
+if ! command -v jq >/dev/null 2>&1; then
+    if [ "$is_empty" = true ]; then
+        cat "$tmpdir/managed"
+        exit 0
+    fi
+    keep_current "jq not found"
 fi
 
 # Empty stdin is a target that does not exist yet — a machine being
@@ -47,15 +68,24 @@ fi
 # Merging them in on every run instead would hoist their four keys to the front
 # of the output, so each time Claude Code reordered the file the merge would
 # reorder it back and the prompt this script exists to remove would return.
-if [ ! -s "$tmpdir/current" ]; then
+if [ "$is_empty" = true ]; then
     cp "$tmpdir/defaults" "$tmpdir/current"
 fi
 
 # Recursive merge, managed keys winning. Objects merge key by key, so a plugin
 # enabled through the UI and absent from enabledPlugins here is kept; arrays
 # are replaced whole rather than concatenated, which is what permissions.deny
-# wants. If the existing file is unparseable (hand-mangled, half-written), fall
-# back to our keys rather than erroring out and leaving chezmoi unable to
-# apply.
-jq -s '.[0] * .[1]' "$tmpdir/current" "$tmpdir/managed" 2>/dev/null ||
-    cat "$tmpdir/managed"
+# wants. A literal `null` reads as an empty object. Anything else that is not a
+# single JSON object (hand-mangled, half-written) is left alone with a warning,
+# rather than erroring out and leaving chezmoi unable to apply. The merge goes
+# to a file first, so a jq that fails halfway prints nothing of its own.
+if jq -n --slurpfile cur "$tmpdir/current" --slurpfile man "$tmpdir/managed" '
+    if ($cur | length) != 1 then error("expected one JSON value") else . end
+    | ($cur[0] // {}) as $c
+    | if ($c | type) != "object" then error("not a JSON object") else . end
+    | $c * $man[0]
+' >"$tmpdir/merged" 2>/dev/null; then
+    cat "$tmpdir/merged"
+else
+    keep_current "settings.json is not a JSON object"
+fi

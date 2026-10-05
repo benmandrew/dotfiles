@@ -19,7 +19,14 @@ set -euo pipefail
 # `chezmoi apply` restores the canonical key order.
 
 # marketplace-source:marketplace-name:plugin-name
+#
+# Keep this in step with enabledPlugins in
+# .chezmoitemplates/claude-settings.json.tmpl: a plugin enabled there but
+# missing here is enabled on paper and absent on disk.
 PLUGINS=(
+    "anthropics/claude-plugins-official:claude-plugins-official:clangd-lsp"
+    "anthropics/claude-plugins-official:claude-plugins-official:pyright-lsp"
+    "anthropics/claude-plugins-official:claude-plugins-official:lua-lsp"
     "isaaccorley/skills:isaaccorley-skills:bib-audit"
 )
 
@@ -27,14 +34,25 @@ if ! command -v claude >/dev/null 2>&1; then
     exit 0
 fi
 
+# Each listing is captured before it is searched. Piped straight into
+# `grep -q`, grep exits at the first match and closes the pipe, claude dies of
+# SIGPIPE, and under pipefail the pipeline then reports failure -- so the guard
+# would read "not installed" and rerun an install that had already happened.
+# Both listings are refreshed after each change, since one marketplace serves
+# several entries.
+marketplaces=$(claude plugin marketplace list 2>/dev/null || true)
+installed=$(claude plugin list 2>/dev/null || true)
+
 for entry in "${PLUGINS[@]}"; do
     IFS=':' read -r source marketplace plugin <<<"${entry}"
 
-    if ! claude plugin marketplace list 2>/dev/null | grep -q "${marketplace}"; then
+    if ! grep -qF -- "${marketplace}" <<<"${marketplaces}"; then
         claude plugin marketplace add "${source}"
+        marketplaces=$(claude plugin marketplace list 2>/dev/null || true)
     fi
 
-    if ! claude plugin list 2>/dev/null | grep -q "${plugin}@${marketplace}"; then
+    if ! grep -qF -- "${plugin}@${marketplace}" <<<"${installed}"; then
         claude plugin install "${plugin}@${marketplace}" --scope user
+        installed=$(claude plugin list 2>/dev/null || true)
     fi
 done

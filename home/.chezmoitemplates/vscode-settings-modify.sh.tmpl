@@ -18,10 +18,23 @@ cat >"$tmpdir/managed" <<'CHEZMOI_MANAGED_SETTINGS'
 {{ template "vscode-settings.json.tmpl" . }}
 CHEZMOI_MANAGED_SETTINGS
 
-# Without jq or node we cannot merge; fall back to asserting our keys only.
-if ! command -v jq >/dev/null 2>&1 || ! command -v node >/dev/null 2>&1; then
-    cat "$tmpdir/managed"
+# Whatever this script prints replaces settings.json, so a path that cannot
+# merge hands back the file it was given rather than our keys alone, which
+# would wipe every setting VS Code and its extensions wrote. Only an empty
+# target, with nothing to lose, takes our keys unmerged.
+keep_current() {
+    echo "vscode-settings: $1; leaving settings.json unchanged" >&2
+    cat "$tmpdir/current"
     exit 0
+}
+
+# Without jq or node we cannot merge.
+if ! command -v jq >/dev/null 2>&1 || ! command -v node >/dev/null 2>&1; then
+    if ! grep -q '[^[:space:]]' "$tmpdir/current"; then
+        cat "$tmpdir/managed"
+        exit 0
+    fi
+    keep_current "jq or node not found"
 fi
 
 # settings.json is JSONC — comments and trailing commas are legal there but not
@@ -59,7 +72,17 @@ node -e '
 ' <"$tmpdir/current" >"$tmpdir/clean" 2>/dev/null || printf '{}' >"$tmpdir/clean"
 
 # Recursive merge, managed keys winning. If the existing file is unparseable
-# (hand-mangled, half-written), fall back to our keys rather than erroring out
-# and leaving chezmoi unable to apply.
-jq -s '.[0] * .[1]' "$tmpdir/clean" "$tmpdir/managed" 2>/dev/null ||
-    cat "$tmpdir/managed"
+# (hand-mangled, half-written), leave it alone with a warning rather than
+# erroring out and leaving chezmoi unable to apply. The merge goes to a file
+# first, so a jq that fails halfway prints nothing of its own.
+# An empty or `null` file reads as an empty object.
+if jq -n --slurpfile cur "$tmpdir/clean" --slurpfile man "$tmpdir/managed" '
+    if ($cur | length) != 1 then error("expected one JSON value") else . end
+    | ($cur[0] // {}) as $c
+    | if ($c | type) != "object" then error("not a JSON object") else . end
+    | $c * $man[0]
+' >"$tmpdir/merged" 2>/dev/null; then
+    cat "$tmpdir/merged"
+else
+    keep_current "settings.json is not valid JSONC"
+fi

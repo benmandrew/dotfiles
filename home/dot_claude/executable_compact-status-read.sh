@@ -13,7 +13,8 @@ set -euo pipefail
 input="$(cat)"
 cwd="$(jq -r '.cwd // empty' <<<"$input")"
 
-dir="${HOME}/.claude/compact-status"
+# The same per-profile directory the write hook uses.
+dir="${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/compact-status"
 slug="$(printf '%s' "${cwd:-$PWD}" | tr '/.' '-')"
 file="$dir/${slug}.md"
 
@@ -22,15 +23,23 @@ file="$dir/${slug}.md"
 # A summary older than this describes work that has almost certainly moved on,
 # and injecting it would spend context on stale state. -mmin is in both GNU and
 # BSD find, and -maxdepth 0 names the file itself, so the slug is never read as a
-# glob. To make the next /clear a genuinely clean one, delete the file.
+# glob.
 max_age_minutes=720
 fresh="$(find "$file" -maxdepth 0 -mmin "-${max_age_minutes}" 2>/dev/null)"
 [ -n "$fresh" ] || exit 0
 
+# A summary is injected once. Left in place, it came back on every /clear for
+# the next 12 hours, including the /clear meant to start clean, and in every
+# other session in the same directory. Moving it aside claims it: when two
+# sessions clear at once, only the one whose mv succeeds injects it. The .used
+# copy stays for reading by hand, and the next compaction writes a fresh .md.
+used="${file}.used"
+mv -f "$file" "$used" 2>/dev/null || exit 0
+
 # additionalContext is the documented channel for a SessionStart hook to put text
 # in front of the model; anything this script prints on stdout outside this JSON
 # would be shown to the user instead.
-jq -nc --rawfile summary "$file" '{
+jq -nc --rawfile summary "$used" '{
     hookSpecificOutput: {
         hookEventName: "SessionStart",
         additionalContext: ("Summary of the work in this directory, carried over from the last compaction before the session was cleared:\n\n" + $summary)
