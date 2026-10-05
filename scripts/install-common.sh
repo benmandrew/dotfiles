@@ -341,6 +341,62 @@ download_verified() {
     verify_sha256 "${dest}" "${manifest_url}" "${url##*/}" || return 1
 }
 
+# The SHA-256 GitHub records for a release asset, for releases that publish no
+# checksum manifest of their own. GitHub has computed one for every asset
+# uploaded since June 2025 and serves it as the asset's `digest` in the
+# release's API response. It is weaker than a manifest the project signs off on
+# in one way only, being GitHub's record rather than upstream's, and it costs an
+# API call against the rate limit.
+github_asset_sha256() {
+    local repo="$1" tag="$2" asset="$3" tmp headers digest
+    tmp="$(mktemp)"
+    headers="$(mktemp)"
+    if ! github_api_curl "https://api.github.com/repos/${repo}/releases/tags/${tag}" \
+        -D "${headers}" -o "${tmp}"; then
+        local reason
+        reason="$(_github_api_failure "${headers}")"
+        err "GitHub API request failed for ${repo} ${tag} (${reason})"
+        rm -f "${tmp}" "${headers}"
+        return 1
+    fi
+    # Split at commas, so compact and pretty-printed JSON read alike. Each
+    # asset's "name" field comes a few fields before its "digest", and the
+    # uploader object between them has no "name" of its own.
+    digest="$(tr ',' '\n' <"${tmp}" | awk -v a="${asset}" '
+        /"name"[[:space:]]*:/ {
+            n = $0
+            sub(/^.*"name"[[:space:]]*:[[:space:]]*"/, "", n)
+            sub(/".*$/, "", n)
+        }
+        /"digest"[[:space:]]*:[[:space:]]*"sha256:/ && n == a {
+            d = $0
+            sub(/^.*sha256:/, "", d)
+            sub(/".*$/, "", d)
+            print d
+            exit
+        }' || true)"
+    rm -f "${tmp}" "${headers}"
+    if [[ ! "${digest}" =~ ^[0-9a-f]{64}$ ]]; then
+        err "No sha256 digest for ${asset} in the ${repo} ${tag} release"
+        return 1
+    fi
+    printf '%s\n' "${digest}"
+}
+
+# download a GitHub release asset, then check it against the digest GitHub
+# records for it.
+download_verified_github() {
+    local repo="$1" tag="$2" asset="$3" dest="$4" expected actual
+    download "https://github.com/${repo}/releases/download/${tag}/${asset}" "${dest}" || return 1
+    expected="$(github_asset_sha256 "${repo}" "${tag}" "${asset}")" || return 1
+    actual="$(sha256_file "${dest}")" || return 1
+    actual="$(printf '%s' "${actual}" | tr '[:upper:]' '[:lower:]')"
+    if [[ "${actual}" != "${expected}" ]]; then
+        err "Checksum mismatch for ${asset}: expected ${expected}, got ${actual}"
+        return 1
+    fi
+}
+
 # nproc is coreutils and absent on macOS. Only Linux calls the two steps that
 # build from source, but neither should depend on that staying true.
 cpu_count() {
@@ -386,6 +442,8 @@ GO_VERSION="go1.27.1"
 HYPERFINE_VERSION="v1.20.0"
 LUA_LS_VERSION="3.19.1"
 MOOR_VERSION="v2.18.0"
+# shellcheck disable=SC2034  # read by install-linux.sh and print_pin_updates
+NEOVIM_VERSION="v0.12.5"
 NERD_FONTS_VERSION="v3.5.1"
 OPAM_VERSION="2.5.2"
 RIPGREP_ALL_VERSION="v0.10.10"
@@ -418,7 +476,8 @@ pinned_tag() {
 # where the two differ is a pin that can be bumped. Writes to stdout: this is a
 # report, not a step.
 print_pin_updates() {
-    local spec name repo pinned latest
+    local spec name repo pinned latest reason errors
+    errors="$(mktemp)"
     for spec in \
         "ATUIN_VERSION|atuinsh/atuin" \
         "BAT_VERSION|sharkdp/bat" \
@@ -436,6 +495,7 @@ print_pin_updates() {
         "HYPERFINE_VERSION|sharkdp/hyperfine" \
         "LUA_LS_VERSION|LuaLS/lua-language-server" \
         "MOOR_VERSION|walles/moor" \
+        "NEOVIM_VERSION|neovim/neovim" \
         "NERD_FONTS_VERSION|ryanoasis/nerd-fonts" \
         "OPAM_VERSION|ocaml/opam" \
         "RIPGREP_ALL_VERSION|phiresky/ripgrep-all" \
@@ -448,15 +508,20 @@ print_pin_updates() {
         name="${spec%%|*}"
         repo="${spec#*|}"
         pinned="${!name}"
-        latest="$(github_latest_tag "${repo}" 2>/dev/null)" || latest=""
+        # err writes to fd 3, which 2>/dev/null leaves open, so the reason was
+        # printed as an ERROR line above every "unreachable" one. Catch it and
+        # fold it into the one line instead.
+        latest="$(github_latest_tag "${repo}" 2>/dev/null 3>"${errors}")" || latest=""
         if [[ -z "${latest}" ]]; then
-            printf '%-24s %-30s (upstream unreachable)\n' "${name}" "${pinned}"
+            reason="$(sed -n 's/.*ERROR: //p' "${errors}" | tail -n 1 || true)"
+            printf '%-24s %-30s (upstream unreachable: %s)\n' "${name}" "${pinned}" "${reason:-unknown}"
         elif [[ "${pinned}" == "${latest}" ]]; then
             printf '%-24s %-30s up to date\n' "${name}" "${pinned}"
         else
             printf '%-24s %-30s -> %s\n' "${name}" "${pinned}" "${latest}"
         fi
     done
+    rm -f "${errors}"
     # Go publishes its current release as plain text rather than as a GitHub tag.
     local go_out go_latest
     go_out="$(curl -fsSL --proto '=https' --tlsv1.2 "${_CURL_RETRY_OPTS[@]}" \
@@ -729,32 +794,72 @@ npm_install_g() {
     npm install -g "$@"
 }
 
-# Wrapper around curl for GitHub API calls; adds auth header when GITHUB_TOKEN is set
-# to avoid unauthenticated rate limits (60 req/hr) on shared CI runner IPs.
+# The token for GitHub API calls: GITHUB_TOKEN when set, else the one an
+# authenticated gh holds, else none. Anonymous calls share a limit of 60 an hour
+# per address, which `make pins` alone spends in two runs; gh's token lifts that
+# to 5000 on any machine where `gh auth login` has been run. `gh auth token`
+# exits non-zero when gh is not logged in, which leaves the call anonymous.
+github_api_token() {
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        printf '%s' "${GITHUB_TOKEN}"
+    elif command -v gh >/dev/null 2>&1; then
+        gh auth token 2>/dev/null || true
+    fi
+}
+
+# Wrapper around curl for GitHub API calls; adds an auth header when a token is
+# available (see github_api_token) to avoid the unauthenticated rate limit on
+# shared CI runner IPs.
 # Same TLS floor as download(): these calls decide which version gets installed,
 # so a downgrade to plaintext or to an obsolete TLS version matters here at
 # least as much as on the fetch that follows.
 github_api_curl() {
-    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    local token
+    token="$(github_api_token)"
+    if [[ -n "${token}" ]]; then
         curl -fsSL --proto '=https' --tlsv1.2 "${_CURL_RETRY_OPTS[@]}" \
-            -H "Authorization: Bearer ${GITHUB_TOKEN}" "$@"
+            -H "Authorization: Bearer ${token}" "$@"
     else
         curl -fsSL --proto '=https' --tlsv1.2 "${_CURL_RETRY_OPTS[@]}" "$@"
     fi
 }
 
+# Why a GitHub API call failed, from the response headers curl dumped: the
+# rate limit and when it resets, or the HTTP status. GitHub answers an
+# exhausted limit with 403 (or 429) and x-ratelimit-remaining: 0, and curl's -f
+# reduces that to "returned error: 403", which reads like a permissions fault.
+_github_api_failure() {
+    local headers="$1" status remaining reset when
+    status="$(awk 'toupper($1) ~ /^HTTP\// { s = $2 } END { print s }' "${headers}" 2>/dev/null | tr -d '\r' || true)"
+    remaining="$(awk -F': *' 'tolower($1) == "x-ratelimit-remaining" { r = $2 } END { print r }' "${headers}" 2>/dev/null | tr -d '\r' || true)"
+    reset="$(awk -F': *' 'tolower($1) == "x-ratelimit-reset" { r = $2 } END { print r }' "${headers}" 2>/dev/null | tr -d '\r' || true)"
+    if [[ "${remaining}" == "0" && "${reset}" =~ ^[0-9]+$ ]]; then
+        # GNU date takes -d @epoch, BSD date -r epoch.
+        when="$(date -d "@${reset}" '+%H:%M %Z' 2>/dev/null || date -r "${reset}" '+%H:%M %Z' 2>/dev/null || printf 'epoch %s' "${reset}")"
+        printf 'rate limit exhausted until %s; set GITHUB_TOKEN or run gh auth login' "${when}"
+    elif [[ -n "${status}" ]]; then
+        printf 'HTTP %s' "${status}"
+    else
+        printf 'no response'
+    fi
+}
+
 github_latest_tag() {
     local repo="$1"
-    local tmp
+    local tmp headers
     tmp="$(mktemp)"
+    headers="$(mktemp)"
     # RETURN traps persist for the caller too until unset, so clear it here
     # or it would also fire (and re-delete an unrelated tmp) when the caller returns.
-    trap 'rm -f "${tmp}"; trap - RETURN' RETURN
+    trap 'rm -f "${tmp}" "${headers}"; trap - RETURN' RETURN
     # Checked here rather than at each call site: a rate-limited or unreachable
     # API returns an empty tag, which the callers then paste into an asset URL
     # and download a 404 page with. Three of the ten guarded it, seven did not.
-    if ! github_api_curl "https://api.github.com/repos/${repo}/releases/latest" -o "${tmp}"; then
-        err "GitHub API request failed for ${repo}"
+    if ! github_api_curl "https://api.github.com/repos/${repo}/releases/latest" \
+        -D "${headers}" -o "${tmp}"; then
+        local reason
+        reason="$(_github_api_failure "${headers}")"
+        err "GitHub API request failed for ${repo} (${reason})"
         return 1
     fi
     # The API pretty-prints for some requests and sends compact JSON, all on
@@ -1553,6 +1658,24 @@ install_pyright() {
     require_runs "${HOME}/.local/bin/pyright"
 }
 
+# For the bashls server the Neovim config enables. npm's package is the only
+# distribution upstream publishes.
+install_bash_ls() {
+    if command -v bash-language-server >/dev/null 2>&1; then
+        if [[ -z "${UPGRADE:-}" ]]; then
+            log "bash-language-server already installed; skipping"
+            return
+        fi
+        log "Upgrading bash-language-server"
+    else
+        log "Installing bash-language-server"
+    fi
+    require_cmd npm
+    npm_install_g bash-language-server || return 1
+    note_shadowed bash-language-server "${HOME}/.local/bin/bash-language-server"
+    require_runs "${HOME}/.local/bin/bash-language-server"
+}
+
 install_eza() { install_cargo_tool eza; }
 install_fd() { install_cargo_tool fd fd-find; }
 install_bat() { install_cargo_tool bat; }
@@ -1645,7 +1768,8 @@ install_gh_stack_skill() {
     fi
     # User scope, so the skill applies in every repo instead of only whichever
     # one the install happened to run from. It lands in ~/.claude/skills/gh-stack,
-    # which chezmoi does not manage: nothing under home/dot_claude/ claims it.
+    # a directory chezmoi manages through skills/.keep alone, so it leaves the
+    # skill itself untouched.
     local skills
     skills="$(gh skill list --agent claude-code --scope user --json skillName --jq '.[].skillName' 2>/dev/null)"
     if grep -qx "gh-stack" <<<"${skills}"; then
@@ -1947,11 +2071,17 @@ install_nix_direnv() {
             log "nix-direnv already installed; skipping"
         else
             log "Upgrading nix-direnv"
-            nix profile upgrade nix-direnv
+            nix profile upgrade nix-direnv || return 1
         fi
     else
         log "Installing nix-direnv"
-        nix profile install nixpkgs#nix-direnv
+        nix profile install nixpkgs#nix-direnv || return 1
+    fi
+    # The file the source line below loads. A profile entry whose package
+    # failed to link would otherwise leave direnvrc sourcing nothing.
+    if [[ ! -f "${HOME}/.nix-profile/share/nix-direnv/direnvrc" ]]; then
+        err "nix-direnv is not in the nix profile (~/.nix-profile/share/nix-direnv/direnvrc missing)"
+        return 1
     fi
     if [[ -f "${direnvrc}" ]] && grep -qF "nix-direnv/direnvrc" "${direnvrc}"; then
         return
@@ -2101,7 +2231,9 @@ install_ccusage() {
 }
 
 install_tmux_from_source() {
-    local required_major=3 required_minor=3
+    # 3.4, for the `hyperlinks` terminal feature dot_tmux.conf.tmpl sets; 3.3
+    # rejects the name, and tmux strips OSC 8 links without it.
+    local required_major=3 required_minor=4
     local build_version
 
     if [[ -n "${UPGRADE:-}" ]]; then
@@ -2475,9 +2607,19 @@ install_opam() {
         binary="opam-${version}-${opam_arch}-linux"
         install_dir="${HOME}/.local/bin"
         mkdir -p "${install_dir}"
-        download "https://github.com/ocaml/opam/releases/download/${tag}/${binary}" \
-            "${install_dir}/opam" || return 1
-        chmod +x "${install_dir}/opam" || return 1
+        # Fetched beside the live binary and swapped in, so a failed or
+        # truncated download leaves the old opam working.
+        local tmp
+        tmp="$(mktemp)" || return 1
+        if ! download "https://github.com/ocaml/opam/releases/download/${tag}/${binary}" "${tmp}"; then
+            rm -f "${tmp}"
+            return 1
+        fi
+        if ! install -m755 "${tmp}" "${install_dir}/opam"; then
+            rm -f "${tmp}"
+            return 1
+        fi
+        rm -f "${tmp}"
         note_shadowed opam "${install_dir}/opam"
         require_runs "${install_dir}/opam"
     }
@@ -2628,7 +2770,9 @@ install_go() {
     local go_minor=0
     if [[ -n "${go_bin}" ]]; then
         local go_version_output
-        go_version_output="$("${go_bin}" version)"
+        # GOTOOLCHAIN=local, or a go.mod in the working directory asking for a
+        # newer Go would have `go version` download and report that one.
+        go_version_output="$(GOTOOLCHAIN=local "${go_bin}" version)"
         go_minor="$(printf '%s' "${go_version_output}" | sed 's/.*go1\.\([0-9]*\).*/\1/')"
         if [[ "${go_minor:-0}" -ge 21 ]]; then
             if [[ -z "${UPGRADE:-}" ]]; then
@@ -2670,6 +2814,17 @@ install_go() {
         if [[ -z "${latest}" ]]; then
             err "go.dev returned no version"
             return 1
+        fi
+        # `go version` prints "go version go1.24.2 linux/amd64". Only the
+        # toolchain this step owns counts, so a distro go of the same version
+        # does not stop /usr/local/go being installed.
+        local installed_word=""
+        if [[ "${go_bin}" == /usr/local/go/bin/go ]]; then
+            installed_word="$(awk '{ print $3 }' <<<"${go_version_output}")"
+        fi
+        if [[ "${installed_word}" == "${latest}" ]]; then
+            log "Go ${latest} already at latest; skipping"
+            return
         fi
     fi
 
@@ -2745,7 +2900,9 @@ install_moor() {
         # No official arm64 binary; build from source. install_go ensures a
         # modern Go is available; GOTOOLCHAIN=auto downloads a newer toolchain
         # if go.mod requires one beyond what's installed.
-        GOTOOLCHAIN=auto go install github.com/walles/moor/v2/cmd/moor@latest || return 1
+        local tag
+        tag="$(pinned_tag "${MOOR_VERSION}" walles/moor)" || return 1
+        GOTOOLCHAIN=auto go install "github.com/walles/moor/v2/cmd/moor@${tag}" || return 1
         local gobin
         gobin="$(go env GOBIN)" || return 1
         if [[ -z "${gobin}" ]]; then
@@ -3180,10 +3337,16 @@ install_fzf_git() {
 # rather than five so a single failure is reported as one line, and each tool
 # is skipped individually once installed.
 install_cargo_extras() {
-    local tool
+    local tool failed=()
+    # Every tool is tried, so one broken build does not leave the rest
+    # uninstalled; the failures are named together at the end.
     for tool in cargo-audit cargo-fuzz cargo-llvm-cov cross samply; do
-        install_cargo_tool "${tool}" || return 1
+        install_cargo_tool "${tool}" || failed+=("${tool}")
     done
+    if ((${#failed[@]} > 0)); then
+        err "cargo tools failed to install: ${failed[*]}"
+        return 1
+    fi
 }
 
 # The thing advertised at obsidian.md/cli is not a separately installable
@@ -3868,6 +4031,13 @@ install_latex() {
         return 1
     fi
 
+    if [[ -n "${installed}" ]] && ((TEXLIVE_INSTALLER_YEAR < installed)); then
+        # A mirror lagging a release year behind would otherwise count as a
+        # new year, install the older TeX Live and delete the newer one.
+        rm -rf "${work}"
+        log "TeX Live ${installed} is newer than the ${TEXLIVE_INSTALLER_YEAR} installer on ${TEXLIVE_MIRROR}; skipping"
+        return
+    fi
     if [[ "${installed}" == "${TEXLIVE_INSTALLER_YEAR}" ]]; then
         rm -rf "${work}"
         bin_dir="$(texlive_bin_dir "${TEXLIVE_ROOT}/${installed}")" || return 1

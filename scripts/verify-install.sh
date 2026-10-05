@@ -109,6 +109,7 @@ check_cmd cmake
 check_cmd nix
 check_cmd direnv
 check_cmd pyright
+check_cmd bash-language-server
 check_cmd lua-language-server
 check_cmd opam
 check_cmd moor
@@ -135,7 +136,9 @@ if [[ "${os_name}" == "Linux" ]]; then
 fi
 
 # nix-direnv is a nix profile entry rather than a command, and the line that
-# loads it is what actually makes it do anything.
+# loads it is what actually makes it do anything. Both ends are checked: a
+# direnvrc sourcing a file the profile does not hold loads nothing.
+check_file "nix-direnv in the nix profile" "${HOME}/.nix-profile/share/nix-direnv/direnvrc"
 check_file "nix-direnv wired into direnvrc" "${HOME}/.config/direnv/direnvrc"
 
 # nix-direnv's `use flake` refuses to run under bash older than 4.4, and macOS
@@ -249,7 +252,14 @@ check_cmd ccusage
 check_cmd starship
 
 if [[ "${headless_linux}" == false ]]; then
-    check_cmd wezterm
+    # install_wezterm skips Linux ARM64, which upstream publishes no build for.
+    arch_name="$(uname -m)"
+    if [[ "${os_name}" == "Linux" && "${arch_name}" != "x86_64" ]] &&
+        ! command -v wezterm >/dev/null 2>&1; then
+        printf "\033[1;33m[warn]\033[0m wezterm (no Linux %s build; skipped by the installer)\n" "${arch_name}"
+    else
+        check_cmd wezterm
+    fi
     if [[ "${os_name}" == "Darwin" ]]; then
         if brew list --cask font-code-new-roman-nerd-font >/dev/null 2>&1; then
             printf "\033[1;32m[ok]\033[0m   nerd-font\n"
@@ -306,7 +316,25 @@ if [[ -f "${HOME}/.tmux.conf" ]]; then
     done <<<"${tmux_plugins}"
 fi
 
+# The config needs 0.12's built-in completion, and an older nvim on PATH, such
+# as jammy's 0.6, passes a bare --version probe.
+check_nvim_version() {
+    local line version major minor
+    line="$(cd / && nvim --version </dev/null 2>/dev/null | head -n 1)"
+    version="${line#NVIM v}"
+    version="${version%%[-+]*}"
+    IFS=. read -r major minor _ <<<"${version}"
+    if [[ "${major}" =~ ^[0-9]+$ && "${minor}" =~ ^[0-9]+$ ]] && ((major > 0 || minor >= 12)); then
+        printf "\033[1;32m[ok]\033[0m   nvim >= 0.12 (%s)\n" "${version}"
+        ((ok++)) || true
+    else
+        printf "\033[1;31m[FAIL]\033[0m nvim >= 0.12 (found %s)\n" "${line:-nothing}" >&2
+        ((fail++)) || true
+    fi
+}
+
 check_cmd nvim
+check_nvim_version
 
 printf "\n%d passed, %d failed\n" "${ok}" "${fail}"
 ((fail == 0))

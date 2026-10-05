@@ -162,6 +162,7 @@ main() {
     run_step install_uv
     run_step install_clangd
     run_step install_pyright
+    run_step install_bash_ls
     run_step install_lua_ls
     run_step install_opam
     run_step install_moor

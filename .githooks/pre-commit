@@ -18,19 +18,31 @@ if [[ -z "${DOTFILES_HOOK_NIX:-}" ]] &&
 fi
 
 # NUL-separated, so a path with a space or a newline in it survives. Deleted
-# paths are already excluded by the filter, but a rename can stage a path that
-# is not on disk, so check.
+# paths are excluded by the filter.
 staged=()
 # shellcheck disable=SC2312  # git's status is not the interesting one here: a
 # repository with nothing staged and a failed git both give an empty list, and
 # both mean there is nothing to check.
 while IFS= read -r -d '' path; do
-    [[ -e "${path}" ]] && staged+=("${path}")
+    staged+=("${path}")
 done < <(git diff --cached --name-only --diff-filter=ACMR -z)
 
 if ((${#staged[@]} == 0)); then
     exit 0
 fi
+
+# Lint what is being committed, not what is on disk. Linting the working tree
+# passed a commit whose staged half was broken and the fix left unstaged, and
+# failed one over an unstaged edit. The whole index goes into a temporary
+# directory, since typos, actionlint and the template renders read the tree
+# rather than a file list, and every check below runs there. A checkout of the
+# index leaves the working tree and the stash alone, as `git stash
+# --keep-index` would not on a conflict.
+index_tree="$(mktemp -d)"
+# shellcheck disable=SC2064  # expand index_tree now, not when the trap fires
+trap "rm -rf '${index_tree}'" EXIT INT TERM
+git checkout-index --all --prefix="${index_tree}/"
+cd "${index_tree}"
 
 # Three shellcheck styles for the same reason the Makefile has them: scripts/
 # takes the whole optional set, and the deployed scripts take it without the
@@ -52,8 +64,8 @@ template_staged=false
 for path in "${staged[@]}"; do
     case "${path}" in
         *.lua) lua_files+=("${path}") ;;
-        scripts/*.sh) install_files+=("${path}") ;;
-        home/dot_claude/*.sh) deployed_bash+=("${path}") ;;
+        scripts/*.sh | .githooks/pre-commit) install_files+=("${path}") ;;
+        home/dot_claude/*.sh | home/run_*.sh) deployed_bash+=("${path}") ;;
         home/dot_local/bin/executable_* | home/dot_config/tmux/*.sh) sh_files+=("${path}") ;;
         *.toml) toml_files+=("${path}") ;;
         .github/workflows/*) workflow_files+=("${path}") ;;
@@ -112,7 +124,9 @@ if ((${#toml_files[@]} > 0)); then
 fi
 
 if ((${#workflow_files[@]} > 0)); then
-    check actionlint actionlint
+    # Every workflow, named, since the index checkout has no .git for
+    # actionlint to find the project by.
+    check actionlint actionlint .github/workflows/*.yml
 fi
 
 if [[ "${makefile_staged}" == true ]]; then
@@ -132,9 +146,10 @@ check typos typos
 
 # Staged content only, which is the one place a secret can still be stopped
 # without a history rewrite. `gitleaks git --staged` reads the same diff this
-# hook has already filtered, so no file list is passed. --redact keeps a
-# finding out of the terminal scrollback it would otherwise sit in.
-check gitleaks gitleaks git --staged --no-banner --redact
+# hook has already filtered, so no file list is passed, but it needs the
+# repository rather than the index checkout. --redact keeps a finding out of
+# the terminal scrollback it would otherwise sit in.
+check gitleaks gitleaks git --staged --no-banner --redact "${repo_root}"
 
 if ((${#skipped[@]} > 0)); then
     printf 'pre-commit: skipped (not on PATH): %s\n' "${skipped[*]}" >&2

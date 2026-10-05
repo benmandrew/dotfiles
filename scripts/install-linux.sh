@@ -14,7 +14,7 @@ export DEBIAN_FRONTEND=noninteractive
 install_apt_packages_if_missing() {
     if [[ -n "${UPGRADE:-}" ]]; then
         log "Upgrading base packages: $*"
-        sudo apt-get update
+        sudo apt-get update || return 1
         sudo apt-get install -y "$@"
         return
     fi
@@ -30,6 +30,9 @@ install_apt_packages_if_missing() {
         return
     fi
     log "Installing missing base packages: ${missing_packages[*]}"
+    # A fresh machine or container may never have fetched the package lists,
+    # and stale ones name versions the mirror no longer carries.
+    sudo apt-get update || return 1
     sudo apt-get install -y "${missing_packages[@]}"
 }
 
@@ -80,18 +83,25 @@ install_git() {
         err "git-core PPA key does not carry the pinned fingerprint"
         return 1
     fi
-    sudo mkdir -p -m 755 /etc/apt/keyrings
+    sudo mkdir -p -m 755 /etc/apt/keyrings || return 1
     gpg --dearmor <"${tmp}" >"${tmp}.gpg" || return 1
-    sudo install -m 644 "${tmp}.gpg" "${keyring}"
+    sudo install -m 644 "${tmp}.gpg" "${keyring}" || return 1
     rm -f "${tmp}" "${tmp}.gpg"
     local arch
-    arch="$(dpkg --print-architecture)"
+    arch="$(dpkg --print-architecture)" || return 1
     printf 'deb [arch=%s signed-by=%s] https://ppa.launchpadcontent.net/git-core/ppa/ubuntu %s main\n' \
         "${arch}" "${keyring}" "${codename}" |
-        sudo tee /etc/apt/sources.list.d/git-core-ppa.list >/dev/null
-    sudo apt-get update
-    sudo apt-get install -y git
-    version="$(git --version)"
+        sudo tee /etc/apt/sources.list.d/git-core-ppa.list >/dev/null || return 1
+    sudo apt-get update || return 1
+    sudo apt-get install -y git || return 1
+    # apt can succeed and still leave the old git, when the PPA has no build
+    # for this series or a pin holds the distro's one.
+    hash -r
+    version="$(git --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"
+    if [[ -z "${version}" ]] || ! version_gte "${version}" "${GIT_MIN_VERSION}"; then
+        err "git is ${version:-absent} after installing from the PPA; need at least ${GIT_MIN_VERSION}"
+        return 1
+    fi
     log "git is now ${version}"
 }
 
@@ -189,9 +199,10 @@ install_node() {
                 return
             fi
             log "Upgrading Node.js LTS"
-            sudo apt-get update
+            sudo apt-get update || return 1
             remove_conflicting_libnode_dev
-            sudo apt-get install -y nodejs
+            sudo apt-get install -y nodejs || return 1
+            require_runs node
             return
         fi
         log "Node.js ${node_major} < 20; upgrading to LTS"
@@ -202,10 +213,28 @@ install_node() {
     local setup_path
     setup_path="$(mktemp)"
     download https://deb.nodesource.com/setup_lts.x "${setup_path}" || return 1
-    sudo -E bash "${setup_path}"
+    if ! sudo -E bash "${setup_path}"; then
+        rm -f "${setup_path}"
+        err "NodeSource setup script failed"
+        return 1
+    fi
     rm -f "${setup_path}"
-    sudo apt-get install -y nodejs
+    sudo apt-get install -y nodejs || return 1
+    # Without the NodeSource repository in place, apt installs the distro's
+    # nodejs, which on jammy is 12.
+    hash -r
+    local installed_major
+    installed_major="$(node --version 2>/dev/null | cut -d. -f1 | tr -d 'v')"
+    if [[ ! "${installed_major}" =~ ^[0-9]+$ ]] || ((installed_major < 20)); then
+        err "Node.js is ${installed_major:-absent} after installing; need at least 20"
+        return 1
+    fi
 }
+
+# Neovim 0.12, for the built-in completion the config uses. The 0.12.5 release
+# carries no shasum.txt, so the tarball is checked against the digest GitHub
+# records for it instead.
+NEOVIM_MIN_VERSION="0.12.0"
 
 install_neovim_if_missing() {
     local os_arch nvim_arch
@@ -217,22 +246,51 @@ install_neovim_if_missing() {
     fi
     local nvim_dir="nvim-linux-${nvim_arch}"
     local nvim_path="/opt/${nvim_dir}/bin/nvim"
-    if [[ -x "${nvim_path}" ]] || command -v nvim >/dev/null 2>&1; then
+    local tag
+    # shellcheck disable=SC2154  # NEOVIM_VERSION is in install-common.sh's pin block
+    tag="$(pinned_tag "${NEOVIM_VERSION}" neovim/neovim)" || return 1
+    # The first line of `nvim --version` is "NVIM v0.12.5", or for a nightly
+    # "NVIM v0.13.0-dev-123+gabcdef", whose suffix version_gte cannot read.
+    local probe="${nvim_path}" current="" bare=""
+    if [[ ! -x "${probe}" ]]; then
+        probe="$(command -v nvim 2>/dev/null)" || probe=""
+    fi
+    if [[ -n "${probe}" ]]; then
+        current="$("${probe}" --version 2>/dev/null | awk 'NR == 1 { print $2 }')"
+        bare="${current#v}"
+        bare="${bare%%[-+]*}"
+    fi
+    if [[ -n "${bare}" ]] && version_gte "${bare}" "${NEOVIM_MIN_VERSION}"; then
         if [[ -z "${UPGRADE:-}" ]]; then
-            log "Neovim already installed; skipping"
+            log "Neovim ${current} already installed; skipping"
             return
         fi
-        log "Upgrading Neovim"
+        if [[ "${probe}" == "${nvim_path}" && "${current}" == "${tag}" ]]; then
+            log "Neovim ${current} already at latest; skipping"
+            return
+        fi
+        log "Upgrading Neovim ${current} to ${tag}"
+    elif [[ -n "${current}" ]]; then
+        log "Neovim ${current} < ${NEOVIM_MIN_VERSION}; installing ${tag}"
     else
-        log "Installing Neovim"
+        log "Installing Neovim ${tag}"
     fi
     local tmp_dir
     tmp_dir="$(mktemp -d)"
     trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    download "https://github.com/neovim/neovim/releases/latest/download/${nvim_dir}.tar.gz" \
+    download_verified_github neovim/neovim "${tag}" "${nvim_dir}.tar.gz" \
         "${tmp_dir}/${nvim_dir}.tar.gz" || return 1
-    sudo rm -rf "/opt/${nvim_dir}"
-    sudo tar -C /opt -xf "${tmp_dir}/${nvim_dir}.tar.gz"
+    # Unpacked before the old tree goes, so a bad tarball leaves Neovim working.
+    tar -C "${tmp_dir}" -xf "${tmp_dir}/${nvim_dir}.tar.gz" || return 1
+    if [[ ! -x "${tmp_dir}/${nvim_dir}/bin/nvim" ]]; then
+        err "No bin/nvim inside ${nvim_dir}.tar.gz; upstream layout changed"
+        return 1
+    fi
+    sudo rm -rf "/opt/${nvim_dir}" || return 1
+    sudo mv "${tmp_dir}/${nvim_dir}" "/opt/${nvim_dir}" || return 1
+    sudo chown -R root:root "/opt/${nvim_dir}" || return 1
+    note_shadowed nvim "${nvim_path}"
+    require_runs "${nvim_path}" --version
 }
 
 main() {
@@ -287,6 +345,7 @@ main() {
     run_step install_uv
     run_step install_clangd
     run_step install_pyright
+    run_step install_bash_ls
     run_step install_lua_ls
     run_step install_opam
     run_step install_go

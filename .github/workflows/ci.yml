@@ -120,6 +120,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+      # Every pinned version, hashed. A pin bump that restored a cache built
+      # under the old pins left each step's `command -v` guard satisfied by the
+      # old tool, so the new version went untested until the weekly cold run.
+      # Both cache keys below lead with this, so a cache is only ever restored
+      # into a run with the same pins.
+      - name: Hash pinned versions
+        id: pins
+        if: github.event_name != 'schedule'
+        run: |
+          hash="$(grep -hE '^[A-Z_]+_VERSION=' scripts/install-common.sh scripts/install-linux.sh | sha256sum | cut -c1-16)"
+          echo "hash=${hash}" >> "${GITHUB_OUTPUT}"
+
       - name: Cache installed tools
         # Skipped on the weekly cold run — see the `schedule:` trigger above.
         if: github.event_name != 'schedule'
@@ -136,16 +148,17 @@ jobs:
             /opt/nvim-linux-x86_64
             /usr/local/bin
             /usr/local/lib/node_modules
-          key: install-${{ runner.os }}-${{ hashFiles('scripts/install-common.sh', 'scripts/install-linux.sh') }}
+          key: install-${{ runner.os }}-${{ steps.pins.outputs.hash }}-${{ hashFiles('scripts/install-common.sh', 'scripts/install-linux.sh') }}
           # The primary key can never hit. It hashes the two scripts, and this
           # job only runs when one of them changed, so the key is new on every
           # run that reaches here — measured as a 0s restore and a 3m save of a
           # 1.1 GB cache nothing would ever read. The prefix restores the
           # previous run's tools instead, which the install steps then skip
           # over, leaving the run to exercise whatever the edit actually
-          # changed.
+          # changed. It carries the pin hash, so a run with different pins
+          # restores nothing and installs every tool afresh.
           restore-keys: |
-            install-${{ runner.os }}-
+            install-${{ runner.os }}-${{ steps.pins.outputs.hash }}-
 
       - name: Run install script
         env:

@@ -21,8 +21,11 @@ set -euo pipefail
 # whole ATUIN_HOST_NAME block missing, exits 0, and the check passes having
 # read a file that is not the one being shipped.
 
-repo_root="$(git rev-parse --show-toplevel)"
-cd "${repo_root}"
+# The script's own parent rather than git's top level: the pre-commit hook runs
+# this from a checkout of the index in a temporary directory, which is not a
+# git work tree.
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${repo_root}" || exit 1
 
 out_dir="$(mktemp -d)"
 # shellcheck disable=SC2064  # expand out_dir now, not when the trap fires
