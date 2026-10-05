@@ -5,7 +5,7 @@ Second audit, covering the 48 commits since 2 September plus anything the first 
 - [ ] `ocamllsp` and `ocamlformat` live only in the `default` opam switch, and the active switch is `oxcaml`, a custom repository fork with no compiler listed. Installing into it risks the rollback damage noted above `install_ocaml_tools`, so it was left. Either install them into `oxcaml` by hand or point nvim's `ocamllsp` at `~/.opam/default/bin`.
 - [ ] The unmanaged `~/.profile` and `~/.bashrc` still add `~/.rvm/bin` and source rvm, so the desktop session's PATH carries it.
 - [ ] `bash-language-server` has an installer now but is not installed here, so `verify-install.sh` fails until the next install run.
-- [ ] A Claude bell that arrives on the tmux window already in view clears only when focus or the window changes.
+- [x] A Claude bell that arrived on the tmux window already in view cleared only when focus or the window changed. `wezterm-notify.sh` now writes no flag when the pane's window is active and a client on its session is focused.
 
 # Dotfiles audit — remediation plan
 

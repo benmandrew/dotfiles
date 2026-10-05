@@ -93,5 +93,17 @@ if [ -n "$pid" ]; then
         done
         [ -n "$live" ] || rm -f "$stale"
     done
-    : >"$bells/$pid"
+    # Inside tmux, a window already on screen in a focused client gets no flag.
+    # tmux clears flags from its focus and window-change hooks, and neither fires
+    # for the window being looked at, so the flag would stay until the user left
+    # it and came back. focus-events keeps tmux's "focused" client flag current.
+    in_view=""
+    if [ -n "${TMUX_PANE:-}" ] && command -v tmux >/dev/null 2>&1; then
+        where="$(tmux display -p -t "$TMUX_PANE" '#{window_active} #{session_name}' 2>/dev/null || true)"
+        if [ "${where%% *}" = 1 ]; then
+            flags="$(tmux list-clients -t "${where#* }" -F '#{client_flags}' 2>/dev/null || true)"
+            case "$flags" in *focused*) in_view=1 ;; esac
+        fi
+    fi
+    [ -n "$in_view" ] || : >"$bells/$pid"
 fi
