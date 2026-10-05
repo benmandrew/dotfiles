@@ -1,0 +1,47 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Check every Neovim plugin out at the commit lazy-lock.json pins, and delete
+# any plugin the specs no longer list.
+#
+# chezmoi manages the lock file but never runs lazy.nvim, so a lock bumped on
+# one machine moved nothing on the others: plugins stayed wherever they were
+# first cloned, nvim-lspconfig among them, at a commit older than the lsp/
+# directory vim.lsp.enable reads, so no server started at all. Removed plugins
+# (nvim-cmp, LuaSnip, lsp-zero) stayed on disk as well.
+#
+# The hash makes chezmoi re-run this whenever the lock changes. `after_`, so the
+# new lock is already in ~/.config/nvim when lazy reads it.
+# lazy-lock-hash: {{ include "dot_config/nvim/lazy-lock.json" | sha256sum }}
+
+if ! command -v nvim >/dev/null 2>&1; then
+    exit 0
+fi
+
+lock="${XDG_CONFIG_HOME:-${HOME}/.config}/nvim/lazy-lock.json"
+if [[ ! -f "${lock}" ]]; then
+    exit 0
+fi
+
+# lazy.nvim installs any missing plugin as nvim starts, and then rewrites the
+# whole lock from whatever every plugin has checked out, so the stale commits
+# overwrite the pinned ones before `restore` gets to read them. So keep the
+# managed lock aside, let a first start do its installing, put the lock back,
+# and only then restore; and put it back once more at the end, so the deployed
+# file still matches chezmoi's and apply raises no "has changed" prompt.
+#
+# Lazy! with the bang waits for the operation to finish, so +qa does not cut
+# the restore short. A failure (offline, say) warns rather than failing the
+# apply; `:Lazy restore` by hand, or the next lock change, tries again.
+saved=$(mktemp)
+trap 'cp "${saved}" "${lock}"; rm -f "${saved}"' EXIT
+cp "${lock}" "${saved}"
+if ! nvim --headless +qa >/dev/null 2>&1; then
+    echo "restore-nvim-plugins: nvim failed to start" >&2
+    exit 0
+fi
+cp "${saved}" "${lock}"
+if ! nvim --headless "+Lazy! restore" "+Lazy! clean" +qa >/dev/null 2>&1; then
+    echo "restore-nvim-plugins: lazy.nvim restore failed; run :Lazy restore in nvim" >&2
+fi

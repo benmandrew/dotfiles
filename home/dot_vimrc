@@ -92,8 +92,30 @@ endif
 
 inoremap <C-U> <C-G>u<C-U>
 " ## added by OPAM user-setup for vim / base ## d611dd144a5764d46fdea4c0c2e0ba07 ## you can edit, but keep this line
-let s:opam_share_dir = system("opam var share")
-let s:opam_share_dir = substitute(s:opam_share_dir, '[\r\n]*$', '', '')
+" `opam var share` was 20 of the 21 ms this file took to load, so the answer is
+" worked out without opam where it can be: from the active switch's prefix when
+" `eval $(opam env)` has set one, else from the default switch named in opam's
+" own config. A switch given as a path is a local one, whose prefix is _opam
+" inside it. opam itself is asked only when neither is there.
+function! s:OpamShareDir() abort
+  if !empty($OPAM_SWITCH_PREFIX)
+    return $OPAM_SWITCH_PREFIX . '/share'
+  endif
+  let l:root = empty($OPAMROOT) ? expand('~/.opam') : $OPAMROOT
+  if filereadable(l:root . '/config')
+    for l:line in readfile(l:root . '/config')
+      let l:switch = matchstr(l:line, '^switch: "\zs[^"]*\ze"')
+      if !empty(l:switch)
+        return l:switch =~# '^/' ? l:switch . '/_opam/share' : l:root . '/' . l:switch . '/share'
+      endif
+    endfor
+  endif
+  if executable('opam')
+    return substitute(system('opam var share'), '[\r\n]*$', '', '')
+  endif
+  return ''
+endfunction
+let s:opam_share_dir = s:OpamShareDir()
 
 let s:opam_configuration = {}
 

@@ -41,9 +41,17 @@ require("lazy").setup({
                 end,
             },
             {
+                -- git_files only errors outside a repository, so fall back to
+                -- find_files there. vim.fs.root walks up for .git without a fork,
+                -- and matches the .git file a worktree has in place of a directory.
                 "<C-p>",
                 function()
-                    require("telescope.builtin").git_files()
+                    local builtin = require("telescope.builtin")
+                    if vim.fs.root(vim.uv.cwd(), ".git") then
+                        builtin.git_files()
+                    else
+                        builtin.find_files()
+                    end
                 end,
             },
             {
@@ -143,13 +151,14 @@ require("lazy").setup({
             vim.api.nvim_create_autocmd("LspAttach", {
                 callback = function(args)
                     local opts = { buffer = args.buf }
-                    -- gri/grr/grn/gra/gO are 0.11 defaults and are deliberately not
-                    -- re-bound here. Descriptions live in the which-key block below.
+                    -- gri/grr/grn/gra/grt/gO and insert-mode <C-s> are 0.11+ defaults
+                    -- and are deliberately not re-bound here. Type definition and
+                    -- signature help used to sit on go and gs as well, which shadowed
+                    -- the built-in go-to-byte and sleep for nothing. Descriptions live
+                    -- in the which-key block below.
                     vim.keymap.set("n", "K", vim.lsp.buf.hover, opts)
                     vim.keymap.set("n", "gd", vim.lsp.buf.definition, opts)
                     vim.keymap.set("n", "gD", vim.lsp.buf.declaration, opts)
-                    vim.keymap.set("n", "go", vim.lsp.buf.type_definition, opts)
-                    vim.keymap.set("n", "gs", vim.lsp.buf.signature_help, opts)
                     vim.keymap.set("n", "<F2>", vim.lsp.buf.rename, opts)
                     vim.keymap.set("n", "<F3>", function()
                         vim.lsp.buf.format({ async = true })
@@ -175,13 +184,18 @@ require("lazy").setup({
                 end,
             })
 
-            vim.lsp.enable({
-                "bashls",
-                "clangd",
-                "lua_ls",
-                "ocamllsp",
-                "rust_analyzer",
-            })
+            -- Enable only the servers whose binary is on PATH, since an enabled
+            -- server that is not installed logs an error on every matching buffer.
+            -- vim.lsp.config[name] resolves the lsp/ file enable would read anyway;
+            -- a cmd given as a function cannot be checked, so it stays enabled.
+            local servers = {}
+            for _, name in ipairs({ "bashls", "clangd", "lua_ls", "ocamllsp", "rust_analyzer" }) do
+                local cmd = (vim.lsp.config[name] or {}).cmd
+                if type(cmd) ~= "table" or fn.executable(cmd[1]) == 1 then
+                    table.insert(servers, name)
+                end
+            end
+            vim.lsp.enable(servers)
         end,
     },
     {
@@ -373,14 +387,12 @@ require("lazy").setup({
                 { "K", desc = "Hover documentation" },
                 { "gd", desc = "Go to definition" },
                 { "gD", desc = "Go to declaration" },
-                { "go", desc = "Go to type definition" },
-                { "gs", desc = "Signature help" },
                 { "gl", desc = "Show diagnostic float" },
                 { "<F2>", desc = "Rename symbol" },
                 { "<F3>", desc = "Format buffer (LSP)" },
                 { "<F4>", desc = "Code action" },
 
-                -- LSP defaults shipped by Neovim 0.11
+                -- LSP defaults shipped by Neovim 0.11 and 0.12
                 { "gr", group = "lsp" },
                 { "grr", desc = "References" },
                 { "gri", desc = "Implementations" },
@@ -388,6 +400,7 @@ require("lazy").setup({
                 { "gra", desc = "Code action" },
                 { "grt", desc = "Type definition" },
                 { "gO", desc = "Document symbols" },
+                { "<C-s>", desc = "Signature help", mode = "i" },
 
                 -- Hunk / diagnostic motions
                 { "]c", desc = "Next git hunk" },

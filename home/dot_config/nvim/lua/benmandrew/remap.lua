@@ -11,5 +11,5 @@ vim.keymap.set("x", "<LeftRelease>", '"+y<LeftRelease>')
 -- cases to the black hole instead; plain d and c still yank, deliberately.
 vim.keymap.set({ "n", "x" }, "<leader>d", '"_d')
 vim.keymap.set("n", "x", '"_x')
--- Paste over a visual selection without the selection replacing the register.
-vim.keymap.set("x", "p", '"_dP')
+-- No `p` remap to keep the register over a visual paste: the built-in visual P
+-- already does that, and '"_dP' pasted in the wrong place at the end of a line.
