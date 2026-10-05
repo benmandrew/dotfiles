@@ -1112,7 +1112,10 @@ install_rust() {
 
 install_rust_analyzer() {
     load_cargo_env
-    if command -v rust-analyzer >/dev/null 2>&1; then
+    # rustup puts a rust-analyzer proxy in ~/.cargo/bin whether or not the
+    # component is installed, so `command -v` alone always passes. The proxy
+    # only runs once the component is there.
+    if rust-analyzer --version >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then
             log "rust-analyzer already installed; skipping"
             return
