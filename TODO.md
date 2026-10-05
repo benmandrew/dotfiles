@@ -3,7 +3,7 @@
 Second audit, covering the 48 commits since 2 September plus anything the first pass missed. 57 findings across provisioning, shell and git, editor and terminal, and chezmoi/Claude/VS Code. All fixed and committed on 5 October 2026 except where listed below. `make lint` and `make fmt-ci` pass. `chezmoi apply` has not been run; the first apply will ask about the existing unmanaged `~/.zlogin`. Measured: login shell 257 ± 49 ms → 69 ± 14 ms, `starship prompt` 62.7 → 20.1 ms. On this machine the stale nvim-lspconfig checkout was deleted and every plugin restored to `lazy-lock.json`; `lua_ls` now attaches.
 
 - [ ] `ocamllsp` and `ocamlformat` live only in the `default` opam switch, and the active switch is `oxcaml`, a custom repository fork with no compiler listed. Installing into it risks the rollback damage noted above `install_ocaml_tools`, so it was left. Either install them into `oxcaml` by hand or point nvim's `ocamllsp` at `~/.opam/default/bin`.
-- [ ] The unmanaged `~/.profile` and `~/.bashrc` still add `~/.rvm/bin` and source rvm, so the desktop session's PATH carries it.
+- [x] The unmanaged `~/.profile`, `~/.bashrc`, `~/.bash_profile` and `~/.mkshrc` added `~/.rvm/bin` and sourced rvm. The lines were removed on this machine, and a managed `~/.rvmrc` stops `rvm get` adding them back.
 - [ ] `bash-language-server` has an installer now but is not installed here, so `verify-install.sh` fails until the next install run.
 - [x] A Claude bell that arrived on the tmux window already in view cleared only when focus or the window changed. `wezterm-notify.sh` now writes no flag when the pane's window is active and a client on its session is focused.
 

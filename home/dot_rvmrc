@@ -1,0 +1,5 @@
+# Read by rvm's installer, which otherwise appends PATH and source lines to
+# ~/.profile, ~/.bashrc, ~/.bash_profile, ~/.mkshrc and ~/.zlogin on every
+# `rvm get`. Loading rvm eagerly cost about 150 ms per login shell; ~/.zlogin
+# shims it instead, loading it on first use.
+export rvm_ignore_dotfiles=yes
