@@ -1,3 +1,49 @@
+{{- /* The OS glyph at the right of the prompt, rendered here as literal text.
+     starship's own os module costs 54 ms of a 63 ms prompt on Linux, where it
+     forks lsb_release on every prompt to learn what never changes between
+     applies. Keyed on the os-release ID; any other distribution gets the
+     generic penguin, as the module's Linux fallback did. */ -}}
+{{- $osSymbol := " " -}}
+{{- if eq .chezmoi.os "darwin" -}}
+{{-   $osSymbol = " " -}}
+{{- else if eq .chezmoi.os "linux" -}}
+{{-   $symbols := dict -}}
+{{-   $symbols = set $symbols "alpaquita" " " -}}
+{{-   $symbols = set $symbols "alpine" " " -}}
+{{-   $symbols = set $symbols "almalinux" " " -}}
+{{-   $symbols = set $symbols "amzn" " " -}}
+{{-   $symbols = set $symbols "aosc" " " -}}
+{{-   $symbols = set $symbols "arch" " " -}}
+{{-   $symbols = set $symbols "artix" " " -}}
+{{-   $symbols = set $symbols "cachyos" " " -}}
+{{-   $symbols = set $symbols "centos" " " -}}
+{{-   $symbols = set $symbols "debian" " " -}}
+{{-   $symbols = set $symbols "elementary" " " -}}
+{{-   $symbols = set $symbols "endeavouros" " " -}}
+{{-   $symbols = set $symbols "fedora" " " -}}
+{{-   $symbols = set $symbols "garuda" "󰛓 " -}}
+{{-   $symbols = set $symbols "gentoo" " " -}}
+{{-   $symbols = set $symbols "kali" " " -}}
+{{-   $symbols = set $symbols "mabox" " " -}}
+{{-   $symbols = set $symbols "manjaro" " " -}}
+{{-   $symbols = set $symbols "mariner" " " -}}
+{{-   $symbols = set $symbols "linuxmint" " " -}}
+{{-   $symbols = set $symbols "nixos" " " -}}
+{{-   $symbols = set $symbols "nobara" " " -}}
+{{-   $symbols = set $symbols "opensuse-leap" " " -}}
+{{-   $symbols = set $symbols "opensuse-tumbleweed" " " -}}
+{{-   $symbols = set $symbols "ol" "󰌷 " -}}
+{{-   $symbols = set $symbols "pop" " " -}}
+{{-   $symbols = set $symbols "raspbian" " " -}}
+{{-   $symbols = set $symbols "rhel" " " -}}
+{{-   $symbols = set $symbols "rocky" " " -}}
+{{-   $symbols = set $symbols "solus" "󰠳 " -}}
+{{-   $symbols = set $symbols "sles" " " -}}
+{{-   $symbols = set $symbols "ubuntu" " " -}}
+{{-   $symbols = set $symbols "void" " " -}}
+{{-   $symbols = set $symbols "zorin" " " -}}
+{{-   $osSymbol = get $symbols .chezmoi.osRelease.id | default $osSymbol -}}
+{{- end -}}
 # Get editor completions based on the config schema
 "$schema" = 'https://starship.rs/config-schema.json'
 
@@ -10,7 +56,7 @@ add_newline = true
 # cold first run, so it clears 500 either way.
 command_timeout = 500
 
-format = "$all$fill$os$time$line_break$character"
+format = "$all$fill [{{ $osSymbol }}](bold white)$time$line_break$character"
 
 [directory]
 format = '[\[$path\]]($style)'
@@ -188,60 +234,9 @@ symbol = " "
 format = ' [$symbol($version)( \($switch_indicator$switch_name\))]($style)'
 symbol = " "
 
+# Replaced by the literal glyph in format above.
 [os]
-disabled = false
-format =" [$symbol]($style)"
-
-[os.symbols]
-Alpaquita = " "
-Alpine = " "
-AlmaLinux = " "
-Amazon = " "
-Android = " "
-AOSC = " "
-Arch = " "
-Artix = " "
-CachyOS = " "
-CentOS = " "
-Debian = " "
-DragonFly = " "
-Elementary = " "
-Emscripten = " "
-EndeavourOS = " "
-Fedora = " "
-FreeBSD = " "
-Garuda = "󰛓 "
-Gentoo = " "
-HardenedBSD = "󰞌 "
-Illumos = "󰈸 "
-Ios = "󰀷 "
-Kali = " "
-Linux = " "
-Mabox = " "
-Macos = " "
-Manjaro = " "
-Mariner = " "
-MidnightBSD = " "
-Mint = " "
-NetBSD = " "
-NixOS = " "
-Nobara = " "
-OpenBSD = "󰈺 "
-openSUSE = " "
-OracleLinux = "󰌷 "
-Pop = " "
-Raspbian = " "
-Redhat = " "
-RedHatEnterprise = " "
-RockyLinux = " "
-Redox = "󰀘 "
-Solus = "󰠳 "
-SUSE = " "
-Ubuntu = " "
-Unknown = " "
-Void = " "
-Windows = "󰍲 "
-Zorin = " "
+disabled = true
 
 [perl]
 format = ' [$symbol($version)]($style)'

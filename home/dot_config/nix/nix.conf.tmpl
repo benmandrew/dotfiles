@@ -1,7 +1,12 @@
+# auto-optimise-store hard-links identical store files as each build lands.
+# Linux only: on macOS it races the build and fails it with "cannot link ...
+# File exists" (NixOS/nix#7273), so a Mac relies on `nix store optimise`.
 experimental-features = nix-command flakes
 min-free = 10G
 max-free = 30G
+{{- if eq .chezmoi.os "linux" }}
 auto-optimise-store = true
+{{- end }}
 keep-outputs = false
 keep-derivations = false
 builders-use-substitutes = true

@@ -8,7 +8,12 @@ fi
 # fresh shell print two "no such file or directory" lines before the prompt.
 [[ -f "$HOMEBREW_BASE/fzf/shell/completion.zsh" ]] \
   && source "$HOMEBREW_BASE/fzf/shell/completion.zsh"
-[[ -f "$HOMEBREW_BASE/fzf/shell/key-bindings.zsh" ]] \
+# The key bindings need the line editor, which a shell with no terminal cannot
+# start: `zsh -i -c` from a script or an agent printed "can't change option:
+# zle" four times from fzf's option save and restore. `[[ -o zle ]]` reads on
+# there all the same, so ask by setting it, which fails without a terminal and
+# changes nothing with one.
+setopt zle 2>/dev/null && [[ -f "$HOMEBREW_BASE/fzf/shell/key-bindings.zsh" ]] \
   && source "$HOMEBREW_BASE/fzf/shell/key-bindings.zsh"
 
 {{ else if eq .chezmoi.os "linux" }}
@@ -20,6 +25,12 @@ fi
 # sources this file. `source <(fzf --zsh)` forked fzf on every shell start, the
 # one generator here that was still paying that on each startup rather than
 # once per fzf upgrade.
-_cache_eval fzf --zsh
+#
+# `fzf --zsh` is completion and key bindings together, and both need the line
+# editor, which a shell with no terminal cannot start: `zsh -i -c` from a script
+# or an agent printed "can't change option: zle" from fzf's option save and
+# restore. `[[ -o zle ]]` reads on there all the same, so ask by setting it,
+# which fails without a terminal and changes nothing with one.
+setopt zle 2>/dev/null && _cache_eval fzf --zsh
 
 {{ end }}

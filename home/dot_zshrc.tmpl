@@ -203,26 +203,37 @@ path+=(
 )
 
 export JAVA_DIR="$HOMEBREW_BASE/openjdk"
-export JAVA_HOME="$HOMEBREW_BASE/openjdk/bin/java"
+# The JDK root, which is what tools append bin/java to. It had pointed at the
+# java binary itself.
+export JAVA_HOME="$HOMEBREW_BASE/openjdk/libexec/openjdk.jdk/Contents/Home"
 
-export LIBRARY_PATH="$LIBRARY_PATH:${HOMEBREW_BASE%/opt}/lib"
+# Tied and unique like PATH above. Appending to the string left an empty first
+# entry when LIBRARY_PATH was unset, which the linker reads as the current
+# directory, and added another copy in every nested shell.
+typeset -TUx LIBRARY_PATH library_path
+library_path+=("${HOMEBREW_BASE%/opt}/lib")
 
 {{ else if eq .chezmoi.os "linux" }}
 
 # Same split as the macOS branch above: user-managed binaries in front of the
 # system ones, everything else behind. /usr/local/bin is dropped rather than
 # re-added, since the system login PATH already carries it.
+#
+# install_neovim_if_missing unpacks the release tarball to
+# /opt/nvim-linux-<arch>. It goes in front, since behind /usr/bin it lost to
+# apt's far older nvim. (N) drops whichever architecture this machine is not.
+# shellcheck disable=SC1036  # zsh glob qualifier, read as bash by the linter
 path=(
   "$HOME/.local/bin"
   "$HOME/usr/bin"
   "$HOME/.cargo/bin"
   "${GOPATH:-$HOME/go}/bin"
+  /opt/nvim-linux-{x86_64,arm64}/bin(N)
   $path
 )
 
 path+=(
   /usr/local/go/bin
-  /opt/nvim-linux-x86_64/bin
 )
 
 {{ end }}
@@ -541,8 +552,15 @@ _cache_eval() {
   [[ -f "$cache" ]] && read -r first < "$cache"
   if [[ "$first" != "$stamp" ]] || [[ "$bin_path" -nt "$cache" ]]; then
     mkdir -p "${cache:h}"
-    { print -r -- "$stamp"; "$@" } >| "$cache"
-    (zcompile "$cache" &)
+    # Into a temporary file first, and kept only if the generator succeeds. A
+    # failing one — a broken upgrade, a flag it no longer takes — had its
+    # partial output cached under a fresh stamp and sourced on every start.
+    if { print -r -- "$stamp"; "$@" } >| "$cache.tmp.$$"; then
+      mv -f "$cache.tmp.$$" "$cache"
+      (zcompile "$cache" &)
+    else
+      rm -f "$cache.tmp.$$"
+    fi
   fi
   source "$cache"
 }

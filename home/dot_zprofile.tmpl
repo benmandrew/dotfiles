@@ -52,3 +52,29 @@ unset _brew
 # Lean's toolchain manager. Guarded on the directory, so a machine without lean
 # does not carry a PATH entry that resolves to nothing.
 [ -d "$HOME/.elan/bin" ] && export PATH="$HOME/.elan/bin:$PATH"
+
+# The current opam switch's bin, so ocamllsp and dune are on PATH for an editor
+# started before anything has called the `opam` shim in .zshrc, which is what
+# runs `opam env`. Running `opam env` here instead costs a fork of opam on every
+# login, so the switch name is read out of ~/.opam/config with builtins. A
+# switch given as a path is a local one, whose prefix is <path>/_opam. The shim
+# still sets the rest of `opam env` on first use, and .zshrc's typeset -U drops
+# the copy of this entry it prepends.
+if [ -r "$HOME/.opam/config" ]; then
+    while IFS= read -r _opam_line; do
+        case $_opam_line in
+            'switch: '*)
+                _opam_switch=${_opam_line#switch: }
+                _opam_switch=${_opam_switch#\"}
+                _opam_switch=${_opam_switch%\"}
+                case $_opam_switch in
+                    /*) _opam_bin="$_opam_switch/_opam/bin" ;;
+                    *) _opam_bin="$HOME/.opam/$_opam_switch/bin" ;;
+                esac
+                [ -d "$_opam_bin" ] && export PATH="$_opam_bin:$PATH"
+                break
+                ;;
+        esac
+    done < "$HOME/.opam/config"
+    unset _opam_line _opam_switch _opam_bin
+fi

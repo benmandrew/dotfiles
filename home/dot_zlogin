@@ -1,0 +1,36 @@
+# Login shells only, read after .zshrc.
+#
+# RVM's installer appended a line here sourcing ~/.rvm/scripts/rvm, which cost
+# about 150 ms on every login shell for a Ruby used now and then. These shims
+# stand in for rvm and the default Ruby's commands instead: the first call to
+# any of them removes them all, sources rvm, which puts the default Ruby on
+# PATH, and reruns the call against the real command. The same pattern as the
+# `opam` shim in .zshrc. Until then no rvm directory is on PATH, and rvm's cd
+# hook, which switches Ruby on a .ruby-version, is not installed.
+#
+# The fixed names cover a gem not yet installed and a default Ruby not yet
+# chosen. The glob adds every other command the default Ruby and its gems
+# provide, for the cost of reading two directories, and (N) drops a directory
+# that does not exist.
+if [[ -s "$HOME/.rvm/scripts/rvm" ]]; then
+  _rvm_shims=(
+    rvm ruby gem bundle bundler jekyll irb rake erb ri rdoc
+    "$HOME"/.rvm/{rubies,gems}/default/bin/*(N:t)
+  )
+  _rvm_shims=(${(u)_rvm_shims})
+
+  # Sourced from inside a function, where a bare typeset would be local. rvm
+  # exports what it needs, and `rvm use` and `rvm list` behave the same after
+  # this load as after sourcing it at the top level.
+  _rvm_load() {
+    unfunction $_rvm_shims _rvm_load
+    unset _rvm_shims
+    source "$HOME/.rvm/scripts/rvm"
+    "$@"
+  }
+
+  for _rvm_shim in $_rvm_shims; do
+    functions[$_rvm_shim]="_rvm_load ${(q)_rvm_shim} \"\$@\""
+  done
+  unset _rvm_shim
+fi
