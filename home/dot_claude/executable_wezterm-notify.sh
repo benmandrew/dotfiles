@@ -27,12 +27,16 @@ fi
 
 label="${name:-$(basename "${cwd:-$PWD}")}"
 
+# The notification is the optional half of this hook. Over SSH there is no
+# session bus and no GUI to post to, and under errexit a failure here would end
+# the script before the tab flag below is written, which is the half that still
+# works there. So each notifier's failure is swallowed.
 case "$(uname -s)" in
     Darwin)
         osascript -e 'on run argv' \
             -e 'display notification (item 1 of argv) with title "Claude Code"' \
             -e 'end run' \
-            "$label"
+            "$label" >/dev/null 2>&1 || true
         ;;
     Linux)
         # Every idle prompt of every agent fires this, and the kept copies piled
@@ -44,19 +48,30 @@ case "$(uname -s)" in
         # arriving past that goes straight to the list with no banner to hide,
         # so it stays. Each one therefore replaces the last by its id, keeping
         # one entry at most. notify-send 0.7.9 has no --replace-id, hence gdbus.
-        if command -v gdbus >/dev/null 2>&1; then
-            id_file="${XDG_RUNTIME_DIR:-/tmp}/claude-notify-id"
+        #
+        # No DBUS_SESSION_BUS_ADDRESS means an SSH login or similar, where gdbus
+        # could only fail. The id is captured before the file is written, so a
+        # failed call leaves the last good id in place rather than truncating it.
+        # Bare /tmp is shared between users, so the uid goes in the name there, as
+        # claude-pane-session does.
+        if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v gdbus >/dev/null 2>&1; then
+            if [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+                id_file="${XDG_RUNTIME_DIR%/}/claude-notify-id"
+            else
+                id_file="/tmp/claude-notify-id.$(id -u)"
+            fi
             (
-                flock 9
+                flock 9 || exit 0
                 last="$(cat "$id_file" 2>/dev/null || true)"
-                gdbus call --session \
+                reply="$(gdbus call --session \
                     --dest org.freedesktop.Notifications \
                     --object-path /org/freedesktop/Notifications \
                     --method org.freedesktop.Notifications.Notify \
                     "Claude Code" "uint32 ${last:-0}" "" "Claude Code" "$label" \
-                    "[]" "{'transient': <true>}" "int32 -1" |
-                    sed -n 's/^(uint32 \([0-9]*\),)$/\1/p' >"$id_file"
-            ) 9>"${id_file}.lock"
+                    "[]" "{'transient': <true>}" "int32 -1" 2>/dev/null)" || exit 0
+                id="$(printf '%s\n' "$reply" | sed -n 's/^(uint32 \([0-9]*\),)$/\1/p')"
+                if [ -n "$id" ]; then printf '%s\n' "$id" >"$id_file"; fi
+            ) 9>"${id_file}.lock" || true
         fi
         ;;
 esac

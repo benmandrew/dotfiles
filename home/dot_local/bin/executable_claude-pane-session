@@ -14,6 +14,7 @@
 # Usage: claude-pane-session cwd|name <pane-pid> <fallback>
 #        claude-pane-session status|status-current <pane-pid>
 #        claude-pane-session refresh
+#        claude-pane-session clear-bell <pane-pid>...
 set -u
 
 # Claude Code keeps its whole state under CLAUDE_CONFIG_DIR, so a second account
@@ -33,8 +34,9 @@ have_sessions() {
 # directory for every profile, the pid being the key either way.
 titles="${HOME}/.claude/tab-titles"
 # Sessions asking to be looked at, written by wezterm-notify.sh and removed once
-# the tab is focused. The file's existence is the whole signal; its name is the
-# same pid again.
+# the tab is focused: by wezterm.lua for a WezTerm tab, and by `clear-bell` below
+# for a tmux window, whose panes that walk cannot see into. The file's existence
+# is the whole signal; its name is the same pid again.
 bells="${HOME}/.claude/tab-bells"
 # XDG_RUNTIME_DIR is /run/user/<uid> and macOS TMPDIR is a private per-user
 # directory, so both are per-user already. Bare /tmp is not, and it is reached on
@@ -209,6 +211,38 @@ if [ "$field" = refresh ]; then
     if have_sessions && command -v jq >/dev/null 2>&1; then
         build_cache || true
     fi
+    exit 0
+fi
+
+# Called from tmux's focus and window-change hooks with every pane of the window
+# being looked at, so it runs on each switch. Nearly always no bell is set, and
+# that answer costs the glob alone. Otherwise the parent map comes from the
+# cache status-left rebuilt this tick rather than a ps of its own, and only the
+# bells whose session sits under one of the panes are removed.
+if [ "$field" = clear-bell ]; then
+    shift
+    have_bell=''
+    for f in "$bells"/*; do
+        [ -f "$f" ] && have_bell=1 && break
+    done
+    [ -n "$have_bell" ] && [ $# -gt 0 ] && [ -f "$cache" ] || exit 0
+    awk -F '\t' -v roots="$*" '
+        BEGIN { n = split(roots, r, " "); for (i = 1; i <= n; i++) if (r[i] ~ /^[0-9]+$/) root[r[i] + 0] = 1 }
+        $1 == "P" { parent[$2 + 0] = $3 + 0 }
+        $1 == "S" { spid[++s] = $2 + 0 }
+        END {
+            for (i = 1; i <= s; i++) {
+                p = spid[i]
+                for (hops = 0; p > 1 && hops < 64; hops++) {
+                    if (p in root) { print spid[i]; break }
+                    if (!(p in parent)) break
+                    p = parent[p]
+                }
+            }
+        }
+    ' "$cache" 2>/dev/null | while read -r pid; do
+        rm -f "$bells/$pid"
+    done
     exit 0
 fi
 

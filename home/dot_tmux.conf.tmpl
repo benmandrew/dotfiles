@@ -8,7 +8,11 @@ bind-key C-a send-prefix
 # so OSC 8 survives the pass through tmux. tmux's built-in xterm* feature set
 # omits hyperlinks, so without this it strips the links delta, eza and gh emit,
 # and the ctrl-click gesture in wezterm.lua has nothing to open.
-set-option -a terminal-features 'xterm-256color:RGB:extkeys:hyperlinks'
+#
+# Reset to tmux's defaults before appending, since -a alone adds another copy of
+# the entry every time this file is sourced (prefix r, or the chezmoi reload).
+set-option -su terminal-features
+set-option -sa terminal-features 'xterm-256color:RGB:extkeys:hyperlinks'
 set-option -g focus-events on
 set -g extended-keys on
 
@@ -136,6 +140,17 @@ set -g status-interval 2
 # script; the host stays here, since tmux already knows it.
 set -g status-right "#[bg=#191918,fg=#c9c9c9] 󰒋 #{host_short}  #(~/.config/tmux/status.sh) "
 
+# Drop the attention flag of every claude session in a window once it is looked
+# at, as clear_active_bell does for a WezTerm tab, whose process walk cannot see
+# inside tmux. pane-focus-in covers the terminal regaining focus and a change of
+# pane; the other two cover a change of window or session, where focus-in does
+# not always fire. #{P:} hands over every pane of the window, since typing in a
+# split beside claude still means the window has been seen. The script returns
+# after a glob when no flag is set, which is nearly always.
+set-hook -g pane-focus-in 'run-shell -b "~/.local/bin/claude-pane-session clear-bell #{P:#{pane_pid} }"'
+set-hook -g after-select-window 'run-shell -b "~/.local/bin/claude-pane-session clear-bell #{P:#{pane_pid} }"'
+set-hook -g client-session-changed 'run-shell -b "~/.local/bin/claude-pane-session clear-bell #{P:#{pane_pid} }"'
+
 # Do nothing on bell
 set -g visual-activity off
 set -g visual-bell off
@@ -161,9 +176,14 @@ bind-key -T copy-mode-vi v send-keys -X begin-selection
 # One copy command on both platforms: copy.sh chooses the clipboard tool by
 # what is on PATH, and runs the selection through unbox first so a copied table
 # pastes into a .md file as a markdown table.
-bind-key -T copy-mode-vi y send-keys -X copy-pipe-and-cancel '~/.config/tmux/copy.sh'
-bind-key -T copy-mode-vi Enter send-keys -X copy-pipe-and-cancel '~/.config/tmux/copy.sh'
-bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel '~/.config/tmux/copy.sh'
+#
+# pipe-and-cancel rather than copy-pipe-and-cancel: the copy-pipe form also sets a
+# buffer of the raw selection, which set-clipboard sends over OSC 52 ahead of the
+# converted text. copy.sh loads the converted text into the buffer itself, so it
+# is the one writer.
+bind-key -T copy-mode-vi y send-keys -X pipe-and-cancel '~/.config/tmux/copy.sh'
+bind-key -T copy-mode-vi Enter send-keys -X pipe-and-cancel '~/.config/tmux/copy.sh'
+bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X pipe-and-cancel '~/.config/tmux/copy.sh'
 
 # The four options tmux-sensible sets that this file does not already set for
 # itself (escape-time and focus-events are above). They are inlined rather than
@@ -184,18 +204,39 @@ set -g status-keys emacs
 # Plugins. Session persistence, which is the one thing here that genuinely needs
 # a plugin: tmux has no save/restore of its own, and dot_zshrc.tmpl auto-attaches
 # on every SSH host, so a reboot silently costs the layout on machines that are
-# only ever reached through tmux. continuum saves on a timer and restores when
-# the server starts; resurrect is the mechanism underneath it, and has to be
-# listed first. Capturing pane contents keeps the scrollback that was on screen,
-# and the nvim strategy restores sessions written by :mksession.
+# only ever reached through tmux. Capturing pane contents keeps the scrollback
+# that was on screen, and the nvim strategy restores sessions written by
+# :mksession.
 #
 # tpm is only sourced if it is actually there, so a machine that has not been
 # provisioned yet gets a working config rather than an error on every source.
 set -g @plugin 'tmux-plugins/tpm'
 set -g @plugin 'tmux-plugins/tmux-resurrect'
-set -g @plugin 'tmux-plugins/tmux-continuum'
 set -g @resurrect-capture-pane-contents 'on'
 set -g @resurrect-strategy-nvim 'session'
-set -g @continuum-restore 'on'
-set -g @continuum-save-interval '15'
 if-shell '[ -f ~/.tmux/plugins/tpm/tpm ]' "run '~/.tmux/plugins/tpm/tpm'"
+
+# Saving and restoring without tmux-continuum. Continuum saved on a timer by
+# prepending a #() job to status-right, which cost about 50 ms on every status
+# tick to decide, nearly always, that the 15 minutes were not up. Saving instead
+# when a client detaches or a session closes catches the layout at the points it
+# is left behind; a session closing with none left keeps the previous save
+# rather than writing an empty one over it.
+#
+# Restore runs once, as continuum's did, when the server has just started: the
+# marker stops a re-source repeating it, and the start-time test stops the first
+# source of this file into a server that predates the marker restoring into live
+# sessions. The sleep lets the first session finish being created, which
+# resurrect then replaces. Only the default socket does either, so a scratch
+# server (tmux -L audit) neither restores the saved layout into itself nor
+# saves its own over it.
+if -F '#{m:*/default,#{socket_path}}' {
+    set-hook -g client-detached 'run-shell -b "[ -x ~/.tmux/plugins/tmux-resurrect/scripts/save.sh ] && ~/.tmux/plugins/tmux-resurrect/scripts/save.sh quiet"'
+    set-hook -g session-closed 'if -F "#{server_sessions}" "run-shell -b \"[ -x ~/.tmux/plugins/tmux-resurrect/scripts/save.sh ] && ~/.tmux/plugins/tmux-resurrect/scripts/save.sh quiet\""'
+    if -F '#{@resurrect-restored}' '' {
+        set -g @resurrect-restored 1
+        if-shell '[ -x ~/.tmux/plugins/tmux-resurrect/scripts/restore.sh ] && [ $(($(date +%s) - #{start_time})) -lt 10 ]' {
+            run-shell -b 'sleep 1; ~/.tmux/plugins/tmux-resurrect/scripts/restore.sh'
+        }
+    }
+}

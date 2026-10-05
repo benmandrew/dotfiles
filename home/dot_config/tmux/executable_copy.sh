@@ -1,9 +1,9 @@
 #!/bin/sh
-# Clipboard integration for tmux copy-pipe.
+# Clipboard integration for tmux's pipe-and-cancel.
 #
 # tmux set-clipboard=on handles OSC 52, which is what carries a copy back over
 # SSH; this script handles the native tools for local Wayland/X11 and macOS
-# sessions, so clipboard managers see the copy too. It is the copy-pipe target
+# sessions, so clipboard managers see the copy too. It is the pipe target
 # on both platforms now, the only difference between them being which tool is
 # on PATH, so dot_tmux.conf.tmpl no longer branches on the operating system.
 #
@@ -28,10 +28,11 @@ elif command -v xclip >/dev/null 2>&1 && [ -n "$DISPLAY" ]; then
     printf '%s' "$buf" | xclip -selection clipboard
 fi
 
-# copy-pipe sets a buffer, and with set-clipboard on that has already sent the
-# raw selection to the outer terminal over OSC 52. Send the converted text the
-# same way so it arrives second and wins, and so a session reached over SSH,
-# where none of the tools above exist, gets the conversion at all. Writing the
-# escape sequence directly is not available here: copy-pipe runs the command
-# with no controlling terminal, so there is no /dev/tty to write it to.
+# This is the only write to tmux's buffers: dot_tmux.conf.tmpl binds
+# pipe-and-cancel, which unlike copy-pipe sets no buffer of the raw selection.
+# load-buffer -w sets one from the converted text and, with set-clipboard on,
+# sends it to the outer terminal over OSC 52, so a session reached over SSH,
+# where none of the tools above exist, still gets the copy. Writing the escape
+# sequence directly is not available here: tmux runs the pipe command with no
+# controlling terminal, so there is no /dev/tty to write it to.
 printf '%s' "$buf" | tmux load-buffer -w - 2>/dev/null

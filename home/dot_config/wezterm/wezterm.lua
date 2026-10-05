@@ -472,10 +472,16 @@ local function cpu_linux()
     end
     local line = f:read("*l")
     f:close()
-    -- "cpu  user nice system idle iowait irq softirq steal ..."; idle is field 4.
+    -- "cpu  user nice system idle iowait irq softirq steal guest guest_nice";
+    -- idle is field 4. Only the first eight count, as in .config/tmux/status.sh:
+    -- the kernel already folds guest time into user and nice, so summing fields
+    -- 9 and 10 as well counts it twice.
     local total, idle, i = 0, 0, 0
     for n in (line or ""):gmatch("%d+") do
         i = i + 1
+        if i > 8 then
+            break
+        end
         n = tonumber(n) or 0
         total = total + n
         if i == 4 then
@@ -530,7 +536,7 @@ local function ram_linux()
     if not (total and avail) then
         return nil
     end
-    return string.format("%4.1fG/%4.1fG", (total - avail) / 1048576, total / 1048576)
+    return string.format("%5.1fG/%5.1fG", (total - avail) / 1048576, total / 1048576)
 end
 
 -- macOS RAM: used = (active + wired + compressed) pages * page size; total from
@@ -550,7 +556,7 @@ local function ram_macos()
     if not total then
         return nil
     end
-    return string.format("%4.1fG/%4.1fG", used / 1073741824, total / 1073741824)
+    return string.format("%5.1fG/%5.1fG", used / 1073741824, total / 1073741824)
 end
 
 local function uptime_linux()
@@ -585,12 +591,12 @@ local function metrics_text()
     end
     -- Fixed-width fields so a changing value doesn't nudge the row: the right
     -- status is right-aligned, so any width change shifts everything to its left.
-    -- CPU pads to 3 digits (the 100% case), RAM to %4.1f per number (as
+    -- CPU pads to 3 digits (the 100% case), RAM to %5.1f per number (as
     -- .config/tmux/status.sh does), uptime left-justified into a field wide
     -- enough for "123d 4h".
     local cpu_s = cpu and string.format("%3d%%", cpu) or " --%"
     local text =
-        string.format(" %s %s   %s %-11s   %s %-7s ", ICON_CPU, cpu_s, ICON_RAM, ram or "--", ICON_UPTIME, up or "--")
+        string.format(" %s %s   %s %-13s   %s %-7s ", ICON_CPU, cpu_s, ICON_RAM, ram or "--", ICON_UPTIME, up or "--")
     metrics_cache = { at = now, text = text }
     return text
 end
@@ -839,18 +845,21 @@ local function unboxed(text)
         return text
     end
 
-    -- run_child_process takes no stdin, so the selection is passed as an argv
-    -- element and printf feeds it in. sh -c reads $0 as the name, so the
-    -- script path is $1 and the text $2.
-    local ok, stdout = wezterm.run_child_process({
-        "sh",
-        "-c",
-        'printf %s "$2" | "$1"',
-        "unbox",
-        UNBOX,
-        text,
-    })
-    if not ok or stdout == "" then
+    -- run_child_process takes no stdin, so the selection goes through a temp
+    -- file the script reads on its stdin. It used to ride in as an argv element,
+    -- which fails with E2BIG once one argument passes 128 KiB, and the error
+    -- escaped the callback, so nothing was copied at all. sh -c reads $0 as the
+    -- name, so the script path is $1 and the file $2. Any failure, raised or
+    -- returned, copies the selection as drawn.
+    local path = os.tmpname()
+    local called, ok, stdout = pcall(function()
+        local f = assert(io.open(path, "wb"))
+        f:write(text)
+        f:close()
+        return wezterm.run_child_process({ "sh", "-c", '"$1" <"$2"', "unbox", UNBOX, path })
+    end)
+    os.remove(path)
+    if not (called and ok) or not stdout or stdout == "" then
         return text
     end
 
@@ -1099,9 +1108,11 @@ if wezterm.gui then
     for _, entry in ipairs(copy_mode) do
         if entry.key == "y" and entry.mods == "NONE" then
             -- Yank always has a selection, so it flashes via the unconditional
-            -- "copied" event; CopyTo before Close so the copy still happens.
+            -- "copied" event. copy_unboxed rather than CopyTo, so a table
+            -- yanked here converts as a mouse copy does, and before Close so
+            -- the selection is still there to read.
             entry.action = act.Multiple({
-                act.CopyTo("ClipboardAndPrimarySelection"),
+                copy_unboxed("ClipboardAndPrimarySelection"),
                 act.EmitEvent("copied"),
                 act.CopyMode("Close"),
             })
