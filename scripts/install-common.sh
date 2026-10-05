@@ -757,10 +757,12 @@ github_latest_tag() {
         err "GitHub API request failed for ${repo}"
         return 1
     fi
-    local tag_line tag
-    tag_line="$(grep -m1 '"tag_name"' "${tmp}" || true)"
-    tag="${tag_line#*\"tag_name\": \"}"
-    tag="${tag%%\"*}"
+    # The API pretty-prints for some requests and sends compact JSON, all on
+    # one line, for others. A literal `"tag_name": "` strip missed the compact
+    # form and left the line's leading `{` as the tag.
+    local tag
+    tag="$(grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' "${tmp}" |
+        head -n1 | sed 's/.*"\([^"]*\)"$/\1/' || true)"
     if [[ -z "${tag}" ]]; then
         err "No release tag for ${repo} in the GitHub API response"
         return 1
