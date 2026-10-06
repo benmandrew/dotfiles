@@ -62,10 +62,20 @@ install_neovim_if_missing() {
     brew install neovim
 }
 
+# Bounded, since a dismissed or cancelled install dialog leaves nothing to
+# wait for. A rerun opens the dialog again.
+CLT_WAIT_SECONDS=1800
+
 wait_for_clt() {
+    local waited=0
     log "Waiting for Xcode Command Line Tools installation to complete"
     until xcode-select -p >/dev/null 2>&1; do
+        if ((waited >= CLT_WAIT_SECONDS)); then
+            err "Xcode Command Line Tools not installed after $((CLT_WAIT_SECONDS / 60)) minutes; was the dialog dismissed? Rerun to try again"
+            return 1
+        fi
         sleep 5
+        waited=$((waited + 5))
     done
 }
 

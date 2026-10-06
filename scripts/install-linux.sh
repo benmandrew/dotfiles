@@ -73,20 +73,19 @@ install_git() {
     log "Installing git from the git-core PPA (distro git is ${version:-absent})"
     local tmp keyring="/etc/apt/keyrings/git-core-ppa.gpg"
     tmp="$(mktemp)"
+    trap 'rm -f "${tmp}" "${tmp}.gpg"; trap - RETURN' RETURN
     download "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x${GIT_CORE_PPA_FINGERPRINT}" \
         "${tmp}" || return 1
     # Check the key that came back is the pinned one before apt is told to
     # trust everything it signs.
     if ! gpg --show-keys --with-colons "${tmp}" 2>/dev/null |
         awk -F: '/^fpr:/ { print $10 }' | grep -qx "${GIT_CORE_PPA_FINGERPRINT}"; then
-        rm -f "${tmp}"
         err "git-core PPA key does not carry the pinned fingerprint"
         return 1
     fi
     sudo mkdir -p -m 755 /etc/apt/keyrings || return 1
     gpg --dearmor <"${tmp}" >"${tmp}.gpg" || return 1
     sudo install -m 644 "${tmp}.gpg" "${keyring}" || return 1
-    rm -f "${tmp}" "${tmp}.gpg"
     local arch
     arch="$(dpkg --print-architecture)" || return 1
     printf 'deb [arch=%s signed-by=%s] https://ppa.launchpadcontent.net/git-core/ppa/ubuntu %s main\n' \
@@ -106,17 +105,21 @@ install_git() {
 }
 
 install_perf() {
-    if command -v perf >/dev/null 2>&1; then
+    # Run it rather than find it: /usr/bin/perf is linux-tools-common's wrapper,
+    # which stays after a kernel update and then fails with "perf not found for
+    # kernel", since linux-tools-generic tracks the GA kernel, not an HWE one.
+    local kernel_tools
+    kernel_tools="linux-tools-$(uname -r)"
+    if perf --version >/dev/null 2>&1; then
         log "perf already installed; skipping"
         return
     fi
-    log "Installing perf (linux-tools-generic)"
-    # linux-tools-generic depends on an exact-version linux-tools-$(uname -r)
-    # package. Cloud/CI runners often run a custom kernel with no matching
-    # package in the archive, so this install is best-effort: warn and
-    # continue rather than failing the whole script.
-    if ! sudo apt-get install -y linux-tools-generic; then
-        log "WARNING: failed to install linux-tools-generic (perf); skipping, this is expected on some cloud kernels"
+    log "Installing perf (linux-tools-generic and ${kernel_tools})"
+    # Cloud/CI runners often run a custom kernel with no matching package in
+    # the archive, so this install is best-effort: warn and continue rather
+    # than failing the whole script.
+    if ! sudo apt-get install -y linux-tools-generic "${kernel_tools}"; then
+        log "WARNING: failed to install ${kernel_tools} (perf); skipping, this is expected on some cloud kernels"
     fi
 }
 
@@ -134,7 +137,7 @@ fs.inotify.max_user_instances = 512"
         return
     fi
     log "Configuring inotify watch/instance limits"
-    printf '%s\n' "${desired}" | sudo tee "${conf}" >/dev/null
+    printf '%s\n' "${desired}" | sudo tee "${conf}" >/dev/null || return 1
     sudo sysctl -p "${conf}" >/dev/null
 }
 
@@ -198,14 +201,13 @@ install_node() {
                 log "Node.js ${node_major} already installed; skipping"
                 return
             fi
-            log "Upgrading Node.js LTS"
-            sudo apt-get update || return 1
-            remove_conflicting_libnode_dev
-            sudo apt-get install -y nodejs || return 1
-            require_runs node
-            return
+            # Through NodeSource's setup script again, since its apt source
+            # names one major version and an apt upgrade stays on it past
+            # end of life.
+            log "Upgrading Node.js to the current LTS"
+        else
+            log "Node.js ${node_major} < 20; upgrading to LTS"
         fi
-        log "Node.js ${node_major} < 20; upgrading to LTS"
     else
         log "Installing Node.js LTS"
     fi

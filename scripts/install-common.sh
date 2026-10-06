@@ -1148,7 +1148,11 @@ install_zsh_completions() {
 
 install_rust() {
     load_cargo_env
-    if command -v cargo >/dev/null 2>&1 && command -v rustup >/dev/null 2>&1; then
+    # Run cargo rather than find it: rustup-init lays down the proxies in
+    # ~/.cargo/bin before it fetches a toolchain, so an interrupted first install
+    # leaves a cargo on PATH that fails with "no default toolchain". Rerunning
+    # rustup-init over that finishes the job.
+    if command -v rustup >/dev/null 2>&1 && cargo --version >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then
             log "Rust already installed; skipping"
             return
@@ -1224,7 +1228,7 @@ install_btop() {
     # would shadow the binary installed below.
     if dpkg -s btop >/dev/null 2>&1; then
         log "Removing apt btop (predates GPU support, and shadows ~/.local/bin)"
-        sudo apt-get purge -y btop
+        sudo apt-get purge -y btop || return 1
     fi
 
     if command -v btop >/dev/null 2>&1; then
@@ -1808,26 +1812,39 @@ install_gh() {
     # Linux: install from GitHub's official apt repo — Ubuntu's `gh` package is
     # years out of date. Skip only when gh is present AND already sourced from
     # the official repo, so a gh first installed from Ubuntu's repos gets
-    # migrated to the official one on the next run.
+    # migrated to the official one on the next run. The installed version's
+    # origin is checked as well as the list file, since a failed `apt-get
+    # update` after writing the list leaves Ubuntu's gh in place.
+    local policy installed_from=""
+    policy="$(apt-cache policy gh 2>/dev/null)" || policy=""
+    # The line after the one `***` marks is the installed version's source.
+    installed_from="$(printf '%s\n' "${policy}" | awk '/^ \*\*\* / { getline; print; exit }')" ||
+        installed_from=""
     if command -v gh >/dev/null 2>&1 &&
         [[ -f /etc/apt/sources.list.d/github-cli.list ]] &&
+        [[ "${installed_from}" == *cli.github.com* ]] &&
         [[ -z "${UPGRADE:-}" ]]; then
         log "GitHub CLI already installed; skipping"
         return
     fi
     log "Installing GitHub CLI from official apt repo"
-    sudo mkdir -p -m 755 /etc/apt/keyrings
+    sudo mkdir -p -m 755 /etc/apt/keyrings || return 1
     local tmp
     tmp="$(mktemp)"
-    download https://cli.github.com/packages/githubcli-archive-keyring.gpg "${tmp}" || return 1
-    sudo install -m 644 "${tmp}" /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    download https://cli.github.com/packages/githubcli-archive-keyring.gpg "${tmp}" || {
+        rm -f "${tmp}"
+        return 1
+    }
+    sudo install -m 644 "${tmp}" /etc/apt/keyrings/githubcli-archive-keyring.gpg || {
+        rm -f "${tmp}"
+        return 1
+    }
     rm -f "${tmp}"
-    sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
     local arch
     arch="$(dpkg --print-architecture)"
     echo "deb [arch=${arch} signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" |
-        sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
-    sudo apt-get update
+        sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null || return 1
+    sudo apt-get update || return 1
     sudo apt-get install -y gh || return 1
     require_runs gh
 }
@@ -2094,7 +2111,7 @@ install_nix() {
             return
         fi
         log "Upgrading Nix"
-        sudo -i nix upgrade-nix
+        retry_once sudo -i nix upgrade-nix || return 1
         enable_nix_flakes
         configure_nix_trusted_user || return 1
         require_runs nix
@@ -2115,7 +2132,9 @@ install_nix() {
 }
 
 install_direnv() {
-    if command -v direnv >/dev/null 2>&1; then
+    # Run it rather than find it: direnv's install.sh curls straight over the
+    # existing binary, so an interrupted upgrade leaves a truncated executable.
+    if direnv --version >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then
             log "direnv already installed; skipping"
             return
@@ -2412,7 +2431,7 @@ install_tmux_plugins() {
             log "Upgrading tmux plugin manager (tpm)"
             ensure_user_owns "${tpm_dir}"
             safe_git "${tpm_dir}" fetch origin || return 1
-            safe_git "${tpm_dir}" reset --hard origin/master
+            safe_git "${tpm_dir}" reset --hard origin/master || return 1
         else
             log "tmux plugin manager (tpm) already installed; skipping"
         fi
@@ -2549,7 +2568,9 @@ install_nerd_font() {
     require_cmd unzip
     local font_dir="${HOME}/.local/share/fonts/CodeNewRomanNerdFont"
     local version_file="${font_dir}/.version"
-    if [[ -d "${font_dir}" ]]; then
+    # The version file is written after unzip, so an interrupted extract leaves
+    # none and the next run finishes the job.
+    if [[ -f "${version_file}" ]]; then
         if [[ -z "${UPGRADE:-}" ]]; then
             log "CodeNewRoman Nerd Font already installed; skipping"
             return
@@ -2576,7 +2597,7 @@ install_nerd_font() {
         "${nerd_base}/SHA-256.txt" || return 1
     mkdir -p "${font_dir}"
     unzip -oq "${tmp_dir}/CodeNewRoman.zip" -d "${font_dir}" || return 1
-    echo "${tag}" >"${version_file}"
+    echo "${tag}" >"${version_file}" || return 1
     fc-cache -f "${font_dir}" >/dev/null 2>&1 || true
 }
 
@@ -2621,7 +2642,7 @@ install_lua_ls() {
     local os_name
     os_name="$(uname -s)"
 
-    if command -v lua-language-server >/dev/null 2>&1; then
+    if lua-language-server --version >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then
             log "lua-language-server already installed; skipping"
             return
@@ -2665,11 +2686,21 @@ install_lua_ls() {
     fi
     local archive="lua-language-server-${tag}-${lua_arch}.tar.gz"
     local install_dir="${HOME}/.local/opt/lua-language-server"
-    mkdir -p "${install_dir}"
+    # Extracted beside the live tree and swapped in, so an interrupted upgrade
+    # leaves the old one whole. Staged in ~/.local/opt rather than tmp_dir, so
+    # the renames stay on one filesystem.
+    local staged="${install_dir}.new" old="${install_dir}.old"
     # No checksum manifest: LuaLS publishes the tarballs alone.
     download "https://github.com/LuaLS/lua-language-server/releases/download/${tag}/${archive}" \
         "${tmp_dir}/${archive}" || return 1
-    tar -xf "${tmp_dir}/${archive}" -C "${install_dir}" || return 1
+    rm -rf "${staged}" "${old}" || return 1
+    mkdir -p "${staged}" || return 1
+    tar -xf "${tmp_dir}/${archive}" -C "${staged}" || return 1
+    if [[ -d "${install_dir}" ]]; then
+        mv "${install_dir}" "${old}" || return 1
+    fi
+    mv "${staged}" "${install_dir}" || return 1
+    rm -rf "${old}"
     mkdir -p "${HOME}/.local/bin"
     ln -sf "${install_dir}/bin/lua-language-server" "${HOME}/.local/bin/lua-language-server" || return 1
     note_shadowed lua-language-server "${HOME}/.local/bin/lua-language-server"
@@ -2751,10 +2782,18 @@ install_opam() {
     unset -f _install_opam_linux_binary
     ((rc == 0)) || return 1
 
-    # Initialise opam root (idempotent: skip if ~/.opam already exists)
-    if [[ -d "${HOME}/.opam" ]]; then
+    # Initialise the opam root. A ~/.opam that opam cannot read is an
+    # interrupted init, which opam will not redo in place, so it is moved
+    # aside rather than skipped.
+    if [[ -f "${HOME}/.opam/config" ]] && opam switch list >/dev/null 2>&1; then
         log "opam already initialised; skipping opam init"
     else
+        if [[ -e "${HOME}/.opam" ]]; then
+            local aside
+            aside="${HOME}/.opam.broken.$(date +%Y%m%d%H%M%S)"
+            log "${HOME}/.opam is unusable; moving it to ${aside} and initialising afresh"
+            mv "${HOME}/.opam" "${aside}" || return 1
+        fi
         local init_flags=(--bare --yes --no-setup)
         if ! _opam_sandboxing_works; then
             log "bwrap sandboxing unavailable (container/VM); initialising opam with --disable-sandboxing"
@@ -3662,12 +3701,12 @@ install_obsync() {
             log "Upgrading obsync"
             ensure_user_owns "${OBSYNC_DIR}"
             safe_git "${OBSYNC_DIR}" fetch origin || return 1
-            safe_git "${OBSYNC_DIR}" reset --hard origin/main
+            safe_git "${OBSYNC_DIR}" reset --hard origin/main || return 1
         fi
     else
         log "Cloning obsync"
-        mkdir -p "$(dirname "${OBSYNC_DIR}")"
-        git clone "${OBSYNC_REPO}" "${OBSYNC_DIR}"
+        mkdir -p "$(dirname "${OBSYNC_DIR}")" || return 1
+        git clone "${OBSYNC_REPO}" "${OBSYNC_DIR}" || return 1
     fi
 
     # No vault means nothing to schedule against, and obsync.sh exits 1 on a
@@ -3787,9 +3826,11 @@ schedule_obsync_launchd() {
     local plist="${HOME}/Library/LaunchAgents/${OBSYNC_LAUNCHD_LABEL}.plist"
     local interval=$((OBSYNC_INTERVAL_MIN * 60))
 
-    mkdir -p "$(dirname "${plist}")"
-    log "Installing obsync LaunchAgent (every ${OBSYNC_INTERVAL_MIN} minutes)"
-    cat >"${plist}" <<EOF
+    local domain desired
+    domain="gui/$(id -u)"
+    mkdir -p "$(dirname "${plist}")" || return 1
+    desired="$(
+        cat <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -3812,13 +3853,30 @@ schedule_obsync_launchd() {
 </dict>
 </plist>
 EOF
+    )"
+    if [[ -f "${plist}" && "$(<"${plist}")" == "${desired}" ]] &&
+        launchctl print "${domain}/${OBSYNC_LAUNCHD_LABEL}" >/dev/null 2>&1; then
+        log "obsync LaunchAgent already loaded and unchanged; skipping"
+        remove_obsync_cron
+        return
+    fi
+    log "Installing obsync LaunchAgent (every ${OBSYNC_INTERVAL_MIN} minutes)"
+    printf '%s\n' "${desired}" >"${plist}" || return 1
 
-    local domain
-    domain="gui/$(id -u)"
     # bootout first so a changed plist is picked up; it fails when nothing is
-    # loaded, which is the normal first-install case.
+    # loaded, which is the normal first-install case. launchd unloads
+    # asynchronously, and a bootstrap straight after fails with I/O error 5
+    # until it has, so bootstrap is retried for a few seconds.
     launchctl bootout "${domain}/${OBSYNC_LAUNCHD_LABEL}" >/dev/null 2>&1 || true
-    launchctl bootstrap "${domain}" "${plist}" || return 1
+    local attempt
+    for attempt in 1 2 3 4 5; do
+        launchctl bootstrap "${domain}" "${plist}" 2>/dev/null && break
+        if ((attempt == 5)); then
+            err "launchctl bootstrap of ${plist} still failing after ${attempt} attempts"
+            return 1
+        fi
+        sleep 1
+    done
 
     # After the agent is loaded, not before: a machine whose bootstrap failed
     # keeps the crontab entry and stays scheduled by it.
@@ -3978,12 +4036,28 @@ TEXLIVE_COLLECTIONS=(collection-basic collection-latex collection-latexrecommend
     collection-binextra collection-bibtexextra collection-mathscience
     collection-pictures collection-plaingeneric collection-luatex)
 
-# The newest year directory under TEXLIVE_ROOT holding a tlmgr; empty when none.
+# Written into a TEXDIR once install-tl has finished there. install-tl lays
+# tlmgr down first, so a tlmgr alone does not mean the collections followed.
+TEXLIVE_COMPLETE_MARKER=".dotfiles-complete"
+
+# Whether install-tl finished in a TEXDIR. A tree from before the marker counts
+# when its package database lists every collection, and gets the marker then.
+texlive_complete() {
+    local texdir="$1" collection
+    [[ -f "${texdir}/${TEXLIVE_COMPLETE_MARKER}" ]] && return 0
+    [[ -f "${texdir}/tlpkg/texlive.tlpdb" ]] || return 1
+    for collection in "${TEXLIVE_COLLECTIONS[@]}"; do
+        grep -qx "name ${collection}" "${texdir}/tlpkg/texlive.tlpdb" || return 1
+    done
+    : >"${texdir}/${TEXLIVE_COMPLETE_MARKER}"
+}
+
+# The newest complete year directory under TEXLIVE_ROOT; empty when none.
 texlive_installed_year() {
     local dir bin_dir year=""
     for dir in "${TEXLIVE_ROOT}"/20[0-9][0-9]; do
         bin_dir="$(texlive_bin_dir "${dir}")" || continue
-        if [[ -x "${bin_dir}/tlmgr" ]]; then
+        if [[ -x "${bin_dir}/tlmgr" ]] && texlive_complete "${dir}"; then
             year="${dir##*/}"
         fi
     done
@@ -4082,6 +4156,7 @@ run_texlive_installer() {
     local bin_dir
     bin_dir="$(texlive_bin_dir "${texdir}")" || return 1
     "${bin_dir}/tlmgr" option repository "${TEXLIVE_REPOSITORY}" || return 1
+    : >"${texdir}/${TEXLIVE_COMPLETE_MARKER}"
 }
 
 # Links in ~/.local/bin left dangling by a removed TeX Live year.
@@ -4150,6 +4225,15 @@ install_latex() {
     else
         # tlmgr cannot cross a release year, so a new year is a fresh install
         # beside the old one, which goes only once the new one runs.
+        # Whatever is there already is an interrupted install, since a
+        # complete one would have counted as installed above.
+        if [[ -d "${TEXLIVE_ROOT}/${TEXLIVE_INSTALLER_YEAR}" ]]; then
+            log "Removing the incomplete TeX Live ${TEXLIVE_INSTALLER_YEAR} left by an earlier run"
+            rm -rf "${TEXLIVE_ROOT:?}/${TEXLIVE_INSTALLER_YEAR}" || {
+                rm -rf "${work}"
+                return 1
+            }
+        fi
         log "Installing TeX Live ${TEXLIVE_INSTALLER_YEAR} into ${TEXLIVE_ROOT}; this is a download of several gigabytes"
         if ! run_texlive_installer "${TEXLIVE_INSTALLER}" "${TEXLIVE_ROOT}/${TEXLIVE_INSTALLER_YEAR}"; then
             rm -rf "${work}"
