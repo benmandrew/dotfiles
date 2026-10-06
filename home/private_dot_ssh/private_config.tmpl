@@ -8,6 +8,11 @@ Host github.com
 	User git
 
 {{ if stat (joinPath .chezmoi.homeDir ".ssh/id_avlab") -}}
+Host av1
+	HostName av1.cs.man.ac.uk
+	IdentityFile ~/.ssh/id_avlab
+	User benandrew
+
 Host av2
 	HostName av2.cs.man.ac.uk
 	IdentityFile ~/.ssh/id_avlab
