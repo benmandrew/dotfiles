@@ -38,6 +38,7 @@ Tools only useful on a machine someone sits at go through `run_optional_step <ke
 
 - `install_git` runs first on Linux, fitting the git-core personal package archive (PPA) build on Ubuntu below `GIT_MIN_VERSION`, and fails if git is still below it afterwards; its key must match `GIT_CORE_PPA_FINGERPRINT`.
 - `install_tmux_from_source` skips a tmux of 3.4 or newer, the first with the `hyperlinks` terminal feature; `install_neovim_if_missing` skips a Neovim of 0.12 or newer, for built-in completion.
+- `install_login_shell` reads the shell from `getent passwd` or `dscl`, never `$SHELL`, which stays stale until the next login. It keeps any zsh already set and listed in `/etc/shells`, else sets `/usr/bin/zsh` or `/bin/zsh` with `sudo chsh`, and skips an account missing from `/etc/passwd`, which chsh cannot change.
 - `install_perf` warns rather than fails without an exact-version kernel-tools package.
 - `enable_nix_flakes` is only a fallback for a machine that has not run `chezmoi apply`; `home/dot_config/nix/nix.conf` is where nix settings belong.
 - `configure_nix_trusted_user` adds the user to `trusted-users`, since the daemon silently ignores restricted settings from anyone else.

@@ -1033,6 +1033,65 @@ _zsh_completion_installed() {
     return 1
 }
 
+# The login shell the account database records. $SHELL is no substitute: it
+# comes from the session that started this script, and stays stale after chsh
+# until the next login.
+login_shell() {
+    local user os_name entry
+    user="$(id -un)" || return 1
+    os_name="$(uname -s)"
+    if [[ "${os_name}" == "Darwin" ]]; then
+        entry="$(dscl . -read "/Users/${user}" UserShell 2>/dev/null)" || return 1
+        printf '%s\n' "${entry#UserShell: }"
+    else
+        entry="$(getent passwd "${user}")" || return 1
+        printf '%s\n' "${entry##*:}"
+    fi
+}
+
+# Make the system zsh the login shell. Any zsh already set and listed in
+# /etc/shells is left alone, so a Homebrew or nix zsh chosen by hand survives.
+# The system one is preferred over whatever zsh is first on PATH, since a login
+# shell under ~/.nix-profile or /opt/homebrew breaks when that tree is upgraded
+# or removed.
+install_login_shell() {
+    local current target="" candidate user os_name
+    os_name="$(uname -s)"
+    current="$(login_shell)"
+    if [[ "${current##*/}" == "zsh" && -x "${current}" ]] && grep -qxF "${current}" /etc/shells; then
+        log "Login shell is already ${current}; skipping"
+        return 0
+    fi
+    for candidate in /usr/bin/zsh /bin/zsh; do
+        if [[ -x "${candidate}" ]] && "${candidate}" -fc 'exit 0' </dev/null; then
+            target="${candidate}"
+            break
+        fi
+    done
+    if [[ -z "${target}" ]]; then
+        err "No working zsh at /usr/bin/zsh or /bin/zsh"
+        return 1
+    fi
+    user="$(id -un)" || return 1
+    # chsh edits /etc/passwd alone, so an account held in LDAP or SSSD has to
+    # have its shell changed by whoever runs the directory.
+    if [[ "${os_name}" != "Darwin" ]] && ! grep -q "^${user}:" /etc/passwd; then
+        log "${user} is not in /etc/passwd, so chsh cannot change its shell; skipping"
+        return 0
+    fi
+    # chsh refuses a shell missing from /etc/shells.
+    if ! grep -qxF "${target}" /etc/shells; then
+        printf '%s\n' "${target}" | sudo tee -a /etc/shells >/dev/null || return 1
+    fi
+    log "Changing login shell from ${current:-unknown} to ${target}"
+    sudo chsh -s "${target}" "${user}" || return 1
+    current="$(login_shell)"
+    if [[ "${current}" != "${target}" ]]; then
+        err "chsh exited 0 but the login shell is still ${current:-unknown}"
+        return 1
+    fi
+}
+
 # Generate zsh completions for the tools that can print their own but ship it
 # nowhere useful. Runs after every other install step, since it invokes each
 # binary. The output goes to the user site-functions directory that

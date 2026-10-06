@@ -132,6 +132,7 @@ main() {
     require_cmd brew
 
     run_step install_brew_formulae_if_missing git zsh tmux node entr
+    run_step install_login_shell
     run_step install_cmake
     run_step install_direnv
     run_step install_nix_direnv

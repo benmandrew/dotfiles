@@ -310,6 +310,7 @@ main() {
     # Early, so every later step and the user's own work runs against the
     # newer git rather than jammy's 2.34.1.
     run_step install_git
+    run_step install_login_shell
     run_step install_inotify_limits
     run_step install_vscode_unattended_upgrades
     run_step install_tmux_from_source

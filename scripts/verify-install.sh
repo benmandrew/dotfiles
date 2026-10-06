@@ -182,6 +182,31 @@ check_bash_version() {
 
 check_bash_version
 
+# Read from the account database, as install_login_shell does, since $SHELL is
+# stale until the next login. An account missing from /etc/passwd (LDAP, SSSD)
+# is one chsh cannot change, and the installer skips it, so it only warns.
+check_login_shell() {
+    local user shell
+    user="$(id -un)"
+    if [[ "${os_name}" == "Darwin" ]]; then
+        shell="$(dscl . -read "/Users/${user}" UserShell 2>/dev/null | awk '{ print $2 }')"
+    else
+        shell="$(getent passwd "${user}" | cut -d: -f7)"
+    fi
+    if [[ "${shell##*/}" == "zsh" && -x "${shell}" ]]; then
+        printf "\033[1;32m[ok]\033[0m   login shell (%s)\n" "${shell}"
+        ((ok++)) || true
+    elif [[ "${os_name}" != "Darwin" ]] && ! grep -q "^${user}:" /etc/passwd; then
+        printf "\033[1;33m[warn]\033[0m login shell is %s; %s is not in /etc/passwd, so chsh cannot change it\n" \
+            "${shell:-unknown}" "${user}"
+    else
+        printf "\033[1;31m[FAIL]\033[0m login shell is %s, not zsh\n" "${shell:-unknown}" >&2
+        ((fail++)) || true
+    fi
+}
+
+check_login_shell
+
 # Editor and formatter for OCaml, installed into the default opam switch.
 check_cmd ocamllsp
 check_cmd ocamlformat
