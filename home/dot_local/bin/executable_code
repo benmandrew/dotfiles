@@ -1,0 +1,20 @@
+#!/bin/sh
+# Disable GPU rasterisation: tinymist's SVG preview stutters on Intel/Mesa
+# without it. argv.json does not accept this switch.
+#
+# The explicit "=true" stops the CLI parser, which does not know the switch,
+# from taking the next argument (such as a path) as its value. Its "not in the
+# list of known options" warning is filtered from stderr. VS Code's exit status
+# comes back through fd 4, since a pipeline would report grep's, and git reads
+# the status of `code --wait` as the editor's.
+warning="'disable-gpu-rasterization' is not in the list of known options"
+exec 3>&1
+status=$(
+    {
+        {
+            /usr/share/code/bin/code --disable-gpu-rasterization=true "$@" 2>&1 >&3 3>&- 4>&-
+            echo "$?" >&4
+        } | grep -v -F "${warning}" >&2
+    } 4>&1
+)
+exit "${status}"
