@@ -14,7 +14,30 @@ from .sudo import sudo_command
 _LEADING_DIGITS = re.compile(r"\d+")
 
 
-def require_runs(context: StepContext, command: str | Path, *probe: str) -> None:
+def require_command(context: StepContext, command: str) -> None:
+    """Fail the step unless `command` is on PATH."""
+    if context.which(command) is None:
+        raise StepFailed(f"Missing required command: {command}")
+
+
+def retry_once(context: StepContext, argv: Sequence[str]) -> None:
+    """Run a command, and once more if it fails.
+
+    For vendor self-updaters, which fetch on their own rather than through
+    fetch.download and its curl retries. On 14 September 2026 `rustup update`
+    failed on one dropped download of a nightly component, rolled back cleanly,
+    and succeeded when retried by hand. These updaters leave the old version in
+    place on failure, so a second attempt is safe.
+    """
+    if context.call(argv) == 0:
+        return
+    context.log(f"{argv[0]} failed; retrying once")
+    context.run(argv)
+
+
+def require_runs(
+    context: StepContext, command: str | Path, *probe: str, env: dict[str, str] | None = None
+) -> None:
     """Fail the step unless `command` runs.
 
     An installer's exit status says nothing about the binary it leaves behind.
@@ -25,7 +48,7 @@ def require_runs(context: StepContext, command: str | Path, *probe: str) -> None
     probe must print and exit: no network, no GUI, nothing written.
     """
     probe = probe or ("--version",)
-    if context.succeeds([str(command), *probe]):
+    if context.succeeds([str(command), *probe], env=env):
         return
     resolved = context.which(str(command)) or "not on PATH"
     raise StepFailed(
@@ -63,9 +86,16 @@ def version_gte(current: str, required: str) -> bool:
     return parts(current) >= parts(required)
 
 
-def sudo(context: StepContext, argv: Sequence[str]) -> None:
-    """Run a command as root, through the askpass helper when one is live."""
-    context.run([*sudo_command(context.env), *argv])
+def sudo(context: StepContext, argv: Sequence[object], *, check: bool = True) -> int:
+    """Run a command as root, through the askpass helper when one is live.
+
+    A non-zero exit fails the step unless `check` is off, and then it is
+    returned.
+    """
+    status = context.call([*sudo_command(context.env), *map(str, argv)])
+    if check and status != 0:
+        raise StepFailed
+    return status
 
 
 def local_bin(context: StepContext) -> Path:

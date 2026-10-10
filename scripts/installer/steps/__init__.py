@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from ..runner import Step
-from . import cargo_tools, cmake, lua_ls, release_tools
+from . import atuin, cargo_tools, cmake, elan, go, lua_ls, neovim, nerd_font, release_tools
 
 PORTED: dict[str, Step] = {
     step.name: step
-    for step in (*cargo_tools.STEPS, *cmake.STEPS, *lua_ls.STEPS, *release_tools.STEPS)
+    for module in (atuin, cargo_tools, cmake, elan, go, lua_ls, neovim, nerd_font, release_tools)
+    for step in module.STEPS
 }

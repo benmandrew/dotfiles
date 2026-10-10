@@ -6,6 +6,7 @@ import hashlib
 import io
 import os
 import re
+import shutil
 import tarfile
 import tempfile
 import unittest
@@ -62,11 +63,22 @@ if [ -n "$out" ]; then cp "$file" "$out"; else cat "$file"; fi
 """
 
 
+# What the fakes and the steps themselves call, and nothing a step installs.
+_SYSTEM_TOOLS = (
+    *("awk", "basename", "bash", "cat", "chmod", "cp", "cut", "date", "dirname", "env"),
+    *("find", "grep", "gzip", "head", "id", "install", "ln", "ls", "mkdir", "mktemp", "mv"),
+    *("readlink", "rm", "sed", "sh", "shasum", "sha256sum", "sleep", "sort", "tail", "tar"),
+    *("tee", "touch", "tr", "uname", "unzip", "wc", "xargs"),
+)
+
+
 class StepCase(ConsoleCase):
     """A test that runs steps against stand-ins for the network and the tools.
 
-    PATH is a directory of fakes ahead of /usr/bin and /bin, HOME is empty, and
-    `curl` serves what `serve` was given.
+    PATH is a directory of fakes ahead of a directory holding links to the
+    system's basic tools, HOME is empty, and `curl` serves what `serve` was
+    given. /usr/bin itself stays off PATH, since it holds a jq and a git on
+    macOS and most of what the steps install on a CI runner.
     """
 
     def setUp(self) -> None:
@@ -76,10 +88,15 @@ class StepCase(ConsoleCase):
         self.bin = root / "bin"
         self.web = root / "web"
         self.calls = root / "calls"
-        for directory in (self.home, self.bin, self.web, root / "tmp"):
+        self.system = root / "system"
+        for directory in (self.home, self.bin, self.web, self.system, root / "tmp"):
             directory.mkdir()
+        for tool in _SYSTEM_TOOLS:
+            found = shutil.which(tool, path="/usr/bin:/bin")
+            if found is not None:
+                (self.system / tool).symlink_to(found)
         self.env = {
-            "PATH": f"{self.bin}:/usr/bin:/bin",
+            "PATH": f"{self.bin}:{self.system}",
             "HOME": str(self.home),
             "TMPDIR": str(root / "tmp"),
             "FAKE_WEB": str(self.web),

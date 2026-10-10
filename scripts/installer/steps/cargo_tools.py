@@ -239,8 +239,7 @@ def _load_cargo_env(context: StepContext) -> None:
 
 def _install_from_source(context: StepContext, tool: CargoTool) -> None:
     _load_cargo_env(context)
-    if context.which("cargo") is None:
-        raise StepFailed("Missing required command: cargo")
+    tools.require_command(context, "cargo")
     # --locked builds against the dependency versions the crate was published
     # with, taken from the Cargo.lock it ships, rather than re-resolving every
     # dependency to the newest semver-compatible release. eza is what made this

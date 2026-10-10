@@ -56,20 +56,6 @@ install_brew_formulae_if_missing() {
     brew install "${missing_formulae[@]}"
 }
 
-install_neovim_if_missing() {
-    if brew list --formula neovim >/dev/null 2>&1; then
-        if [[ -n "${UPGRADE:-}" ]]; then
-            log "Upgrading Neovim"
-            brew upgrade neovim
-        else
-            log "Neovim already installed; skipping"
-        fi
-        return
-    fi
-    log "Installing Neovim"
-    brew install neovim
-}
-
 install_homebrew() {
     if command -v brew >/dev/null 2>&1; then
         log "Homebrew already installed"

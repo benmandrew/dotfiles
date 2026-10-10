@@ -169,7 +169,7 @@ LINUX = Plan(
             " docker group, which is root-equivalent.",
             legacy("install_docker"),
         ),
-        legacy("install_neovim_if_missing"),
+        _step("install_neovim_if_missing"),
         # After every other step: it runs each tool to get its completion
         # script.
         legacy("install_zsh_completions"),
@@ -277,7 +277,7 @@ MACOS = Plan(
             " on macOS, a GUI app that runs a Linux VM.",
             legacy("install_docker"),
         ),
-        legacy("install_neovim_if_missing"),
+        _step("install_neovim_if_missing"),
         # After every other step: it runs each tool to get its completion
         # script.
         legacy("install_zsh_completions"),

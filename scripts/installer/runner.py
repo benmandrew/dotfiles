@@ -155,7 +155,7 @@ class StepContext:
         if self.call(argv, env=env) != 0:
             raise StepFailed
 
-    def succeeds(self, argv: Sequence[str]) -> bool:
+    def succeeds(self, argv: Sequence[str], *, env: dict[str, str] | None = None) -> bool:
         """Whether a command exits 0. Its output is thrown away."""
         try:
             done = subprocess.run(
@@ -163,14 +163,16 @@ class StepContext:
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                env=self.env,
+                env=self.env if env is None else env,
                 check=False,
             )
         except OSError:
             return False
         return done.returncode == 0
 
-    def capture(self, argv: Sequence[str], *, quiet: bool = False) -> str | None:
+    def capture(
+        self, argv: Sequence[str], *, quiet: bool = False, env: dict[str, str] | None = None
+    ) -> str | None:
         """What a command prints, without the trailing newlines, or None if it fails.
 
         stderr goes with the step's output, or nowhere when `quiet`.
@@ -181,7 +183,7 @@ class StepContext:
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL if quiet else self._output,
-                env=self.env,
+                env=self.env if env is None else env,
                 check=False,
             )
         except OSError:

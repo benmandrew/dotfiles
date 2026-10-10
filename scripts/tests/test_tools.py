@@ -37,6 +37,40 @@ class ToolsTest(StepCase):
             self.said(),
         )
 
+    def test_require_command(self) -> None:
+        self.fake("here", prints("here"))
+        self.assertTrue(self.run_action(lambda context: tools.require_command(context, "here")))
+        self.assertFalse(self.run_action(lambda context: tools.require_command(context, "absent")))
+        self.assertIn("ERROR: Missing required command: absent\n", self.said())
+
+    def test_retry_once(self) -> None:
+        # Fails on the first call and passes on the second.
+        flaky = '#!/bin/sh\necho "flaky $*" >>"$FAKE_CALLS"\n[ -e "$HOME/tried" ] && exit 0\n'
+        self.fake("flaky", flaky + 'touch "$HOME/tried"\nexit 1\n')
+        self.assertTrue(self.run_action(lambda context: tools.retry_once(context, ["flaky", "up"])))
+        self.assertEqual(self.said(), "[install] flaky failed; retrying once\n")
+        self.assertEqual(self.called(), ["flaky up", "flaky up"])
+
+    def test_retry_once_gives_up_after_the_second_failure(self) -> None:
+        self.recording("broken", failing="update")
+        self.assertFalse(
+            self.run_action(lambda context: tools.retry_once(context, ["broken", "update"]))
+        )
+        self.assertEqual(self.called(), ["broken update", "broken update"])
+
+    def test_sudo_returns_the_status_when_unchecked(self) -> None:
+        self.fake("fails", "#!/bin/sh\nexit 4\n")
+        seen: list[int] = []
+
+        def unchecked(context: StepContext) -> None:
+            seen.append(tools.sudo(context, ["fails"], check=False))
+
+        self.assertTrue(self.run_action(unchecked))
+        self.assertEqual(seen, [4])
+        self.assertFalse(
+            self.run_action(lambda context: seen.append(tools.sudo(context, ["fails"])))
+        )
+
     def test_require_runs_names_a_missing_command(self) -> None:
         self.assertFalse(self.run_action(lambda context: tools.require_runs(context, "absent")))
         self.assertIn(

@@ -72,7 +72,7 @@ The functions every step calls move to Python with unit tests, and seven steps m
 Port in batches, deleting each bash function as its batch passes the gate. `retry_once`, `cpu_count`, `safe_git`, `ensure_user_owns` and `npm_install_g` move with the first step that calls them.
 
 - [x] Batch B, the cargo tools, in `steps/cargo_tools.py`: one table for 17 tools, with `install_eza`, `install_fd`, `install_bat`, `install_ripgrep`, `install_git_delta`, `install_hyperfine`, `install_zoxide`, `install_sccache`, `install_difftastic`, `install_cargo_nextest`, `install_typst`, `install_git_absorb` and `install_cargo_extras` built on it. Gate: items 1, 2 and 4 pass, and item 3 without sudo. See the log.
-- [ ] Batch C: `install_atuin`, `install_elan`, `install_nerd_font`, `install_neovim_if_missing`, `install_go`.
+- [ ] Batch C: `install_atuin`, `install_elan`, `install_nerd_font`, `install_neovim_if_missing` and `install_go`, one module each in `installer/steps/`. Their bash functions are deleted. Gate: items 1 and 2 pass, and item 3 without sudo; item 4 waits for a push. See the log.
 - [ ] Gate after each batch.
 
 ### Stage 4: package-manager and clone steps
@@ -146,5 +146,22 @@ Gates 2 to 4 leave the macOS and x86_64 install paths of a ported step unrun, si
 
 - On this Mac, 12 steps: the 11 that need no `cargo` print the same lines, and the 12 binaries and one zsh completion that both runs install have the same hashes. `install_cargo_extras` differs as the behaviour changes above describe: with no `cargo`, bash stopped at `cargo-fuzz`, and Python went on to install `cargo-llvm-cov` and `samply`.
 - In an x86_64 Ubuntu 22.04 container, 19 steps, the six from stage 2 that need no `sudo` included: 1,292 lines each, with one difference, a log file that `lua-language-server` writes when it runs. `cross --version` fails there in both, since `cross` needs a `cargo` the bare container lacks.
+
+### Stage 3, batch C, 10 October 2026
+
+`install-common.sh` went from 3,066 lines to 2,693. `download_verified_github` and `github_asset_sha256` went with the five steps, Neovim having been their last bash caller. The Python installer is 3,051 lines in 25 files, and twenty-five steps are now Python. `retry_once` and `require_command` are in `tools.py`; the bash `retry_once` stays for the bash steps that still call it.
+
+- **Gate 1: passed.** `nix develop --command make fmt-ci lint test-py` passes, with 164 tests, and so does the run on Python 3.9.6.
+- **Gate 2: passed.** `b3f0273` against this batch, side by side with `--no-optional` in fresh Ubuntu 22.04 arm64 containers. Each took 2,854 seconds, slower than batch B's 1,169 because the other checks ran on the same machine. The 169 lines of the install are the same in the same order, with the three baseline failures, and both verify runs end 68 passed, 3 failed. The verify output holds the same lines with `[ok] go` two lines apart: `[FAIL]` lines go to stderr, and Docker merges the two streams in no fixed order. The batch B run printed the order this batch printed, from the code that is this run's baseline. atuin, Go, elan and Neovim installed, and the font skipped, the container having no display.
+- **Gate 3: passed without sudo.** The same 66 lines as `b3f0273` on this Mac, every step skipping.
+- **Gate 4: not run.** It needs a push. It will run cold: `NEOVIM_MIN_VERSION` left `install-linux.sh` for `steps/neovim.py`, and CI builds the cache key's pin hash from every `_VERSION=` line in that file, so the restore key matches no earlier cache.
+
+The real-install check from batch B, once from `b3f0273` and once from this batch:
+
+- On this Mac, `install_elan`: the same 11 lines, and the 9 files under `~/.elan` have the same hashes. The other three macOS steps go through Homebrew, which an empty `PATH` hides.
+- In an x86_64 Ubuntu 22.04 container with `DISPLAY` set, `install_atuin`, `install_elan` and `install_nerd_font`: 28 lines each, with no difference.
+- `install_go` and `install_neovim_if_missing` write outside `HOME`, so each version ran as root in an x86_64 container of its own. Both left the same 19,583 entries under `/usr/local/go` and `/opt`, compared by type, size, mode and owner. Two telemetry counter files differ, which `go version` writes on every run.
+
+All 90 release URLs the ported steps build exist, the 16 this batch adds included.
 
 The port carries one risk that no gate removes: each of the 55 commits to `scripts/` since 10 July encodes a fix found on a real machine, and a fix that loses its comment in translation loses its reason. Every stage should move the comment with the code.
