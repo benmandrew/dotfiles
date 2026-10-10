@@ -41,9 +41,13 @@ class UnsupportedPlatform(Exception):
     pass
 
 
+def _step(name: str) -> Step:
+    """The step of that name: the Python one where it is ported, else the bash one."""
+    return PORTED.get(name) or legacy(name)
+
+
 def _steps(*names: str) -> tuple[Step, ...]:
-    """The step of each name: the Python one where it is ported, else the bash one."""
-    return tuple(PORTED.get(name) or legacy(name) for name in names)
+    return tuple(_step(name) for name in names)
 
 
 LINUX = Plan(
@@ -157,7 +161,7 @@ LINUX = Plan(
             "typst",
             "Typst: markup typesetting compiler, a single binary in ~/.local/bin. For"
             " writing documents, not for a server.",
-            legacy("install_typst"),
+            _step("install_typst"),
         ),
         OptionalStep(
             "docker",
@@ -265,7 +269,7 @@ MACOS = Plan(
             "typst",
             "Typst: markup typesetting compiler, a single binary in ~/.local/bin. For"
             " writing documents, not for a server.",
-            legacy("install_typst"),
+            _step("install_typst"),
         ),
         OptionalStep(
             "docker",

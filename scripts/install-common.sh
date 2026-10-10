@@ -890,270 +890,6 @@ _clangd_path() {
     fi
 }
 
-# The seven tools routed through install_cargo_tool were compiled from source
-# until August 2026. On the CI runner that cost 5m21s of a 7m36s install run —
-# eza 67s, bat 79s, delta 75s, fd 36s, rg 22s, hyperfine 22s, zoxide 20s — and
-# the same wait lands on any new machine. All seven publish prebuilt binaries
-# on their GitHub releases, so the tarball is fetched instead and cargo is
-# kept only as the fallback.
-#
-# The release assets agree on nothing. eza leaves the version out of the file
-# name entirely; fd, bat and hyperfine keep the tag's leading `v`; ripgrep,
-# delta and zoxide strip it. Some unpack a bare binary, others a versioned
-# directory. So the name is per-tool data — %TAG% is the tag as published,
-# %VER% the same with any leading `v` removed, %TRIPLE% the Rust target triple
-# — and the binary is found by searching the unpacked tree rather than by a
-# path that would have to be spelled out seven different ways.
-#
-# The triple list is that tool's platform coverage: only triples upstream
-# actually publishes are named, so a platform absent from the list falls back
-# to `cargo install`. eza is the one that does, shipping no macOS asset at all.
-#
-# Five fields, pipe-separated:
-#   <repo>|<asset template>|<published triples>|<checksum template>|<pinned tag>
-# The checksum template is empty for the upstreams that publish none, which is
-# most of them; %ASSET% in it stands for the asset name already expanded.
-_rust_tool_spec() {
-    case "$1" in
-        eza) echo "eza-community/eza|eza_%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu||${EZA_VERSION}" ;;
-        fd) echo "sharkdp/fd|fd-%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin||${FD_VERSION}" ;;
-        bat) echo "sharkdp/bat|bat-%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin||${BAT_VERSION}" ;;
-        rg) echo "BurntSushi/ripgrep|ripgrep-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin|%ASSET%.sha256|${RIPGREP_VERSION}" ;;
-        delta) echo "dandavison/delta|delta-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin||${DELTA_VERSION}" ;;
-        hyperfine) echo "sharkdp/hyperfine|hyperfine-%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin||${HYPERFINE_VERSION}" ;;
-        zoxide) echo "ajeetdsouza/zoxide|zoxide-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin||${ZOXIDE_VERSION}" ;;
-        difft) echo "Wilfred/difftastic|difft-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin x86_64-apple-darwin||${DIFFTASTIC_VERSION}" ;;
-        sccache) echo "mozilla/sccache|sccache-%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin x86_64-apple-darwin|%ASSET%.sha256|${SCCACHE_VERSION}" ;;
-        # Upstream publishes one fat macOS binary rather than a per-arch pair,
-        # which is why universal-apple-darwin is in the triple list at all.
-        cargo-nextest) echo "nextest-rs/nextest|%TAG%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl universal-apple-darwin|%TAG%-%TRIPLE%.sha256|${CARGO_NEXTEST_VERSION}" ;;
-        # The five install_cargo_extras tools, built from source until October
-        # 2026 at 389s of an 1,086s cold CI run, cargo-audit alone 164s.
-        # rustsec/rustsec is a monorepo whose newest release may belong to
-        # another crate (cvss/v3.0.0 when this was written), so its repo field
-        # carries a tag prefix for github_latest_tag to filter on.
-        cargo-audit) echo "rustsec/rustsec:cargo-audit/|cargo-audit-%TRIPLE%-v%VER%.tgz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin x86_64-apple-darwin||${CARGO_AUDIT_VERSION}" ;;
-        cargo-llvm-cov) echo "taiki-e/cargo-llvm-cov|cargo-llvm-cov-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin x86_64-apple-darwin||${CARGO_LLVM_COV_VERSION}" ;;
-        samply) echo "mstange/samply|samply-%TRIPLE%.tar.xz|x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-apple-darwin x86_64-apple-darwin|%ASSET%.sha256|${SAMPLY_VERSION}" ;;
-        # x86_64 only, so ARM machines keep the cargo fallback for these two.
-        cargo-fuzz) echo "rust-fuzz/cargo-fuzz|cargo-fuzz-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl x86_64-apple-darwin||${CARGO_FUZZ_VERSION}" ;;
-        cross) echo "cross-rs/cross|cross-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl x86_64-apple-darwin||${CROSS_VERSION}" ;;
-        # No aarch64 asset for either platform, so an ARM machine takes the
-        # cargo fallback; git-absorb is a small crate and builds in seconds.
-        git-absorb) echo "tummychow/git-absorb|git-absorb-%VER%-%TRIPLE%.tar.gz|x86_64-unknown-linux-musl x86_64-apple-darwin||${GIT_ABSORB_VERSION}" ;;
-        # .tar.xz, which tar -xf detects on its own. No checksum manifest is
-        # published; the binary sits in a typst-<triple>/ directory.
-        typst) echo "typst/typst|typst-%TRIPLE%.tar.xz|x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darwin x86_64-apple-darwin||${TYPST_VERSION}" ;;
-        *) return 1 ;;
-    esac
-}
-
-# Target triples for this machine, best first. musl leads gnu wherever a tool
-# offers both, for the reason install_atuin sets out at length: upstream builds
-# the gnu binaries against a newer glibc than the oldest distro here ships, and
-# they die at the dynamic linker before main() runs. None of these tools is
-# allocator-bound, so the static build costs nothing that matters.
-_rust_tool_triples() {
-    local os_name arch
-    os_name="$(uname -s)"
-    arch="$(uname -m)"
-    case "${os_name}/${arch}" in
-        Linux/x86_64 | Linux/amd64) echo "x86_64-unknown-linux-musl x86_64-unknown-linux-gnu" ;;
-        Linux/aarch64 | Linux/arm64) echo "aarch64-unknown-linux-musl aarch64-unknown-linux-gnu" ;;
-        Darwin/arm64 | Darwin/aarch64) echo "aarch64-apple-darwin universal-apple-darwin" ;;
-        Darwin/x86_64) echo "x86_64-apple-darwin universal-apple-darwin" ;;
-        *) echo "" ;;
-    esac
-}
-
-# First release-asset version number in `<tool> --version` output. Matched with
-# a regex rather than by field, because the seven disagree there too: eza
-# prints a bare `v0.23.5`, rg and eza print several lines, and some wrap the
-# number in escape sequences. This is the same read install_btop makes.
-# A cargo subcommand run directly takes its own name first, as cargo passes
-# it; cargo-llvm-cov rejects a bare --version. The other cargo-* tools here
-# accept both forms. Set in an array rather than printed, so the callers need
-# no command substitution to split.
-_RUST_TOOL_PROBE=()
-_rust_tool_probe() {
-    if [[ "$1" == cargo-* ]]; then
-        _RUST_TOOL_PROBE=("${1#cargo-}" --version)
-    else
-        _RUST_TOOL_PROBE=(--version)
-    fi
-}
-
-_rust_tool_version() {
-    local output
-    _rust_tool_probe "$1"
-    output="$("$1" "${_RUST_TOOL_PROBE[@]}" 2>/dev/null)" || return 1
-    [[ "${output}" =~ ([0-9]+\.[0-9]+\.[0-9]+) ]] || return 1
-    echo "${BASH_REMATCH[1]}"
-}
-
-_install_rust_tool_binary() {
-    local cmd="$1" repo="$2" template="$3" triple="$4" sum_template="$5" pin="$6"
-
-    local tag version
-    tag="$(pinned_tag "${pin}" "${repo}")" || return 1
-    # nextest-rs and samply tag the crate name into the tag
-    # (`cargo-nextest-0.9.143`, `samply-v0.13.1`) and rustsec as a path
-    # (`cargo-audit/v0.22.2`), so strip those and then a leading `v` before
-    # comparing against what the installed binary reports.
-    version="${tag#"${cmd}-"}"
-    version="${version#"${cmd}/"}"
-    version="${version#v}"
-    if [[ -z "${version}" ]]; then
-        err "Could not resolve the ${cmd} release to install"
-        return 1
-    fi
-
-    if [[ -n "${UPGRADE:-}" ]] && command -v "${cmd}" >/dev/null 2>&1; then
-        local current
-        current="$(_rust_tool_version "${cmd}")" || current=""
-        if [[ "${current}" == "${version}" ]]; then
-            log "${cmd} ${current} already at latest; skipping"
-            return
-        fi
-    fi
-
-    local asset="${template}"
-    asset="${asset//%TAG%/${tag}}"
-    asset="${asset//%VER%/${version}}"
-    asset="${asset//%TRIPLE%/${triple}}"
-
-    # ${repo%%:*} drops a tag prefix (see _rust_tool_spec) from the URL.
-    local base_url="https://github.com/${repo%%:*}/releases/download/${tag}"
-    local tmp_dir
-    tmp_dir="$(mktemp -d)"
-    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    if [[ -n "${sum_template}" ]]; then
-        local sum_asset="${sum_template}"
-        sum_asset="${sum_asset//%ASSET%/${asset}}"
-        sum_asset="${sum_asset//%TAG%/${tag}}"
-        sum_asset="${sum_asset//%VER%/${version}}"
-        sum_asset="${sum_asset//%TRIPLE%/${triple}}"
-        download_verified "${base_url}/${asset}" "${tmp_dir}/${asset}" \
-            "${base_url}/${sum_asset}" || return 1
-    else
-        download "${base_url}/${asset}" "${tmp_dir}/${asset}" || return 1
-    fi
-    tar -C "${tmp_dir}" -xf "${tmp_dir}/${asset}" || return 1
-
-    # Located by name, since the tarballs disagree on whether the binary sits
-    # at the root or inside a versioned directory. -type f keeps it off the
-    # completion and man directories several of them ship alongside.
-    local binary
-    binary="$(find "${tmp_dir}" -type f -name "${cmd}" -print -quit)"
-    if [[ -z "${binary}" ]]; then
-        err "No ${cmd} binary inside ${asset}"
-        return 1
-    fi
-    mkdir -p "${HOME}/.local/bin"
-    install -m755 "${binary}" "${HOME}/.local/bin/${cmd}" || return 1
-
-    # Several of these tarballs carry a completions/ directory, and for a tool
-    # with no "print your own completion" subcommand that archive is the only
-    # source there is: install_zsh_completions can generate for uv, fd, delta
-    # and the rest, but zoxide 0.9.9 has no such subcommand, so on Linux — where
-    # these arrive as bare binaries with no package manager to link a
-    # site-functions file — `zoxide <TAB>` completed nothing at all. Homebrew
-    # links one on macOS, which is why the gap only shows on the other platform.
-    # Skipped where a system-wide copy already exists, so the package manager
-    # keeps ownership, matching the policy install_zsh_completions follows.
-    local completion
-    completion="$(find "${tmp_dir}" -type f -name "_${cmd}" -print -quit)"
-    if [[ -n "${completion}" ]] && ! _zsh_completion_installed "${cmd}"; then
-        local comp_dir="${XDG_DATA_HOME:-${HOME}/.local/share}/zsh/site-functions"
-        mkdir -p "${comp_dir}"
-        if install -m644 "${completion}" "${comp_dir}/_${cmd}"; then
-            log "Installed the zsh completion shipped with ${cmd}"
-            # compinit caches the command-to-function map in the dump and only
-            # rereads fpath when the dump is stale, so drop it. Cheap, and this
-            # step does not always run before install_zsh_completions, which
-            # does the same at the end of a full run.
-            rm -f "${ZDOTDIR:-${HOME}}/.zcompdump" "${ZDOTDIR:-${HOME}}/.zcompdump.zwc"
-        fi
-    fi
-
-    # Delete the build this function left behind before it moved to prebuilt
-    # binaries. ~/.local/bin leads ~/.cargo/bin in the rendered zshrc so the new
-    # copy would win there anyway, but verify-install.sh searches the two the
-    # other way round, and a stale build answering for the tool on every check
-    # is exactly the shadowing install_starship had to unpick for /usr/local.
-    rm -f "${HOME}/.cargo/bin/${cmd}"
-    note_shadowed "${cmd}" "${HOME}/.local/bin/${cmd}"
-    _rust_tool_probe "${cmd}"
-    require_runs "${HOME}/.local/bin/${cmd}" "${_RUST_TOOL_PROBE[@]}"
-}
-
-_install_cargo_tool_from_source() {
-    local crate="$1"
-    load_cargo_env
-    require_cmd cargo
-    # --locked builds against the dependency versions the crate was published
-    # with, taken from the Cargo.lock it ships, rather than re-resolving every
-    # dependency to the newest semver-compatible release. eza is what made this
-    # necessary. It pins `palette = "=0.7.5"`, palette itself takes
-    # `palette_derive = "0.7"`, and an unlocked resolve therefore pairs the 0.7.5
-    # library with the 0.7.7 derive macro. That macro generates references to
-    # `crate::lms` and `xyz::meta`, modules which only exist from 0.7.6, so the
-    # build dies with 34 E0433s and takes the step with it. Every CI install job
-    # between 13 and 18 August 2026 failed there. The shipped lockfile pairs
-    # 0.7.5 with palette_derive 0.7.6, and `cargo install eza --locked` then
-    # builds in 43s. All six crates installed through here ship a Cargo.lock,
-    # which is what --locked needs.
-    cargo install --locked "${crate}"
-}
-
-install_cargo_tool() {
-    local cmd="$1" crate="${2:-$1}"
-
-    local repo="" template="" published="" sum_template="" pin="" triple=""
-    local spec
-    if spec="$(_rust_tool_spec "${cmd}")"; then
-        IFS='|' read -r repo template published sum_template pin <<<"${spec}"
-
-        local candidates candidate triple_list
-        triple_list="$(_rust_tool_triples)"
-        read -r -a candidates <<<"${triple_list}"
-        for candidate in "${candidates[@]}"; do
-            if [[ " ${published} " == *" ${candidate} "* ]]; then
-                triple="${candidate}"
-                break
-            fi
-        done
-    fi
-
-    # The skip check comes before github_latest_tag, so an already-installed
-    # tool costs no API call. install_atuin still resolves the tag first and
-    # pays for it on every run.
-    local existing
-    existing="$(command -v "${cmd}" 2>/dev/null)" || existing=""
-    if [[ -n "${existing}" && -z "${UPGRADE:-}" ]]; then
-        if [[ -z "${triple}" || "${existing}" != "${HOME}/.cargo/bin/"* ]]; then
-            log "${cmd} already installed; skipping"
-            return
-        fi
-        log "Replacing cargo-built ${cmd} with the prebuilt binary"
-    elif [[ -n "${existing}" ]]; then
-        log "Upgrading ${cmd}"
-    else
-        log "Installing ${cmd}"
-    fi
-
-    if [[ -z "${triple}" ]]; then
-        _install_cargo_tool_from_source "${crate}" || return 1
-        local built="${CARGO_HOME:-${HOME}/.cargo}/bin/${cmd}"
-        note_shadowed "${cmd}" "${built}"
-        _rust_tool_probe "${cmd}"
-        require_runs "${built}" "${_RUST_TOOL_PROBE[@]}"
-        return
-    fi
-    _install_rust_tool_binary "${cmd}" "${repo}" "${template}" "${triple}" \
-        "${sum_template}" "${pin}"
-}
-
 install_pyright() {
     if command -v pyright >/dev/null 2>&1; then
         if [[ -z "${UPGRADE:-}" ]]; then
@@ -1187,13 +923,6 @@ install_bash_ls() {
     note_shadowed bash-language-server "${HOME}/.local/bin/bash-language-server"
     require_runs "${HOME}/.local/bin/bash-language-server"
 }
-
-install_eza() { install_cargo_tool eza; }
-install_fd() { install_cargo_tool fd fd-find; }
-install_bat() { install_cargo_tool bat; }
-install_ripgrep() { install_cargo_tool rg ripgrep; }
-install_git_delta() { install_cargo_tool delta git-delta; }
-install_hyperfine() { install_cargo_tool hyperfine; }
 
 install_gh() {
     local os_name
@@ -1309,8 +1038,6 @@ install_gh_stack_skill() {
     log "Installing gh-stack skill for Claude Code"
     gh skill install github/gh-stack gh-stack --agent claude-code --scope user --force
 }
-
-install_zoxide() { install_cargo_tool zoxide; }
 
 install_fzf() {
     if command -v fzf >/dev/null 2>&1; then
@@ -2339,37 +2066,6 @@ install_go() {
     GOTOOLCHAIN=local require_runs /usr/local/go/bin/go version
 }
 
-# Prebuilt release binaries where upstream publishes one for this platform, and
-# `cargo install` where it does not -- the shape install_cargo_tool already has.
-install_sccache() { install_cargo_tool sccache; }
-install_difftastic() { install_cargo_tool difft difftastic; }
-install_cargo_nextest() { install_cargo_tool cargo-nextest; }
-
-# git-absorb publishes no aarch64 asset for either platform, so on an ARM Mac
-# install_cargo_tool would build it from source on every fresh machine. brew
-# has a bottle, so take that and leave Linux on the release binary.
-install_git_absorb() {
-    local os_name
-    os_name="$(uname -s)"
-    if [[ "${os_name}" != "Darwin" ]]; then
-        install_cargo_tool git-absorb
-        return
-    fi
-    if brew list --formula git-absorb >/dev/null 2>&1; then
-        if [[ -z "${UPGRADE:-}" ]]; then
-            log "git-absorb already installed; skipping"
-            return
-        fi
-        log "Upgrading git-absorb"
-        brew upgrade git-absorb || return 1
-        require_runs git-absorb
-        return
-    fi
-    log "Installing git-absorb"
-    brew install git-absorb || return 1
-    require_runs git-absorb
-}
-
 # ansible-lint is a Python package, so brew on macOS and a uv-managed tool
 # environment on Linux -- the same place aider and the other Python CLIs here
 # would go, and version-independent of whatever python3 the distro ships.
@@ -2484,24 +2180,6 @@ install_fzf_git() {
     log "Installing fzf-git.sh"
     mkdir -p "$(dirname "${fzf_git_home}")"
     git clone --depth 1 https://github.com/junegunn/fzf-git.sh.git "${fzf_git_home}"
-}
-
-# Cargo tools for Rust work rather than for the shell. Each goes through
-# install_cargo_tool, so it arrives as a prebuilt binary where _rust_tool_spec
-# lists the platform and is built from source elsewhere (cargo-fuzz and cross
-# on ARM). One step rather than five, so a failure is reported as one line, and
-# each tool is skipped individually once installed.
-install_cargo_extras() {
-    local tool failed=()
-    # Every tool is tried, so one broken build does not leave the rest
-    # uninstalled; the failures are named together at the end.
-    for tool in cargo-audit cargo-fuzz cargo-llvm-cov cross samply; do
-        install_cargo_tool "${tool}" || failed+=("${tool}")
-    done
-    if ((${#failed[@]} > 0)); then
-        err "cargo tools failed to install: ${failed[*]}"
-        return 1
-    fi
 }
 
 # The thing advertised at obsidian.md/cli is not a separately installable
@@ -3025,11 +2703,6 @@ print_zathura_app_hint() {
     log "  that opens PDFs on double-click, run the tap's convert-into-app.sh:"
     log "  https://github.com/homebrew-zathura/homebrew-zathura"
 }
-
-# typst ships prebuilt static (musl) binaries for both Linux arches and both
-# macOS arches, so it goes through the same path as the Rust CLIs above. The
-# crate is typst-cli; a copy built by `cargo install` is replaced.
-install_typst() { install_cargo_tool typst typst-cli; }
 
 # TeX Live. Linux takes upstream TeX Live through install-tl, since apt pins
 # it to the distro's release year: Ubuntu 22.04 ships TeX Live 2021 and biber
