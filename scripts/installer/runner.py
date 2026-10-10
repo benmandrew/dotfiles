@@ -138,7 +138,7 @@ class StepContext:
         except FileNotFoundError:
             # What a shell says and returns, so a missing tool reads the same
             # in a step's log whichever language the step is in.
-            self._say(f"{argv[0]}: command not found\n")
+            self.note(f"{argv[0]}: command not found")
             return 127
         try:
             return proc.wait()
@@ -190,11 +190,13 @@ class StepContext:
             return None
         return done.stdout.decode(errors="replace").rstrip("\n")
 
-    def _say(self, text: str) -> None:
+    def note(self, text: str) -> None:
+        """Add a line to the step's output, which is shown only if the step fails."""
+        line = f"{text}\n".encode()
         if self._output is None:
-            self.console.write(text.encode())
+            self.console.write(line)
         else:
-            self._output.write(text.encode())
+            self._output.write(line)
 
 
 def _stop(proc: subprocess.Popen[bytes]) -> None:

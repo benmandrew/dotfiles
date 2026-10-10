@@ -29,6 +29,7 @@ Each of these is deliberate. Anything else that differs from the bash installer 
 - The CLT install moves into the bootstrap, ahead of the sudo password prompt, because Python needs the tools. The sudo timestamp no longer ages while the install dialog is open.
 - `install-linux.sh` and `install-macos-arm64.sh` are step libraries. Run directly, each hands over to `install.sh`.
 - `--help` works, and an unknown argument exits 2 with a usage line (argparse), where bash exited 1.
+- `install_cargo_extras` tries all five tools when one needs a `cargo` that is missing. In bash the `require_cmd` ended the step at the first such tool.
 - On SIGTERM the runner ends the bash step it is waiting on and dies of the signal at once. Bash held the signal until the step's current command had finished. A command the step started may still be running after the runner has gone.
 
 ## The gate
@@ -70,7 +71,7 @@ The functions every step calls move to Python with unit tests, and seven steps m
 
 Port in batches, deleting each bash function as its batch passes the gate. `retry_once`, `cpu_count`, `safe_git`, `ensure_user_owns` and `npm_install_g` move with the first step that calls them.
 
-- [ ] Batch B, the cargo tools, `install_typst` among them: `_rust_tool_spec`, `_install_rust_tool_binary`, `install_cargo_tool` and the steps built on them (`install_eza`, `install_fd`, `install_bat`, `install_ripgrep`, `install_git_delta`, `install_hyperfine`, `install_zoxide`, `install_sccache`, `install_difftastic`, `install_git_absorb`, `install_cargo_nextest`, `install_cargo_extras`).
+- [x] Batch B, the cargo tools, in `steps/cargo_tools.py`: one table for 17 tools, with `install_eza`, `install_fd`, `install_bat`, `install_ripgrep`, `install_git_delta`, `install_hyperfine`, `install_zoxide`, `install_sccache`, `install_difftastic`, `install_cargo_nextest`, `install_typst`, `install_git_absorb` and `install_cargo_extras` built on it. Gate: items 1 and 2 pass, and item 3 without sudo; item 4 waits on the push. See the log.
 - [ ] Batch C: `install_atuin`, `install_elan`, `install_nerd_font`, `install_neovim_if_missing`, `install_go`.
 - [ ] Gate after each batch.
 
@@ -131,5 +132,19 @@ Stage 2 started without the terminal run for gate 3, which is still owed.
 Three things differ from the bash steps, all on failure paths. `install_gitleaks`, `install_glow` and `install_treehouse` find their binary by name inside the tarball, as `install_ripgrep_all` always did, and report "No gitleaks binary inside ..." where `install` used to fail on a fixed path. A binary is copied beside its target and renamed over it, so an interrupted copy leaves the old one. `lua-language-server`'s link is replaced the same way.
 
 `install_typst` was listed in batch A by mistake. It calls `install_cargo_tool`, so it moves with batch B.
+
+### Stage 3, batch B, 10 October 2026
+
+`install-common.sh` went from 3,393 lines to 3,066, and from 115 functions to 95. The Python installer is 2,608 lines in 20 files, with 1,700 lines of tests. Twenty steps are now Python.
+
+- **Gate 1: passed.** `nix develop --command make fmt-ci lint test-py` passes, with 128 tests, and so does the run on Python 3.9.6.
+- **Gate 2: passed.** `1bb0d6f` against this batch, side by side with `--no-optional` in fresh Ubuntu 22.04 arm64 containers. The old run took 1,178 seconds and the new one 1,169. Each printed 251 lines, the same once the temporary directory names are replaced, with the three baseline failures and 68 passed, 3 failed from `verify-install.sh`. Twelve of the thirteen steps ran, `install_typst` being optional. Nine tools came as release binaries, and `git-absorb`, `cargo-fuzz` and `cross` were built by `cargo install`, upstream publishing no aarch64 asset for them.
+- **Gate 3: passed without sudo.** The same 66 lines as `1bb0d6f` on this Mac, every step skipping.
+- **Gate 4: waiting on the push.**
+
+Gates 2 to 4 leave the macOS and x86_64 install paths of a ported step unrun, since a provisioned Mac and a warm CI cache both skip. So this batch added a check that runs the named steps for real into an empty `HOME`, with the system's `PATH` alone, once from `1bb0d6f` and once from this batch, and compares the output and a SHA-256 of every file left behind.
+
+- On this Mac, 12 steps: the 11 that need no `cargo` print the same lines, and the 12 binaries and one zsh completion that both runs install have the same hashes. `install_cargo_extras` differs as the behaviour changes above describe: with no `cargo`, bash stopped at `cargo-fuzz`, and Python went on to install `cargo-llvm-cov` and `samply`.
+- In an x86_64 Ubuntu 22.04 container, 19 steps, the six from stage 2 that need no `sudo` included: 1,292 lines each, with one difference, a log file that `lua-language-server` writes when it runs. `cross --version` fails there in both, since `cross` needs a `cargo` the bare container lacks.
 
 The port carries one risk that no gate removes: each of the 55 commits to `scripts/` since 10 July encodes a fix found on a real machine, and a fix that loses its comment in translation loses its reason. Every stage should move the comment with the code.
