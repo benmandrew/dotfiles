@@ -1,6 +1,12 @@
+{{- /* The Bash tool runs $SHELL, and zsh does not word-split an unquoted $var,
+       so commands written as bash break. Prefer the nix profile's bash, since
+       macOS ships 3.2 as /bin/bash. Claude Code ignores a path that does not
+       run and falls back to $SHELL. */ -}}
+{{- $nixBash := joinPath .chezmoi.homeDir ".nix-profile/bin/bash" -}}
 {
   "env": {
-    "CLAUDE_CODE_NO_FLICKER": "1"
+    "CLAUDE_CODE_NO_FLICKER": "1",
+    "CLAUDE_CODE_SHELL": {{ if stat $nixBash }}{{ $nixBash | quote }}{{ else }}"/bin/bash"{{ end }}
   },
   "includeCoAuthoredBy": false,
   "attribution": {
