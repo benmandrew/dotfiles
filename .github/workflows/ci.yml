@@ -175,7 +175,7 @@ jobs:
       # rebuilt it: 437s of a 521s install job on 5 September, the runner
       # having no OCaml, so the switch compiles ocaml-base-compiler before
       # ocaml-lsp-server and ocamlformat. The key covers only what decides the
-      # switch's contents (the opam pin, the two functions that build it, and
+      # switch's contents (the opam pin, the step module that builds it, and
       # the runner image), so it hits across unrelated script edits, and a hit
       # saves nothing. No restore-keys: a change to that code should rebuild
       # from scratch, which is what it needs testing against. install_opam
@@ -188,7 +188,7 @@ jobs:
           hash="$({
             echo "${ImageOS:-}"
             grep -h '^OPAM_VERSION=' scripts/pins.sh
-            sed -n '/^install_opam()/,/^}/p;/^install_ocaml_tools()/,/^}/p' scripts/install-common.sh
+            cat scripts/installer/steps/opam.py
           } | sha256sum | cut -c1-16)"
           echo "hash=${hash}" >> "${GITHUB_OUTPUT}"
 

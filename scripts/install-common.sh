@@ -35,13 +35,6 @@ err() {
     printf "\033[1;31m[install]\033[0m ERROR: %s\n" "$*" >&3
 }
 
-require_cmd() {
-    if ! command -v "$1" >/dev/null 2>&1; then
-        err "Missing required command: $1"
-        exit 1
-    fi
-}
-
 # An installer's exit status says nothing about the binary it leaves behind. On
 # 14 September 2026 `claude update` upgraded an npm install through npm, left the
 # package's placeholder where the native binary belongs, and exited 0; the step
@@ -183,20 +176,6 @@ download_verified() {
     verify_sha256 "${dest}" "${manifest_url}" "${url##*/}" || return 1
 }
 
-# The pinned versions, which the Python steps read too (installer/pins.py).
-# shellcheck source=scripts/pins.sh
-source "$(dirname -- "${BASH_SOURCE[0]}")/pins.sh"
-
-# The pinned tag, or the newest tag upstream publishes under --upgrade.
-pinned_tag() {
-    local pin="$1" repo="$2"
-    if [[ -n "${UPGRADE:-}" ]]; then
-        github_latest_tag "${repo}"
-        return
-    fi
-    printf '%s\n' "${pin}"
-}
-
 # Shadowing sudo for the bash steps. The runner (installer/sudo.py) reads the
 # password once and exports SUDO_ASKPASS, and -A is what makes sudo use it. A
 # function is not inherited by the subprocesses brew and the vendor installers
@@ -260,44 +239,6 @@ _github_api_failure() {
     else
         printf 'no response'
     fi
-}
-
-github_latest_tag() {
-    # `owner/repo:prefix` takes the newest release whose tag starts with the
-    # prefix, for a monorepo whose releases/latest may be another crate's.
-    local repo="${1%%:*}" prefix=""
-    [[ "$1" == *:* ]] && prefix="${1#*:}"
-    local tmp headers
-    tmp="$(mktemp)"
-    headers="$(mktemp)"
-    # RETURN traps persist for the caller too until unset, so clear it here
-    # or it would also fire (and re-delete an unrelated tmp) when the caller returns.
-    trap 'rm -f "${tmp}" "${headers}"; trap - RETURN' RETURN
-    # Checked here rather than at each call site: a rate-limited or unreachable
-    # API returns an empty tag, which the callers then paste into an asset URL
-    # and download a 404 page with. Three of the ten guarded it, seven did not.
-    local endpoint="releases/latest"
-    [[ -n "${prefix}" ]] && endpoint="releases?per_page=50"
-    if ! github_api_curl "https://api.github.com/repos/${repo}/${endpoint}" \
-        -D "${headers}" -o "${tmp}"; then
-        local reason
-        reason="$(_github_api_failure "${headers}")"
-        err "GitHub API request failed for ${repo} (${reason})"
-        return 1
-    fi
-    # The API pretty-prints for some requests and sends compact JSON, all on
-    # one line, for others. A literal `"tag_name": "` strip missed the compact
-    # form and left the line's leading `{` as the tag.
-    local tag
-    # The list endpoint is newest first, so the first match is the latest.
-    tag="$(grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' "${tmp}" |
-        sed 's/.*"\([^"]*\)"$/\1/' |
-        awk -v p="${prefix}" 'index($0, p) == 1 { print; exit }' || true)"
-    if [[ -z "${tag}" ]]; then
-        err "No release tag for ${repo} in the GitHub API response"
-        return 1
-    fi
-    echo "${tag}"
 }
 
 # The repo's latest release is not necessarily a desktop one. Obsidian ships
@@ -544,197 +485,6 @@ install_wezterm() {
         "${wezterm_base}/${deb}.sha256" || return 1
     sudo apt-get install -y "${tmp_dir}/${deb}" || return 1
     require_runs wezterm
-}
-
-_opam_sandboxing_works() {
-    bwrap --bind / / --dev-bind /dev /dev --proc /proc true 2>/dev/null
-}
-
-install_opam() {
-    local os_name
-    os_name="$(uname -s)"
-
-    _install_opam_linux_binary() {
-        local os_arch opam_arch
-        os_arch="$(uname -m)"
-        if [[ "${os_arch}" == "aarch64" ]]; then
-            opam_arch="arm64"
-        else
-            opam_arch="x86_64"
-        fi
-        # opam signs its binaries with a detached GPG signature rather than
-        # publishing a checksum manifest, and verifying one needs the opam
-        # release key imported first, so this download is unverified.
-        local tag version
-        tag="$(pinned_tag "${OPAM_VERSION}" ocaml/opam)" || return 1
-        version="${tag#v}"
-        if [[ -n "${UPGRADE:-}" ]] && command -v opam >/dev/null 2>&1; then
-            local current_version
-            current_version="$(opam --version 2>/dev/null || true)"
-            if [[ "${current_version}" == "${version}" ]]; then
-                log "opam ${version} already at latest; skipping"
-                return
-            fi
-        fi
-        local binary install_dir
-        binary="opam-${version}-${opam_arch}-linux"
-        install_dir="${HOME}/.local/bin"
-        mkdir -p "${install_dir}"
-        # Fetched beside the live binary and swapped in, so a failed or
-        # truncated download leaves the old opam working.
-        local tmp
-        tmp="$(mktemp)" || return 1
-        if ! download "https://github.com/ocaml/opam/releases/download/${tag}/${binary}" "${tmp}"; then
-            rm -f "${tmp}"
-            return 1
-        fi
-        if ! install -m755 "${tmp}" "${install_dir}/opam"; then
-            rm -f "${tmp}"
-            return 1
-        fi
-        rm -f "${tmp}"
-        note_shadowed opam "${install_dir}/opam"
-        require_runs "${install_dir}/opam"
-    }
-
-    # Collected rather than returned, so the nested function is still unset.
-    local rc=0
-    if command -v opam >/dev/null 2>&1; then
-        if [[ -z "${UPGRADE:-}" ]]; then
-            log "opam already installed; skipping"
-        else
-            log "Upgrading opam"
-            if [[ "${os_name}" == "Darwin" ]]; then
-                { brew upgrade opam && require_runs opam; } || rc=1
-            else
-                _install_opam_linux_binary || rc=1
-            fi
-        fi
-    else
-        log "Installing opam"
-        if [[ "${os_name}" == "Darwin" ]]; then
-            { brew install opam && require_runs opam; } || rc=1
-        else
-            _install_opam_linux_binary || rc=1
-        fi
-    fi
-    unset -f _install_opam_linux_binary
-    ((rc == 0)) || return 1
-
-    # Initialise the opam root. A ~/.opam that opam cannot read is an
-    # interrupted init, which opam will not redo in place, so it is moved
-    # aside rather than skipped.
-    if [[ -f "${HOME}/.opam/config" ]] && opam switch list >/dev/null 2>&1; then
-        log "opam already initialised; skipping opam init"
-    else
-        if [[ -e "${HOME}/.opam" ]]; then
-            local aside
-            aside="${HOME}/.opam.broken.$(date +%Y%m%d%H%M%S)"
-            log "${HOME}/.opam is unusable; moving it to ${aside} and initialising afresh"
-            mv "${HOME}/.opam" "${aside}" || return 1
-        fi
-        local init_flags=(--bare --yes --no-setup)
-        if ! _opam_sandboxing_works; then
-            log "bwrap sandboxing unavailable (container/VM); initialising opam with --disable-sandboxing"
-            init_flags+=(--disable-sandboxing)
-        fi
-        opam init "${init_flags[@]}" || return 1
-    fi
-
-    install_ocaml_tools
-}
-
-# Where a C header lives on a Mac whose active developer directory does not
-# carry it. `xcode-select -p` can point at a nix-provided apple-sdk — it does on
-# this machine, at .../apple-sdk-14.4 — and those SDKs ship a subset of the
-# headers a Command Line Tools SDK does. zlib.h is one of the missing ones, so
-# /usr/bin/cc cannot preprocess `#include <zlib.h>` at all, and any opam package
-# with a C stub needing it fails to build. Homebrew's keg-only zlib is preferred
-# because it is the copy the rest of the machine already builds against; the CLT
-# SDK is the fallback for a Mac without it. Setting SDKROOT does not help, since
-# the CLT shim resolves its toolchain through xcode-select regardless.
-_macos_c_search_path() {
-    local candidate
-    for candidate in /opt/homebrew/opt/zlib/include \
-        /usr/local/opt/zlib/include \
-        "$(xcrun --show-sdk-path 2>/dev/null)/usr/include" \
-        /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include; do
-        if [[ -f "${candidate}/zlib.h" ]]; then
-            printf '%s' "${candidate}"
-            return 0
-        fi
-    done
-    return 1
-}
-
-# ocamllsp and ocamlformat, which the Neovim config enables and expects on PATH.
-# They are opam packages, so they need a switch: `opam init --bare` deliberately
-# creates none, and `opam install` into no switch fails. ocaml-system reuses a
-# compiler already on the machine where there is one, which is the difference
-# between seconds and a from-source OCaml build on every fresh install.
-#
-# This installs into whichever `default` switch the machine already has, which
-# is shared with whatever else the user keeps there. opam resolves the request
-# against the whole switch, so it may recompile packages this step never asked
-# for — and a build failing part way leaves opam rolling back the ones it had
-# already removed. That is not hypothetical: on 2 September 2026 camlzip failed
-# on the missing zlib.h above, and the rollback dropped alt-ergo and why3 from
-# this machine's default switch. Hence the search path below, and hence failing
-# the step loudly rather than continuing.
-install_ocaml_tools() {
-    require_cmd opam
-
-    local os_name
-    os_name="$(uname -s)"
-    if [[ "${os_name}" == "Darwin" ]]; then
-        local c_include
-        if c_include="$(_macos_c_search_path)"; then
-            export CPATH="${c_include}${CPATH:+:${CPATH}}"
-            export LIBRARY_PATH="${c_include%/include}/lib${LIBRARY_PATH:+:${LIBRARY_PATH}}"
-        else
-            err "No zlib.h on this Mac; opam packages with C stubs will not build"
-            return 1
-        fi
-    fi
-    local switches
-    switches="$(opam switch list --short 2>/dev/null || true)"
-    if ! grep -qx "default" <<<"${switches}"; then
-        log "Creating the default opam switch"
-        # --packages is required on both paths. `opam switch create <name>`
-        # reads a bare name as a compiler specification, so `opam switch create
-        # default --yes` looks for a compiler called "default" and exits with
-        # "No compiler matching `default' found" — which is what failed CI run
-        # 33694339533 on a runner with no OCaml. ocaml-system reuses a compiler
-        # already on the machine, the difference between seconds and a
-        # from-source build; ocaml-base-compiler is that from-source build, and
-        # is the only option where the machine has no ocamlc.
-        if command -v ocamlc >/dev/null 2>&1; then
-            opam switch create default --packages=ocaml-system --yes || return 1
-        else
-            opam switch create default --packages=ocaml-base-compiler --yes || return 1
-        fi
-    fi
-
-    local installed
-    installed="$(opam list --switch default --installed --short 2>/dev/null || true)"
-    local missing=()
-    local package
-    for package in ocaml-lsp-server ocamlformat; do
-        if ! grep -qx "${package}" <<<"${installed}"; then
-            missing+=("${package}")
-        fi
-    done
-    if ((${#missing[@]} == 0)); then
-        if [[ -z "${UPGRADE:-}" ]]; then
-            log "ocaml-lsp-server and ocamlformat already installed; skipping"
-            return
-        fi
-        log "Upgrading ocaml-lsp-server and ocamlformat"
-        retry_once opam upgrade --switch default --yes ocaml-lsp-server ocamlformat || return 1
-        return
-    fi
-    log "Installing ${missing[*]} into the default opam switch"
-    opam install --switch default --yes "${missing[@]}" || return 1
 }
 
 # The thing advertised at obsidian.md/cli is not a separately installable
