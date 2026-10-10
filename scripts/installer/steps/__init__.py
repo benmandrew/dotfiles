@@ -11,6 +11,7 @@ from . import (
     cmake,
     elan,
     gh,
+    git,
     go,
     lua_ls,
     neovim,
@@ -20,6 +21,7 @@ from . import (
     packages,
     release_tools,
     rust,
+    system,
     vendor,
 )
 
@@ -33,6 +35,7 @@ PORTED: dict[str, Step] = {
         cmake,
         elan,
         gh,
+        git,
         go,
         lua_ls,
         neovim,
@@ -42,6 +45,7 @@ PORTED: dict[str, Step] = {
         packages,
         release_tools,
         rust,
+        system,
         vendor,
     )
     for step in module.STEPS

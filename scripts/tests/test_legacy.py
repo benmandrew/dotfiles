@@ -36,8 +36,8 @@ class LegacyTest(ConsoleCase):
 
     def test_helper_statuses_come_back(self) -> None:
         runner = self.runner()
-        self.assertTrue(runner.run(legacy("version_gte", "1.2.3", "1.2.0")))
-        self.assertFalse(runner.run(legacy("version_gte", "1.2.0", "1.2.3")))
+        self.assertTrue(runner.run(legacy("test", "1", "-lt", "2")))
+        self.assertFalse(runner.run(legacy("test", "2", "-lt", "1")))
 
     def test_unknown_function_fails_the_step(self) -> None:
         runner = self.runner()

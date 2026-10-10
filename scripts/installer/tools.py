@@ -14,6 +14,21 @@ from .sudo import sudo_command
 
 _LEADING_DIGITS = re.compile(r"\d+")
 
+OS_RELEASE = Path("/etc/os-release")
+
+
+def os_release(field: str) -> str:
+    """A field of /etc/os-release without its quotes, or "" where it has none."""
+    try:
+        lines = OS_RELEASE.read_text(errors="replace").splitlines()
+    except OSError:
+        return ""
+    for line in lines:
+        name, separator, value = line.partition("=")
+        if separator and name == field:
+            return value.replace('"', "")
+    return ""
+
 
 def require_command(context: StepContext, command: str) -> None:
     """Fail the step unless `command` is on PATH."""

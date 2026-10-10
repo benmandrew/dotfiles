@@ -341,24 +341,6 @@ obsidian_desktop_version() {
     echo "${version}"
 }
 
-version_gte() {
-    local current="$1" required="$2"
-    local cur_major cur_minor cur_patch req_major req_minor req_patch
-    IFS=. read -r cur_major cur_minor cur_patch <<<"${current}"
-    IFS=. read -r req_major req_minor req_patch <<<"${required}"
-    cur_major="${cur_major:-0}"
-    cur_minor="${cur_minor:-0}"
-    cur_patch="${cur_patch:-0}"
-    req_major="${req_major:-0}"
-    req_minor="${req_minor:-0}"
-    req_patch="${req_patch:-0}"
-    if ((cur_major > req_major)); then return 0; fi
-    if ((cur_major < req_major)); then return 1; fi
-    if ((cur_minor > req_minor)); then return 0; fi
-    if ((cur_minor < req_minor)); then return 1; fi
-    ((cur_patch >= req_patch))
-}
-
 # safe_git/ensure_user_owns exist because upgrade paths for git-cloned tools
 # have hit repos owned by root — e.g. from an earlier sudo or CI run — which
 # makes plain git refuse ("dubious ownership") or fail to write. The Python
@@ -391,65 +373,6 @@ _zsh_completion_installed() {
         [[ -e "${dir}/_$1" ]] && return 0
     done
     return 1
-}
-
-# The login shell the account database records. $SHELL is no substitute: it
-# comes from the session that started this script, and stays stale after chsh
-# until the next login.
-login_shell() {
-    local user os_name entry
-    user="$(id -un)" || return 1
-    os_name="$(uname -s)"
-    if [[ "${os_name}" == "Darwin" ]]; then
-        entry="$(dscl . -read "/Users/${user}" UserShell 2>/dev/null)" || return 1
-        printf '%s\n' "${entry#UserShell: }"
-    else
-        entry="$(getent passwd "${user}")" || return 1
-        printf '%s\n' "${entry##*:}"
-    fi
-}
-
-# Make the system zsh the login shell. Any zsh already set and listed in
-# /etc/shells is left alone, so a Homebrew or nix zsh chosen by hand survives.
-# The system one is preferred over whatever zsh is first on PATH, since a login
-# shell under ~/.nix-profile or /opt/homebrew breaks when that tree is upgraded
-# or removed.
-install_login_shell() {
-    local current target="" candidate user os_name
-    os_name="$(uname -s)"
-    current="$(login_shell)"
-    if [[ "${current##*/}" == "zsh" && -x "${current}" ]] && grep -qxF "${current}" /etc/shells; then
-        log "Login shell is already ${current}; skipping"
-        return 0
-    fi
-    for candidate in /usr/bin/zsh /bin/zsh; do
-        if [[ -x "${candidate}" ]] && "${candidate}" -fc 'exit 0' </dev/null; then
-            target="${candidate}"
-            break
-        fi
-    done
-    if [[ -z "${target}" ]]; then
-        err "No working zsh at /usr/bin/zsh or /bin/zsh"
-        return 1
-    fi
-    user="$(id -un)" || return 1
-    # chsh edits /etc/passwd alone, so an account held in LDAP or SSSD has to
-    # have its shell changed by whoever runs the directory.
-    if [[ "${os_name}" != "Darwin" ]] && ! grep -q "^${user}:" /etc/passwd; then
-        log "${user} is not in /etc/passwd, so chsh cannot change its shell; skipping"
-        return 0
-    fi
-    # chsh refuses a shell missing from /etc/shells.
-    if ! grep -qxF "${target}" /etc/shells; then
-        printf '%s\n' "${target}" | sudo tee -a /etc/shells >/dev/null || return 1
-    fi
-    log "Changing login shell from ${current:-unknown} to ${target}"
-    sudo chsh -s "${target}" "${user}" || return 1
-    current="$(login_shell)"
-    if [[ "${current}" != "${target}" ]]; then
-        err "chsh exited 0 but the login shell is still ${current:-unknown}"
-        return 1
-    fi
 }
 
 # Generate zsh completions for the tools that can print their own but ship it

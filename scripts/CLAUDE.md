@@ -1,6 +1,6 @@
 # Install Scripts
 
-`install.sh` is the *bootstrap*: it checks the platform, installs the Xcode Command Line Tools (CLT) on macOS or `python3` through apt on Linux, and runs `install.py` on `/usr/bin/python3`. `installer/` is the runner, in Python. Fifty-two steps are Python, in `installer/steps/`. The rest are still bash functions in `install-common.sh`, `install-linux.sh` (x86_64 and aarch64) and `install-macos-arm64.sh`, and `PLAN.md` at the repository root gives the order they move to Python in. `verify-install.sh` checks the result. `lint-templates.sh` backs `make lint-templates` and sits here so the `scripts/*.sh` lint glob covers it.
+`install.sh` is the *bootstrap*: it checks the platform, installs the Xcode Command Line Tools (CLT) on macOS or `python3` through apt on Linux, and runs `install.py` on `/usr/bin/python3`. `installer/` is the runner, in Python. Fifty-eight steps are Python, in `installer/steps/`. The rest are still bash functions in `install-common.sh`, `install-linux.sh` (x86_64 and aarch64) and `install-macos-arm64.sh`, and `PLAN.md` at the repository root gives the order they move to Python in. `verify-install.sh` checks the result. `lint-templates.sh` backs `make lint-templates` and sits here so the `scripts/*.sh` lint glob covers it.
 
 ## Python
 
