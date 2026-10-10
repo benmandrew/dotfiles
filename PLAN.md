@@ -71,7 +71,7 @@ The functions every step calls move to Python with unit tests, and seven steps m
 
 Port in batches, deleting each bash function as its batch passes the gate. `retry_once`, `cpu_count`, `safe_git`, `ensure_user_owns` and `npm_install_g` move with the first step that calls them.
 
-- [x] Batch B, the cargo tools, in `steps/cargo_tools.py`: one table for 17 tools, with `install_eza`, `install_fd`, `install_bat`, `install_ripgrep`, `install_git_delta`, `install_hyperfine`, `install_zoxide`, `install_sccache`, `install_difftastic`, `install_cargo_nextest`, `install_typst`, `install_git_absorb` and `install_cargo_extras` built on it. Gate: items 1 and 2 pass, and item 3 without sudo; item 4 waits on the push. See the log.
+- [x] Batch B, the cargo tools, in `steps/cargo_tools.py`: one table for 17 tools, with `install_eza`, `install_fd`, `install_bat`, `install_ripgrep`, `install_git_delta`, `install_hyperfine`, `install_zoxide`, `install_sccache`, `install_difftastic`, `install_cargo_nextest`, `install_typst`, `install_git_absorb` and `install_cargo_extras` built on it. Gate: items 1, 2 and 4 pass, and item 3 without sudo. See the log.
 - [ ] Batch C: `install_atuin`, `install_elan`, `install_nerd_font`, `install_neovim_if_missing`, `install_go`.
 - [ ] Gate after each batch.
 
@@ -140,7 +140,7 @@ Three things differ from the bash steps, all on failure paths. `install_gitleaks
 - **Gate 1: passed.** `nix develop --command make fmt-ci lint test-py` passes, with 128 tests, and so does the run on Python 3.9.6.
 - **Gate 2: passed.** `1bb0d6f` against this batch, side by side with `--no-optional` in fresh Ubuntu 22.04 arm64 containers. The old run took 1,178 seconds and the new one 1,169. Each printed 251 lines, the same once the temporary directory names are replaced, with the three baseline failures and 68 passed, 3 failed from `verify-install.sh`. Twelve of the thirteen steps ran, `install_typst` being optional. Nine tools came as release binaries, and `git-absorb`, `cargo-fuzz` and `cross` were built by `cargo install`, upstream publishing no aarch64 asset for them.
 - **Gate 3: passed without sudo.** The same 66 lines as `1bb0d6f` on this Mac, every step skipping.
-- **Gate 4: waiting on the push.**
+- **Gate 4: passed, on a warm cache.** Run 38070838460 on commit `4591e77`: `lint` and `install` passed, the install job in 135 seconds. Its 163 `[install]` and verify lines match run 38068886975 on `1bb0d6f`, and every ported step skipped.
 
 Gates 2 to 4 leave the macOS and x86_64 install paths of a ported step unrun, since a provisioned Mac and a warm CI cache both skip. So this batch added a check that runs the named steps for real into an empty `HOME`, with the system's `PATH` alone, once from `1bb0d6f` and once from this batch, and compares the output and a SHA-256 of every file left behind.
 
