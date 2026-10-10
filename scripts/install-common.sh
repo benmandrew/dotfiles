@@ -1,92 +1,17 @@
 #!/bin/bash
 
-UPGRADE=""
-VERBOSE=""
-_INSTALL_FAILED=false
-_FAILED_STEPS=()
+# The install steps that are still bash, and the helpers they share. Nothing
+# here runs a step: scripts/installer does, calling one function per process
+# through legacy-step.sh. PLAN.md has the order they are being ported in.
+
+# Set by the runner, which parses the arguments.
+UPGRADE="${DOTFILES_UPGRADE:-}"
 
 # fd 3 is the terminal, held aside so log and err still reach it from inside a
-# step whose own output is being redirected to a file. Everything this script
-# says for itself goes through those two functions and so writes to fd 3; a
-# step's stdout and stderr both go to its log.
-exec 3>&2
-
-# A step's output is held in a file rather than printed as it goes. Live stderr
-# is not the same as quiet stderr: curl writes its progress meter there, nix and
-# the direnv installer narrate there, and apt's progress bar leaves the cursor
-# mid-line, so the next [install] line starts wherever the bar ended. The log of
-# a step that succeeds is deleted, and the tail of one that fails is printed
-# where it failed, with the path to the whole thing.
-_STEP_LOG_DIR=""
-_STEP_LOG_LINES=50
-
-# Set by the cleanup handler when it finds a log for a step that never reported
-# a result, which means the step took the shell down with it. The run exits 1
-# on the strength of it, since bash otherwise leaves the status at 0 and
-# `install.sh && ...` treats a run that stopped half way as a success.
-_ABORTED_IN_STEP=false
-
-# The terminal's line settings from before the running step, held here rather
-# than in a local so the handlers below can put them back. Empty when no step
-# is running.
-_QUIET_TTY_STATE=""
-
-_quiet_restore_tty() {
-    if [[ -n "${_QUIET_TTY_STATE}" ]]; then
-        stty "${_QUIET_TTY_STATE}" </dev/tty 2>/dev/null || true
-        _QUIET_TTY_STATE=""
-    fi
-}
-
-# One handler for everything this script has to undo, because a second
-# `trap ... EXIT` replaces the first rather than adding to it.
-_install_cleanup() {
-    _quiet_restore_tty
-    stop_sudo_helpers
-    # rmdir, not rm -rf: the directory is empty once every step that passed has
-    # had its log deleted, and a run with a failure keeps its logs.
-    if [[ -n "${_STEP_LOG_DIR}" ]] && ! rmdir "${_STEP_LOG_DIR}" 2>/dev/null; then
-        # A step that takes the whole script down with it — `set -e` or `set -u`
-        # firing inside a function, which `quiet` runs in this shell rather than
-        # a subshell — never reaches the reporting at the end of `quiet`. Its
-        # output is in the log and its stderr went there too, so the run ends
-        # with a bare prompt and nothing to go on. `run_step` marks the failures
-        # it handled, so this covers only the ones it never saw.
-        if [[ "${_INSTALL_FAILED}" != "true" ]]; then
-            local leftover
-            _ABORTED_IN_STEP=true
-            err "The run stopped inside a step. Its output is in:"
-            for leftover in "${_STEP_LOG_DIR}"/*.log; do
-                # No nullglob, so an empty directory yields the pattern itself.
-                if [[ -f "${leftover}" ]]; then
-                    printf "\033[1;31m[install]\033[0m   %s\n" "${leftover}" >&3
-                fi
-            done
-        fi
-    fi
-}
-
-# Clean up, then re-raise, so an interrupted run still dies of the signal it was
-# sent instead of carrying on to the next step.
-_install_signal_exit() {
-    local signal="$1"
-    _install_cleanup
-    trap - "${signal}" EXIT
-    kill "-${signal}" "$$"
-}
-
-# The EXIT path alone turns an abort into a non-zero status. The signal path
-# below re-raises instead, so it wants the cleanup and not the exit.
-_install_exit_trap() {
-    _install_cleanup
-    if [[ "${_ABORTED_IN_STEP}" == "true" ]]; then
-        exit 1
-    fi
-}
-
-trap _install_exit_trap EXIT
-trap '_install_signal_exit INT' INT
-trap '_install_signal_exit TERM' TERM
+# step whose own output is being redirected to a file. The runner names the
+# descriptor to copy in DOTFILES_TERM_FD. Without one, as under `make pins`, it
+# is stderr.
+exec 3>&"${DOTFILES_TERM_FD:-2}"
 
 # Homebrew 6 has ask mode on by default, so `brew install` and `brew upgrade`
 # stop for a [y/n] confirmation whenever the plan reaches past the packages
@@ -95,90 +20,6 @@ trap '_install_signal_exit TERM' TERM
 # first one. HOMEBREW_NO_ASK is what turns the default back off; the equivalent
 # per-command flags are --no-ask/--yes.
 export HOMEBREW_NO_ASK=1
-
-# Drop a command's stdout, keeping stderr. Package managers and build systems
-# narrate their whole run on stdout, so an apt install, a brew upgrade and a
-# make between them bury the one line that matters. All of them report failure
-# on stderr, which passes through. Everything this script says for itself goes
-# through log/err, which write to stderr for that reason, so a step's own
-# progress survives the drop. --verbose puts stdout back for a step that has to
-# be watched.
-#
-# Two guards come with holding a step's output, because a step that has lost the
-# screen has not lost the terminal. Its stdin is /dev/null, so a program testing
-# whether it is interactive decides it is not, and prints rather than prompting
-# or drawing a TUI that nobody can see. And the terminal's line settings are
-# saved before the step and restored after, so one that puts the tty in raw mode
-# and dies before restoring it cannot leave the shell behind it unusable. An
-# --upgrade run on 19 August 2026 did that: the shell it ran from was left at
-# `-isig -opost`, so ^C and ^Z did nothing and every line of output started where
-# the last one ended. Which step it was went unidentified, which is the argument
-# for guarding all of them rather than the suspects. The restore hangs off the
-# signal handlers as well as the end of the step, since Ctrl-C during a step
-# would otherwise skip it and leave exactly that shell behind.
-#
-# Steps that must prompt therefore cannot go through here. The two that do —
-# `install_xcode_clt` and `install_homebrew` — are called directly instead.
-#
-# Failure propagates: a bare `quiet foo` under errexit still aborts, since the
-# status is returned unchanged, and `if ! quiet foo` suppresses errexit exactly
-# as `if ! foo` did.
-quiet() {
-    if { : </dev/tty; } 2>/dev/null; then
-        _QUIET_TTY_STATE="$(stty -g </dev/tty 2>/dev/null || true)"
-    fi
-
-    local status=0 log_file=""
-    if [[ -n "${VERBOSE}" ]]; then
-        "$@" </dev/null || status=$?
-    else
-        if [[ -z "${_STEP_LOG_DIR}" ]]; then
-            _STEP_LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-install.XXXXXX")"
-        fi
-        log_file="${_STEP_LOG_DIR}/$1.log"
-        "$@" </dev/null >"${log_file}" 2>&1 || status=$?
-    fi
-
-    _quiet_restore_tty
-
-    if [[ -n "${log_file}" ]]; then
-        if ((status == 0)); then
-            rm -f "${log_file}"
-        else
-            err "Output of $1, last ${_STEP_LOG_LINES} lines (all of it: ${log_file}):"
-            tail -n "${_STEP_LOG_LINES}" "${log_file}" >&3
-        fi
-    fi
-    return "${status}"
-}
-
-run_step() {
-    if ! quiet "$@"; then
-        err "Step failed: $*"
-        _INSTALL_FAILED=true
-        _FAILED_STEPS+=("$*")
-    fi
-}
-
-# Name the failed steps again at the end. A full install runs 60 steps on Linux
-# and 55 on macOS, printing a screen or two of stderr past the one that broke, so
-# the report at the point of failure has scrolled away by the time it ends.
-check_failed() {
-    # The log directory is removed by the EXIT handler, which gets an
-    # interrupted run as well as this one.
-    if [[ "${_INSTALL_FAILED}" == "true" ]]; then
-        local count="${#_FAILED_STEPS[@]}" noun="steps"
-        if ((count == 1)); then
-            noun="step"
-        fi
-        err "${count} ${noun} failed:"
-        local step
-        for step in "${_FAILED_STEPS[@]}"; do
-            printf "\033[1;31m[install]\033[0m   %s\n" "${step}" >&3
-        done
-        exit 1
-    fi
-}
 
 log() {
     if [[ "$*" == *"skipping"* ]]; then
@@ -259,9 +100,10 @@ note_shadowed() {
 _CURL_RETRY_OPTS=(--retry 5 --retry-connrefused --retry-max-time 120)
 
 # Fetch a URL to a path. Failure is reported and returned, never ignored:
-# errexit does not apply inside a function called from run_step (bash disables
-# it for the whole `if ! ...` condition), so a step whose download failed would
-# otherwise carry on and unpack, build and install a file that is not there.
+# errexit does not apply inside a step (legacy-step.sh calls it left of `||`,
+# and bash disables errexit for everything there), so a step whose download
+# failed would otherwise carry on and unpack, build and install a file that is
+# not there.
 download() {
     local url="$1" dest="$2"
     if ! curl -fsSL --proto '=https' --tlsv1.2 "${_CURL_RETRY_OPTS[@]}" "${url}" -o "${dest}"; then
@@ -546,251 +388,18 @@ print_pin_updates() {
     fi
 }
 
-# Homebrew 6 runs `sudo --reset-timestamp` as unconditional preamble on every
-# brew invocation (Library/Homebrew/brew.sh), and sudo's default timestamp_type
-# is `tty` — one record per terminal — so each brew command destroys the very
-# record this script authenticated. A background refresher cannot repair that:
-# `sudo -n true` is non-interactive by definition and the record is gone, not
-# stale. That is why an --upgrade run asked for the password four times.
-#
-# An askpass helper is the way out. sudo runs it instead of prompting when given
-# -A, and Homebrew opts in on its own — system_command.rb adds -A whenever
-# SUDO_ASKPASS is set — so reading the password once up front covers both this
-# script's sudo calls and the ones brew makes internally for pkg-based casks.
-#
-# The cost is that the password sits in a file for the length of the run. It
-# goes in a mode-0700 directory under $TMPDIR (per-user on macOS) as a mode-0600
-# file and is removed on EXIT, so it is readable only by this user, who could
-# read it from their own keychain anyway. A run killed with SIGKILL leaves it
-# behind. Set DOTFILES_NO_ASKPASS=1 to skip all of this and take the prompts.
-_SUDO_ASKPASS_DIR=""
-
-start_sudo_askpass() {
-    if [[ -n "${DOTFILES_NO_ASKPASS:-}" ]]; then
-        return 0
-    fi
-    # Already root: nothing to authenticate.
-    if ((EUID == 0)); then
-        return 0
-    fi
-    # Nothing to read a password on (CI, a piped provisioning run): leave sudo
-    # to prompt or fail on its own terms rather than blocking on a dead tty.
-    if ! { : </dev/tty; } 2>/dev/null; then
-        return 0
-    fi
-
-    local password=""
-    log "Reading the sudo password once, so brew's timestamp reset cannot force a re-prompt"
-    IFS= read -r -s -p "[install] Password: " password </dev/tty
-    printf '\n' >&3
-    if [[ -z "${password}" ]]; then
-        log "No password given; falling back to prompting per step"
-        return 0
-    fi
-
-    # Verify now rather than let a typo surface halfway through the run as a
-    # helper quietly feeding the wrong password to every step.
-    if ! printf '%s\n' "${password}" | command sudo -S -v 2>/dev/null; then
-        password=""
-        err "sudo authentication failed"
-        exit 1
-    fi
-
-    _SUDO_ASKPASS_DIR="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-askpass.XXXXXX")"
-    chmod 700 "${_SUDO_ASKPASS_DIR}"
-    local secret="${_SUDO_ASKPASS_DIR}/secret"
-    local helper="${_SUDO_ASKPASS_DIR}/askpass"
-    # Create both empty and lock them down before the password goes near them.
-    : >"${secret}"
-    chmod 600 "${secret}"
-    printf '%s\n' "${password}" >"${secret}"
-    password=""
-    # The password lives in the data file rather than inside the script text, so
-    # no shell quoting has to survive a round trip through it. The path comes
-    # from mktemp and contains nothing needing quoting.
-    : >"${helper}"
-    chmod 700 "${helper}"
-    printf '#!/bin/sh\nexec cat %s\n' "${secret}" >"${helper}"
-    export SUDO_ASKPASS="${helper}"
-}
-
-stop_sudo_askpass() {
-    if [[ -n "${_SUDO_ASKPASS_DIR}" ]]; then
-        rm -rf "${_SUDO_ASKPASS_DIR}"
-        _SUDO_ASKPASS_DIR=""
-    fi
-    unset SUDO_ASKPASS
-}
-
-# Shadowing sudo for this script only. A function is not inherited by the
-# subprocesses brew and the vendor installers run — brew adds -A itself, and the
-# vendor scripts are handled by not needing sudo at all — so this only has to
-# cover the call sites in this file, and covers them without each one having to
-# know whether a helper is in play. `command sudo` where the flag would be wrong
-# (the keepalive's -n, which must never prompt).
+# Shadowing sudo for the bash steps. The runner (installer/sudo.py) reads the
+# password once and exports SUDO_ASKPASS, and -A is what makes sudo use it. A
+# function is not inherited by the subprocesses brew and the vendor installers
+# run — brew adds -A itself, and the vendor scripts are handled by not needing
+# sudo at all — so this only has to cover the call sites in this file, and
+# covers them without each one having to know whether a helper is in play.
+# `command sudo` where the flag would be wrong.
 sudo() {
     if [[ -n "${SUDO_ASKPASS:-}" ]]; then
         command sudo -A "$@"
     else
         command sudo "$@"
-    fi
-}
-
-# sudo caches credentials for a short window (15 minutes by default, less on
-# some configs) and a full install — especially the --upgrade path, which
-# rebuilds tmux and re-downloads every toolchain — comfortably outruns it, so
-# the password gets asked for again at each later sudo step. Authenticate once
-# up front and refresh the timestamp from the background for as long as the
-# script runs, which covers every step whose only problem is outlasting the
-# cache. With an askpass helper in place the refresher is belt and braces: a
-# reset timestamp costs a silent helper call rather than a prompt.
-_SUDO_KEEPALIVE_PID=""
-
-start_sudo_keepalive() {
-    # Already root: nothing to cache, and `sudo -v` would be pointless.
-    if ((EUID == 0)); then
-        return
-    fi
-    if [[ -n "${SUDO_ASKPASS:-}" ]]; then
-        log "Requesting sudo access (refreshed in the background; the askpass helper covers brew's timestamp resets)"
-    else
-        log "Requesting sudo access (refreshed in the background; steps that follow a brew command may re-prompt)"
-    fi
-    if ! sudo -v; then
-        err "sudo authentication failed"
-        exit 1
-    fi
-    local parent=$$
-    # `kill -0` bounds the loop to the lifetime of the install even if the EXIT
-    # trap never fires (SIGKILL, say), so no stray refresher is left behind.
-    # `sudo -n true` never prompts, so a refresh that fails costs nothing and is
-    # ignored rather than ending the loop: after a brew command has wiped the
-    # timestamp, or under a sudoers config with timestamp_timeout=0, the next
-    # step that authenticates by hand hands the credential back and the loop
-    # carries it forward again. Breaking here instead retired the refresher for
-    # the whole run at the first brew command, which is most of an --upgrade.
-    while kill -0 "${parent}" 2>/dev/null; do
-        command sudo -n true 2>/dev/null || true
-        sleep 50
-    done &
-    _SUDO_KEEPALIVE_PID=$!
-    # Suppress a "Terminated" job notice if the script is ever run with job
-    # control on (sourced from an interactive shell); a plain `bash install.sh`
-    # never prints one. Best-effort: macOS ships bash 3.2, where `disown` may
-    # only accept a %jobspec rather than a bare pid, so failure is ignored.
-    disown "${_SUDO_KEEPALIVE_PID}" 2>/dev/null || true
-}
-
-stop_sudo_keepalive() {
-    if [[ -n "${_SUDO_KEEPALIVE_PID}" ]]; then
-        kill "${_SUDO_KEEPALIVE_PID}" 2>/dev/null || true
-        _SUDO_KEEPALIVE_PID=""
-    fi
-}
-
-stop_sudo_helpers() {
-    stop_sudo_keepalive
-    stop_sudo_askpass
-}
-
-parse_args() {
-    local arg
-    for arg in "$@"; do
-        case "${arg}" in
-            --upgrade) UPGRADE=true ;;
-            --all-optional) OPTIONAL_MODE=all ;;
-            --no-optional) OPTIONAL_MODE=none ;;
-            --reconfigure-optional) OPTIONAL_RECONFIGURE=true ;;
-            --verbose) VERBOSE=true ;;
-            *)
-                err "Unknown argument: ${arg}. Usage: $0 [--upgrade] [--all-optional|--no-optional] [--reconfigure-optional] [--verbose]"
-                exit 1
-                ;;
-        esac
-    done
-}
-
-# Optional tools: everything else here installs everywhere, but a few tools only
-# make sense on a machine that is actually sat in front of (a GUI app, say) and
-# are pure noise on a server that only ever gets ssh'd into. Rather than
-# hardcoding that split — hostnames churn and a headless check only catches the
-# Linux GUI case — ask once, then remember the answer in a state file so every
-# later run, including --upgrade, stays non-interactive.
-OPTIONAL_MODE=""
-OPTIONAL_RECONFIGURE=""
-OPTIONAL_STATE_FILE="${XDG_CONFIG_HOME:-${HOME}/.config}/dotfiles/optional-tools.conf"
-
-# Answers are stored one per line as `name=yes|no`. Returns 0 if the tool should
-# be installed. $1 is the key, $2 a one-line description shown in the prompt.
-optional_enabled() {
-    local name="$1" description="$2"
-
-    case "${OPTIONAL_MODE}" in
-        all) return 0 ;;
-        none) return 1 ;;
-        *) ;; # unset: fall through to the recorded answer, or ask for one
-    esac
-
-    local recorded=""
-    if [[ -z "${OPTIONAL_RECONFIGURE}" ]] && [[ -f "${OPTIONAL_STATE_FILE}" ]]; then
-        local line
-        line="$(grep -m1 "^${name}=" "${OPTIONAL_STATE_FILE}" 2>/dev/null || true)"
-        recorded="${line#*=}"
-    fi
-
-    if [[ -z "${recorded}" ]]; then
-        # Prefer /dev/tty over stdin: the platform scripts are routinely piped
-        # (`curl ... | bash`), which leaves stdin as the script text itself.
-        # `-r /dev/tty` is not a usable test — the device node is readable even
-        # with no controlling terminal attached, where opening it fails — so
-        # actually try to open it.
-        local tty_ok=false
-        if { : </dev/tty; } 2>/dev/null; then
-            tty_ok=true
-        fi
-        # Nothing to ask on (CI, a provisioning run, a detached shell): decline
-        # rather than block on a read that can never be answered, and leave it
-        # unrecorded so a later interactive run still gets to ask.
-        if [[ "${tty_ok}" == false ]] && [[ ! -t 0 ]]; then
-            log "${name}: optional and no terminal to prompt on; skipping"
-            return 1
-        fi
-        local reply=""
-        printf "\033[1;35m[install]\033[0m %s\n" "${description}" >&3
-        if [[ "${tty_ok}" == true ]]; then
-            read -r -p "[install] Install ${name}? [y/N] " reply </dev/tty
-        else
-            read -r -p "[install] Install ${name}? [y/N] " reply
-        fi
-        case "${reply}" in
-            [Yy]*) recorded=yes ;;
-            *) recorded=no ;;
-        esac
-        optional_record "${name}" "${recorded}"
-    fi
-
-    [[ "${recorded}" == "yes" ]]
-}
-
-optional_record() {
-    local name="$1" answer="$2"
-    mkdir -p "$(dirname "${OPTIONAL_STATE_FILE}")"
-    local tmp
-    tmp="$(mktemp)"
-    if [[ -f "${OPTIONAL_STATE_FILE}" ]]; then
-        grep -v "^${name}=" "${OPTIONAL_STATE_FILE}" >"${tmp}" 2>/dev/null || true
-    fi
-    printf '%s=%s\n' "${name}" "${answer}" >>"${tmp}"
-    mv "${tmp}" "${OPTIONAL_STATE_FILE}"
-    log "Recorded ${name}=${answer} in ${OPTIONAL_STATE_FILE}"
-}
-
-# Wrapper mirroring run_step for tools behind an optional_enabled gate.
-run_optional_step() {
-    local name="$1" description="$2"
-    shift 2
-    if optional_enabled "${name}" "${description}"; then
-        run_step "$@"
     fi
 }
 
@@ -3528,8 +3137,8 @@ install_obsidian() {
         # installed by hand before these scripts existed reads as absent. Left
         # to fall through, the install below aborts on the existing bundle and
         # every later run repeats it, which is invisible from the outside
-        # because run_step calls this inside an `if !`, disabling errexit, so
-        # the failure never reaches the step report.
+        # because a step runs left of `||`, disabling errexit, so the failure
+        # never reaches the step report.
         if [[ -d "/Applications/Obsidian.app" ]]; then
             local installed cask_version
             installed="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
@@ -4378,8 +3987,4 @@ install_docker() {
         log "Enabling docker.service"
         sudo systemctl enable --now docker.service || return 1
     fi
-}
-
-print_chezmoi_init_hint() {
-    log "You can initialize chezmoi with: chezmoi init --apply git@github.com:benmandrew/dotfiles.git"
 }

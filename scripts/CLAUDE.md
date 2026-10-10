@@ -1,18 +1,24 @@
 # Install Scripts
 
-`install.sh` runs `install-linux.sh` (x86_64 and aarch64) or `install-macos-arm64.sh`, which call steps from `install-common.sh`; `verify-install.sh` checks the result. `lint-templates.sh` backs `make lint-templates` and sits here so the `scripts/*.sh` lint glob covers it.
+`install.sh` is the *bootstrap*: it checks the platform, installs the Xcode Command Line Tools (CLT) on macOS or `python3` through apt on Linux, and runs `install.py` on `/usr/bin/python3`. `installer/` is the runner, in Python. The steps are still bash functions in `install-common.sh`, `install-linux.sh` (x86_64 and aarch64) and `install-macos-arm64.sh`, and `PLAN.md` at the repository root gives the order they move to Python in. `verify-install.sh` checks the result. `lint-templates.sh` backs `make lint-templates` and sits here so the `scripts/*.sh` lint glob covers it.
+
+## Python
+
+The installer supports Python 3.9 and newer, since the CLT ship 3.9.6, and uses the standard library alone, so a fresh machine needs nothing installed first. `install.py` puts `scripts/` on `sys.path` itself; an exported `PYTHONPATH` would reach every tool a step runs. `make lint-py` runs ruff and mypy, and `make test-py` runs `scripts/tests` on the interpreter `install.sh` would pick. mypy checks against 3.10, the oldest target it accepts, so run `make test-py PYTHON=/Library/Developer/CommandLineTools/usr/bin/python3` for the floor. The linters write no cache and python runs with `-B`, so nothing they leave can reach a commit. `make test-container` runs a whole install in a fresh Ubuntu 22.04 container.
 
 ## Running steps
 
-Steps are *idempotent*, skipping a tool already present; `--upgrade` upgrades it instead, and `--verbose` streams output live. The scripts avoid bash 4 features, since macOS runs them under bash 3.2.
+Steps are *idempotent*, skipping a tool already present; `--upgrade` upgrades it instead, and `--verbose` streams output live. The bash steps avoid bash 4 features, since `installer/legacy.py` runs them under `/bin/bash`, which is 3.2 on macOS.
 
-`run_step install_foo` calls `quiet`, which holds the step's stdout and stderr in a log and prints its tail and path on failure; `check_failed` lists every failed step at the end and exits 1. Both streams are held because installers draw progress on stderr. `log` and `err` write to file descriptor 3, duplicated from stderr before any redirect. `quiet` also closes stdin and restores the terminal's line settings, since a step that dies in raw mode breaks the shell.
+`installer/plan.py` lists the steps for each platform. `Runner.run` holds a step's stdout and stderr in a log and prints its tail and path on failure; `Runner.finish` lists every failed step at the end, and the run exits 1. Both streams are held because installers draw progress on stderr. `Console` writes to a copy of stderr taken before any step runs, and a bash step's `log` and `err` write to file descriptor 3, which `install-common.sh` points at the same terminal through `DOTFILES_TERM_FD`. The runner also closes a step's stdin and restores the terminal's line settings, since a step that dies in raw mode breaks the shell.
 
-Linux calls `install_apt_packages_if_missing` and `install_perf` through bare `quiet`, so their failure aborts under errexit. Prompting steps cannot use `quiet`, so `install_xcode_clt` and `install_homebrew` are called directly. `install_zsh_completions` runs last, since it invokes each installed binary.
+Each bash step runs in a process of its own. `legacy("install_foo")` calls `legacy-step.sh`, which sources the step library, calls the function and writes its environment out with `env -0`. The runner adopts that environment, so a `PATH` one step exports reaches the next. The working directory and unexported variables do not carry over. A step that calls `exit`, as `require_cmd` does, or dies under `set -u` fails alone, and the run carries on.
+
+A step with `fatal=True` ends the run when it fails, as `install_apt_packages_if_missing` and `install_perf` do on Linux. A prompting step takes `interactive=True`, which leaves its output live and its stdin open; `install_homebrew` is the only one, the CLT install sitting in `install.sh` because `/usr/bin/python3` is a stub without the tools. `install_zsh_completions` runs last, since it invokes each installed binary.
 
 ## Writing a step
 
-**Return failures.** errexit is off inside a step, because `quiet` runs it left of `||`, so a step reports its last command's status. Every command whose failure should fail the step needs `|| return 1` unless it is last, `safe_git` fetches on `--upgrade` paths included.
+**Return failures.** errexit is off inside a bash step, because `legacy-step.sh` runs it left of `||`, so a step reports its last command's status. Every command whose failure should fail the step needs `|| return 1` unless it is last, `safe_git` fetches on `--upgrade` paths included.
 
 **Prove the binary runs.** An installer's exit status says nothing about what it left behind: `claude update` once exited 0 over an npm install, leaving the package's stub in place of the native binary. So every path that installs or upgrades an executable ends with `require_runs <cmd> [probe]`, by absolute path where the step knows it, and the probe prints and exits with no network, GUI or writes. Vendor self-updaters, which fetch outside `download()`, run under `retry_once`. A fixed-path install calls `note_shadowed`, which names a copy earlier on `PATH` without deleting it.
 
@@ -26,13 +32,13 @@ Linux calls `install_apt_packages_if_missing` and `install_perf` through bare `q
 
 **Write exact guards.** Match the version number rather than a field, since `btop` and `atuin` pad theirs and tags carry a `v`; a mismatch reinstalls on every `--upgrade`, and a failing `--version` counts as absent. Guard every artefact, as `install_zstd` tests `dpkg -s libzstd-dev` beside `command -v zstd`.
 
-**Keep apt non-interactive.** `install-linux.sh` exports `DEBIAN_FRONTEND=noninteractive`, since a debconf dialog inside `quiet` is invisible, and calls `apt-get`, never `apt`, which lacks a stable command-line interface (CLI).
+**Keep apt non-interactive.** `install-linux.sh` exports `DEBIAN_FRONTEND=noninteractive`, since a debconf dialog inside a held step is invisible, and calls `apt-get`, never `apt`, which lacks a stable command-line interface (CLI).
 
-**Sudo.** Both platform scripts call `start_sudo_askpass` then `start_sudo_keepalive` first; on macOS they must precede `install_homebrew`, whose installer runs `sudo -k` on exit unless sudo is already active. Homebrew resets the sudo timestamp on every invocation, so the *askpass helper* reads the password once and exports `SUDO_ASKPASS`, which brew honours. The `sudo` function adds `-A`; use `command sudo` where `-A` is wrong, as in the keepalive's `sudo -n true`, whose failures are ignored. `DOTFILES_NO_ASKPASS=1` disables the helper, and `HOMEBREW_NO_ASK=1` stops `brew upgrade` asking.
+**Sudo.** `cli.run` calls `SudoSession.start_askpass` then `start_keepalive` before the first step; on macOS they must precede `install_homebrew`, whose installer runs `sudo -k` on exit unless sudo is already active. Homebrew resets the sudo timestamp on every invocation, so the *askpass helper* reads the password once and puts `SUDO_ASKPASS` in the steps' environment, which brew honours. The bash `sudo` function adds `-A`, and `sudo_command` does the same for Python; use `command sudo` where `-A` is wrong. The keepalive runs `sudo -n true` from a daemon thread and ignores its failures. `DOTFILES_NO_ASKPASS=1` disables the helper, and `HOMEBREW_NO_ASK=1` stops `brew upgrade` asking.
 
 ## Optional tools
 
-Tools only useful on a machine someone sits at go through `run_optional_step <key> <description> <install_fn>` in both platform scripts. `optional_enabled` asks once, never infers, and records `name=yes|no` in `~/.config/dotfiles/optional-tools.conf` (respecting `XDG_CONFIG_HOME`). `--all-optional` and `--no-optional` decide without touching the file; `--reconfigure-optional` re-asks. The prompt reads `/dev/tty` and defaults to no; with no terminal the tool is skipped unrecorded. Test the terminal with `{ : </dev/tty; }`, since `[[ -r /dev/tty ]]` passes without one.
+Tools only useful on a machine someone sits at go into both plans as `OptionalStep(key, description, step)`. `OptionalTools.enabled` asks once, never infers, and records `name=yes|no` in `~/.config/dotfiles/optional-tools.conf` (respecting `XDG_CONFIG_HOME`). `--all-optional` and `--no-optional` decide without touching the file; `--reconfigure-optional` re-asks. The prompt reads `/dev/tty` and defaults to no; with no terminal the tool is skipped unrecorded. Test the terminal by opening `/dev/tty`, as `tty_available` does, since the device node is readable without one.
 
 ## Per-tool constraints
 
