@@ -7,6 +7,7 @@ from typing import Union
 
 from .legacy import legacy
 from .runner import Step
+from .steps import PORTED
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,8 @@ class UnsupportedPlatform(Exception):
 
 
 def _steps(*names: str) -> tuple[Step, ...]:
-    return tuple(legacy(name) for name in names)
+    """The step of each name: the Python one where it is ported, else the bash one."""
+    return tuple(PORTED.get(name) or legacy(name) for name in names)
 
 
 LINUX = Plan(

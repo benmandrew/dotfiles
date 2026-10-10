@@ -72,6 +72,13 @@ def _require(env: dict[str, str], commands: Sequence[str]) -> None:
 
 def run(console: Console, settings: Settings, env: dict[str, str], plan: Plan) -> int:
     """Run a plan and return the exit status."""
+    # Homebrew 6 has ask mode on by default, so `brew install` and `brew
+    # upgrade` stop for a [y/n] confirmation whenever the plan reaches past the
+    # packages named on the command line: a dependency bump, a cask's
+    # dependants. Nothing here answers those prompts, so an install left to run
+    # unattended stalls on the first one. install-common.sh exports the same
+    # for the bash steps.
+    env["HOMEBREW_NO_ASK"] = "1"
     runner = Runner(console, settings, env)
     sudo = SudoSession(console, env)
     optional = OptionalTools(console, env, settings.optional_mode, settings.reconfigure_optional)
