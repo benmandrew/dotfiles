@@ -1,4 +1,4 @@
-.PHONY: all clean test fmt fmt-ci lint lint-sh lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-templates lint-secrets lint-secrets-history deps hooks pins
+.PHONY: all clean test test-py test-container fmt fmt-ci lint lint-sh lint-py lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-templates lint-secrets lint-secrets-history deps hooks pins
 
 BOLD_BLUE := \033[1;34m
 RESET     := \033[0m
@@ -32,11 +32,35 @@ SH_SCRIPTS   := $(DEPLOYED_SH)
 # an exclusion is a mechanical pass over the file it names.
 DEPLOYED_EXCLUDE := --exclude SC2250,SC2249,SC2292
 
+# The installer, which scripts/install.sh runs in place. ruff and mypy write
+# no cache (--no-cache, --cache-dir=/dev/null) and python runs with -B, so
+# nothing they leave behind can reach a commit or the other linters.
+PY_SOURCES := scripts/install.py scripts/installer scripts/tests
+# The interpreter scripts/install.sh would pick, so the tests run on what an
+# install runs on. The floor is Python 3.9, which the Xcode Command Line Tools
+# ship; test it on macOS with
+# `make test-py PYTHON=/Library/Developer/CommandLineTools/usr/bin/python3`.
+PYTHON ?= $(shell if [ -x /usr/bin/python3 ]; then echo /usr/bin/python3; else echo python3; fi)
+
 all: fmt lint
 
 clean:
 
-test: lint
+test: lint test-py
+
+test-py:
+	@printf '$(BOLD_BLUE)[testing the installer]$(RESET)\n'
+	@$(PYTHON) -B -m unittest discover -s scripts/tests -t scripts
+
+# The installer end to end, on a machine that has never been provisioned: an
+# Ubuntu 22.04 container with sudo and nothing else. It takes as long as a cold
+# install does, and it needs a running Docker daemon, so it is not part of
+# `test`. PLAN.md says what to compare the result with.
+test-container:
+	@printf '$(BOLD_BLUE)[installing in a fresh container]$(RESET)\n'
+	@docker build -q -t dotfiles-install-test scripts/tests
+	@docker run --rm -v "$(CURDIR)":/repo:ro dotfiles-install-test bash -c \
+		'/repo/scripts/install.sh --no-optional; status=$$?; /repo/scripts/verify-install.sh || status=1; exit $$status'
 
 hooks:
 	@printf '$(BOLD_BLUE)[installing git hooks]$(RESET)\n'
@@ -52,25 +76,27 @@ deps:
 	@printf '$(BOLD_BLUE)[building dev shell]$(RESET)\n'
 	@nix develop --command true
 
-# Each pinned tool version in scripts/install-common.sh beside the tag upstream
+# Each pinned tool version in scripts/pins.sh beside the tag upstream
 # publishes now. A line showing an arrow is a pin that can be bumped by hand.
 pins:
 	@printf '$(BOLD_BLUE)[checking pinned versions]$(RESET)\n'
-	@bash -c '. scripts/install-common.sh && print_pin_updates'
+	@cd scripts && $(PYTHON) -B -m installer.pins
 
 fmt:
 	@printf '$(BOLD_BLUE)[formatting]$(RESET)\n'
 	@stylua .
 	@shfmt -ln bash -i 4 -ci -w $(BASH_SCRIPTS)
 	@shfmt -ln posix -i 4 -ci -w $(SH_SCRIPTS)
+	@ruff format -q --no-cache $(PY_SOURCES)
 
 fmt-ci:
 	@printf '$(BOLD_BLUE)[checking format]$(RESET)\n'
 	@stylua --check .
 	@shfmt -ln bash -i 4 -ci -d $(BASH_SCRIPTS)
 	@shfmt -ln posix -i 4 -ci -d $(SH_SCRIPTS)
+	@ruff format -q --no-cache --check $(PY_SOURCES)
 
-lint: lint-sh lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-templates lint-secrets
+lint: lint-sh lint-py lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-templates lint-secrets
 
 # gitleaks was pinned, installed by both platform scripts and checked for by
 # verify-install.sh, and then run against nothing: it appeared in no target
@@ -128,6 +154,11 @@ lint-sh:
 	@shellcheck --external-sources --shell bash --enable all $(INSTALL_SCRIPTS) $(REPO_BASH)
 	@shellcheck --external-sources --shell bash --enable all $(DEPLOYED_EXCLUDE) $(DEPLOYED_BASH)
 	@shellcheck --external-sources --shell sh --enable all $(DEPLOYED_EXCLUDE) $(DEPLOYED_SH)
+
+lint-py:
+	@printf '$(BOLD_BLUE)[linting python]$(RESET)\n'
+	@ruff check -q --no-cache $(PY_SOURCES)
+	@mypy --cache-dir=/dev/null $(PY_SOURCES)
 
 # Renders every template and lints each rendering with the real linter for the
 # language it produces. This absorbed the old lint-ssh target, which rendered

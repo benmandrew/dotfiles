@@ -54,6 +54,7 @@ deployed_exclude=(--exclude SC2250 --exclude SC2249 --exclude SC2292)
 
 lua_files=()
 install_files=()
+python_staged=false
 deployed_bash=()
 sh_files=()
 toml_files=()
@@ -65,6 +66,7 @@ for path in "${staged[@]}"; do
     case "${path}" in
         *.lua) lua_files+=("${path}") ;;
         scripts/*.sh | .githooks/pre-commit) install_files+=("${path}") ;;
+        scripts/*.py | pyproject.toml) python_staged=true ;;
         home/dot_claude/*.sh | home/run_*.sh) deployed_bash+=("${path}") ;;
         home/dot_local/bin/executable_* | home/dot_config/tmux/*.sh) sh_files+=("${path}") ;;
         *.toml) toml_files+=("${path}") ;;
@@ -105,6 +107,18 @@ fi
 if ((${#install_files[@]} > 0)); then
     check shfmt shfmt -ln bash -i 4 -ci -d "${install_files[@]}"
     check shellcheck shellcheck --external-sources --shell bash --enable all "${install_files[@]}"
+fi
+
+# The whole installer rather than the staged files, since mypy and the tests
+# read across modules and all of it runs in about two seconds. The tests call
+# the bash steps through legacy-step.sh, so a staged change to those runs them
+# too.
+if [[ "${python_staged}" == true ]] || ((${#install_files[@]} > 0)); then
+    py_sources=(scripts/install.py scripts/installer scripts/tests)
+    check ruff ruff format -q --no-cache --check "${py_sources[@]}"
+    check ruff ruff check -q --no-cache "${py_sources[@]}"
+    check mypy mypy --cache-dir=/dev/null "${py_sources[@]}"
+    check python3 python3 -B -m unittest discover -q -s scripts/tests -t scripts
 fi
 
 if ((${#deployed_bash[@]} > 0)); then

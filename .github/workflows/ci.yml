@@ -11,7 +11,7 @@ on:
     # skips the restore and installs everything from scratch.
     - cron: '0 4 * * 1'
 
-# The install job below runs scripts/install-linux.sh with this token in its
+# The install job below runs scripts/install.sh with this token in its
 # environment, so the workflow gets the narrowest scope that still works: the
 # token is only ever used to lift GitHub's 60-request-per-hour anonymous API
 # limit on the release lookups.
@@ -48,7 +48,12 @@ jobs:
           # ubuntu-latest, so a macOS-only script change can't be exercised here
           filters: |
             install:
+              - 'scripts/install.sh'
+              - 'scripts/install.py'
+              - 'scripts/installer/**'
+              - 'scripts/legacy-step.sh'
               - 'scripts/install-common.sh'
+              - 'scripts/pins.sh'
               - 'scripts/install-linux.sh'
               - 'scripts/verify-install.sh'
 
@@ -101,6 +106,12 @@ jobs:
       - name: Lint check
         run: nix develop --command make lint
 
+      # The installer's own tests. They run the runner over stand-in steps and
+      # call real bash helpers through legacy-step.sh, in about a second. The
+      # install job below is the end-to-end run.
+      - name: Installer unit tests
+        run: nix develop --command make test-py
+
       # `make lint` scans the working tree. This reads every commit, so a
       # secret that was committed and then deleted is still caught; it is kept
       # out of `lint` because it needs the full history a local checkout does
@@ -129,7 +140,7 @@ jobs:
         id: pins
         if: github.event_name != 'schedule'
         run: |
-          hash="$(grep -hE '^[A-Z_]+_VERSION=' scripts/install-common.sh scripts/install-linux.sh | sha256sum | cut -c1-16)"
+          hash="$(grep -hE '^[A-Z_]+_VERSION=' scripts/pins.sh scripts/install-linux.sh | sha256sum | cut -c1-16)"
           echo "hash=${hash}" >> "${GITHUB_OUTPUT}"
 
       - name: Cache installed tools
@@ -148,9 +159,9 @@ jobs:
             /opt/nvim-linux-x86_64
             /usr/local/bin
             /usr/local/lib/node_modules
-          key: install-${{ runner.os }}-${{ steps.pins.outputs.hash }}-${{ hashFiles('scripts/install-common.sh', 'scripts/install-linux.sh') }}
-          # The primary key can never hit. It hashes the two scripts, and this
-          # job only runs when one of them changed, so the key is new on every
+          key: install-${{ runner.os }}-${{ steps.pins.outputs.hash }}-${{ hashFiles('scripts/install.sh', 'scripts/install.py', 'scripts/installer/**', 'scripts/legacy-step.sh', 'scripts/install-common.sh', 'scripts/pins.sh', 'scripts/install-linux.sh') }}
+          # The primary key can never hit. It hashes the installer, and this
+          # job only runs when part of it changed, so the key is new on every
           # run that reaches here — measured as a 0s restore and a 3m save of a
           # 1.1 GB cache nothing would ever read. The prefix restores the
           # previous run's tools instead, which the install steps then skip
@@ -176,7 +187,7 @@ jobs:
         run: |
           hash="$({
             echo "${ImageOS:-}"
-            grep -h '^OPAM_VERSION=' scripts/install-common.sh
+            grep -h '^OPAM_VERSION=' scripts/pins.sh
             sed -n '/^install_opam()/,/^}/p;/^install_ocaml_tools()/,/^}/p' scripts/install-common.sh
           } | sha256sum | cut -c1-16)"
           echo "hash=${hash}" >> "${GITHUB_OUTPUT}"
@@ -194,7 +205,7 @@ jobs:
       - name: Run install script
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash scripts/install-linux.sh
+        run: bash scripts/install.sh
 
       - name: Verify installed tools
         run: bash scripts/verify-install.sh

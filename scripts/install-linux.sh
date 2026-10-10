@@ -3,6 +3,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+# A library of steps: scripts/installer runs each function here in a process of
+# its own, through legacy-step.sh. Run directly, this hands over to the entry
+# point, so an old habit or an old document still installs.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    exec "${SCRIPT_DIR}/install.sh" "$@"
+fi
+
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/install-common.sh"
 
@@ -249,7 +257,7 @@ install_neovim_if_missing() {
     local nvim_dir="nvim-linux-${nvim_arch}"
     local nvim_path="/opt/${nvim_dir}/bin/nvim"
     local tag
-    # shellcheck disable=SC2154  # NEOVIM_VERSION is in install-common.sh's pin block
+    # shellcheck disable=SC2154  # NEOVIM_VERSION is in pins.sh
     tag="$(pinned_tag "${NEOVIM_VERSION}" neovim/neovim)" || return 1
     # The first line of `nvim --version` is "NVIM v0.12.5", or for a nightly
     # "NVIM v0.13.0-dev-123+gabcdef", whose suffix version_gte cannot read.
@@ -294,111 +302,3 @@ install_neovim_if_missing() {
     note_shadowed nvim "${nvim_path}"
     require_runs "${nvim_path}" --version
 }
-
-main() {
-    parse_args "$@"
-    log "Checking prerequisites"
-    require_cmd sudo
-    require_cmd ssh-keygen
-    require_cmd dpkg
-    require_cmd apt
-    start_sudo_askpass
-    start_sudo_keepalive
-    # Prerequisites, deliberately outside run_step: the rest of the install is
-    # built on these, so a failure here aborts under errexit rather than being
-    # collected and reported at the end.
-    quiet install_apt_packages_if_missing git curl gpg build-essential zsh entr libevent-dev libncurses-dev pkg-config bubblewrap bison autoconf unzip
-    quiet install_perf
-    # Early, so every later step and the user's own work runs against the
-    # newer git rather than jammy's 2.34.1.
-    run_step install_git
-    run_step install_login_shell
-    run_step install_inotify_limits
-    run_step install_vscode_unattended_upgrades
-    run_step install_tmux_from_source
-    run_step install_cmake
-    run_step install_nix
-    run_step install_direnv
-    run_step install_nix_direnv
-
-    run_step install_zinit
-    run_step install_rust
-    run_step install_rust_analyzer
-    run_step install_eza
-    run_step install_fd
-    run_step install_bat
-    run_step install_btop
-    run_step install_ripgrep
-    run_step install_git_delta
-    run_step install_jq
-    run_step install_zstd
-    run_step install_hyperfine
-    run_step install_zoxide
-    run_step install_fzf
-    run_step install_fzf_tab
-    run_step install_zsh_autosuggestions
-    run_step install_atuin
-    run_step install_gh
-    run_step install_gh_stack
-    run_step install_gh_stack_skill
-    run_step install_tailscale
-    run_step install_claude_code
-    run_step install_rtk
-    run_step install_node
-    run_step install_uv
-    run_step install_clangd
-    run_step install_pyright
-    run_step install_bash_ls
-    run_step install_lua_ls
-    run_step install_opam
-    run_step install_go
-    run_step install_moor
-    run_step install_glow
-    run_step install_treehouse
-    run_step install_git_absorb
-    run_step install_gitleaks
-    run_step install_sccache
-    run_step install_ripgrep_all
-    run_step install_difftastic
-    run_step install_cargo_nextest
-    run_step install_ansible_lint
-    run_step install_elan
-    run_step install_fzf_git
-    run_step install_cargo_extras
-    run_step install_ccusage
-    run_step install_starship
-    run_step install_tmux_plugins
-    run_step install_wezterm
-    run_step set_default_terminal_wezterm
-    run_step install_nerd_font
-
-    run_optional_step obsidian \
-        "Obsidian: notes app, plus obsync and the 15-minute vault sync cron entry it schedules. Ships the 'obsidian' CLI, but needs the GUI app running — a dev-machine tool, not a server one." \
-        install_obsidian_stack
-
-    run_optional_step zathura \
-        "zathura: keyboard-driven PDF viewer, with SyncTeX inverse search into VS Code. A GUI app — noise on a server." \
-        install_zathura
-
-    run_optional_step latex \
-        "LaTeX: upstream TeX Live in ~/.local/texlive with latexmk and biber, for building papers. Several gigabytes, and pointless where no one writes documents." \
-        install_latex
-
-    run_optional_step typst \
-        "Typst: markup typesetting compiler, a single binary in ~/.local/bin. For writing documents, not for a server." \
-        install_typst
-
-    run_optional_step docker \
-        "Docker: container engine with the buildx and compose plugins. Adds you to the docker group, which is root-equivalent." \
-        install_docker
-
-    run_step install_neovim_if_missing
-
-    # After every other step: it runs each tool to get its completion script.
-    run_step install_zsh_completions
-
-    print_chezmoi_init_hint
-    check_failed
-}
-
-main "$@"
