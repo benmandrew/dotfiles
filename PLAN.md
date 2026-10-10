@@ -64,7 +64,7 @@ The functions every step calls move to Python with unit tests, and seven steps m
 - [x] The step context: `run()` raising on a non-zero exit, `capture()`, `succeeds()`, a temporary directory per step, and a `Host` a test can set.
 - [x] `release.py`: download a release asset, unpack it, find a binary by name.
 - [x] Batch A: `install_gitleaks`, `install_glow` and `install_ripgrep_all` from one table, and `install_moor`, `install_treehouse`, `install_lua_ls` and `install_cmake` as functions. Their bash functions are deleted.
-- [ ] Gate. See the log.
+- [x] Gate: items 1, 2 and 4 pass, and item 3 without sudo. See the log.
 
 ### Stage 3: the remaining release-binary steps
 
@@ -122,9 +122,10 @@ Stage 2 started without the terminal run for gate 3, which is still owed.
 `install-common.sh` went from 3,989 lines to 3,393, and from 123 functions to 115. The Python installer is 2,173 lines in 19 files, with 1,453 lines of tests.
 
 - **Gate 1: passed.** `nix develop --command make fmt-ci lint test-py` passes, with 111 tests. `make test-py PYTHON=/Library/Developer/CommandLineTools/usr/bin/python3` passes on Python 3.9.6. The step tests run each port against a fake `curl`, `brew`, `go` and `sudo`, and cover both platforms' branches on one machine.
-- **Gate 2: running.**
+- **Gate 2: passed.** Both installers ran side by side with `--no-optional` in fresh Ubuntu 22.04 arm64 containers, `b1ed1a5` against this stage. Each took 1,248 seconds and printed 251 lines, and the two logs are the same once the temporary directory names are replaced. Both exit 1 with the three baseline failures, and `verify-install.sh` reports 68 passed and 3 failed in both. All seven ported steps installed for real here: cmake through its installer and `sudo`, moor through `go install`, the other five from release assets.
 - **Gate 3: passed without sudo.** `--no-optional` on this Mac printed the same 66 lines as `b1ed1a5` run the same way. All seven ported steps skip here, so this run covers their guards alone. The terminal run is still owed from stage 1.
-- **Gate 4: waiting on the push.** The pin hash in `ci.yml` now reads `scripts/pins.sh`, so no cache key matches and the install runs cold.
+- **Gate 4: passed, on a warm cache.** Run 38068886975 on commit `1bb0d6f`: `lint` and `install` passed, the install job in 140 seconds. Its 163 `[install]` and verify lines match run 38066631156 on `b1ed1a5`. The pin hash reads the same lines from their new file, so its value did not change and the run restored a 1,232 MB cache through a restore key. All seven ported steps skipped, so on x86_64 this run covers their guards alone.
+- No gate ran an x86_64 install of the ported steps. As a substitute, a script built every release URL from the steps' own tables for Linux x86_64, Linux aarch64 and macOS arm64, and asked GitHub for the headers of each: all 74 exist, the cargo tools of batch B included.
 - `make pins` prints the same 32 lines from Python as `print_pin_updates` printed from `b1ed1a5`.
 
 Three things differ from the bash steps, all on failure paths. `install_gitleaks`, `install_glow` and `install_treehouse` find their binary by name inside the tarball, as `install_ripgrep_all` always did, and report "No gitleaks binary inside ..." where `install` used to fail on a fixed path. A binary is copied beside its target and renamed over it, so an interrupted copy leaves the old one. `lua-language-server`'s link is replaced the same way.
