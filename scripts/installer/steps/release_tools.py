@@ -79,15 +79,7 @@ TOOLS = (
 
 
 def _announce(context: StepContext, name: str, command: str) -> bool:
-    """Say what is about to happen to a tool, or return False to skip it."""
-    if context.which(command) is None:
-        context.log(f"Installing {name}")
-    elif context.upgrade:
-        context.log(f"Upgrading {name}")
-    else:
-        context.log(f"{name} already installed; skipping")
-        return False
-    return True
+    return tools.announce(context, name, context.which(command) is not None)
 
 
 def install(context: StepContext, tool: ReleaseTool) -> None:

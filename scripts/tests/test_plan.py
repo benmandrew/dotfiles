@@ -38,7 +38,7 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(both, [], "ported, and still a bash function")
         for step in steps(plan):
             if step.name in PORTED:
-                self.assertIs(step, PORTED[step.name])
+                self.assertIs(step.action, PORTED[step.name].action)
 
     def test_every_linux_step_is_defined_once(self) -> None:
         self.check_defined(LINUX, "install-linux.sh")
@@ -76,6 +76,17 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(first.name, "install_apt_packages_if_missing")
         self.assertEqual(second.name, "install_perf")
         self.assertTrue(first.fatal and second.fatal)
+
+    def test_a_ported_step_keeps_what_the_plan_gave_it(self) -> None:
+        first = next(steps(LINUX))
+        self.assertIn("build-essential", first.args)
+        self.assertEqual(first.title.split()[:2], ["install_apt_packages_if_missing", "git"])
+        formulae = next(s for s in steps(MACOS) if s.name == "install_brew_formulae_if_missing")
+        self.assertEqual(formulae.args, ("git", "zsh", "tmux", "node", "entr"))
+
+    def test_linux_keeps_apt_from_asking(self) -> None:
+        self.assertIn(("DEBIAN_FRONTEND", "noninteractive"), LINUX.env)
+        self.assertEqual(MACOS.env, ())
 
     def test_platforms(self) -> None:
         self.assertIs(plan_for("Linux", "x86_64"), LINUX)

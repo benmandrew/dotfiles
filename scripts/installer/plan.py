@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Union
 
 from .legacy import legacy
@@ -35,15 +35,22 @@ class Plan:
     # Checked before anything runs, sudo included.
     requires: tuple[str, ...]
     items: tuple[Item, ...]
+    # Set for every step of the run.
+    env: tuple[tuple[str, str], ...] = ()
 
 
 class UnsupportedPlatform(Exception):
     pass
 
 
-def _step(name: str) -> Step:
+def _step(name: str, *args: str, interactive: bool = False, fatal: bool = False) -> Step:
     """The step of that name: the Python one where it is ported, else the bash one."""
-    return PORTED.get(name) or legacy(name)
+    ported = PORTED.get(name)
+    if ported is None:
+        return legacy(name, *args, interactive=interactive, fatal=fatal)
+    if not (args or interactive or fatal):
+        return ported
+    return replace(ported, args=args, interactive=interactive, fatal=fatal)
 
 
 def _steps(*names: str) -> tuple[Step, ...]:
@@ -52,11 +59,15 @@ def _steps(*names: str) -> tuple[Step, ...]:
 
 LINUX = Plan(
     requires=("sudo", "ssh-keygen", "dpkg", "apt"),
+    # A step's output is held in a file while it runs, so a debconf dialog
+    # would be both invisible and unanswerable. noninteractive is the frontend
+    # that never opens one, taking each package's default instead.
+    env=(("DEBIAN_FRONTEND", "noninteractive"),),
     items=(
         # Prerequisites, deliberately fatal: the rest of the install is built
         # on these, so a failure here ends the run rather than being collected
         # and reported at the end.
-        legacy(
+        _step(
             "install_apt_packages_if_missing",
             "git",
             "curl",
@@ -73,7 +84,7 @@ LINUX = Plan(
             "unzip",
             fatal=True,
         ),
-        legacy("install_perf", fatal=True),
+        _step("install_perf", fatal=True),
         # Early, so every later step and the user's own work runs against the
         # newer git rather than jammy's 2.34.1.
         *_steps(
@@ -142,20 +153,20 @@ LINUX = Plan(
             "Obsidian: notes app, plus obsync and the 15-minute vault sync cron entry it"
             " schedules. Ships the 'obsidian' CLI, but needs the GUI app running — a"
             " dev-machine tool, not a server one.",
-            legacy("install_obsidian_stack"),
+            _step("install_obsidian_stack"),
         ),
         OptionalStep(
             "zathura",
             "zathura: keyboard-driven PDF viewer, with SyncTeX inverse search into VS Code."
             " A GUI app — noise on a server.",
-            legacy("install_zathura"),
+            _step("install_zathura"),
         ),
         OptionalStep(
             "latex",
             "LaTeX: upstream TeX Live in ~/.local/texlive with latexmk and biber, for"
             " building papers. Several gigabytes, and pointless where no one writes"
             " documents.",
-            legacy("install_latex"),
+            _step("install_latex"),
         ),
         OptionalStep(
             "typst",
@@ -167,12 +178,12 @@ LINUX = Plan(
             "docker",
             "Docker: container engine with the buildx and compose plugins. Adds you to the"
             " docker group, which is root-equivalent.",
-            legacy("install_docker"),
+            _step("install_docker"),
         ),
         _step("install_neovim_if_missing"),
         # After every other step: it runs each tool to get its completion
         # script.
-        legacy("install_zsh_completions"),
+        _step("install_zsh_completions"),
     ),
 )
 
@@ -188,11 +199,11 @@ MACOS = Plan(
         # running it here lets `sudo -i nix upgrade-nix` use the credential
         # taken moments ago. This saves a prompt on its own, without the
         # askpass helper.
-        legacy("install_nix"),
+        _step("install_nix"),
         # Homebrew's installer prompts, so its output cannot be held.
-        legacy("install_homebrew", interactive=True, fatal=True),
+        _step("install_homebrew", interactive=True, fatal=True),
         Require(("brew",)),
-        legacy("install_brew_formulae_if_missing", "git", "zsh", "tmux", "node", "entr"),
+        _step("install_brew_formulae_if_missing", "git", "zsh", "tmux", "node", "entr"),
         *_steps(
             "install_login_shell",
             "install_cmake",
@@ -251,19 +262,19 @@ MACOS = Plan(
             "Obsidian: notes app, plus obsync and the 15-minute vault sync LaunchAgent it"
             " schedules. Ships the 'obsidian' CLI, but needs the GUI app running — a"
             " dev-machine tool, not a server one.",
-            legacy("install_obsidian_stack"),
+            _step("install_obsidian_stack"),
         ),
         OptionalStep(
             "zathura",
             "zathura: keyboard-driven PDF viewer, with SyncTeX inverse search into VS Code."
             " A GUI app — noise on a server.",
-            legacy("install_zathura"),
+            _step("install_zathura"),
         ),
         OptionalStep(
             "latex",
             "LaTeX: TeX Live with latexmk and biber, for building papers. Several"
             " gigabytes, and pointless where no one writes documents.",
-            legacy("install_latex"),
+            _step("install_latex"),
         ),
         OptionalStep(
             "typst",
@@ -275,12 +286,12 @@ MACOS = Plan(
             "docker",
             "Docker: container engine with the buildx and compose plugins. Docker Desktop"
             " on macOS, a GUI app that runs a Linux VM.",
-            legacy("install_docker"),
+            _step("install_docker"),
         ),
         _step("install_neovim_if_missing"),
         # After every other step: it runs each tool to get its completion
         # script.
-        legacy("install_zsh_completions"),
+        _step("install_zsh_completions"),
     ),
 )
 

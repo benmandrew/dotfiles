@@ -79,6 +79,7 @@ def run(console: Console, settings: Settings, env: dict[str, str], plan: Plan) -
     # unattended stalls on the first one. install-common.sh exports the same
     # for the bash steps.
     env["HOMEBREW_NO_ASK"] = "1"
+    env.update(plan.env)
     runner = Runner(console, settings, env)
     sudo = SudoSession(console, env)
     optional = OptionalTools(console, env, settings.optional_mode, settings.reconfigure_optional)

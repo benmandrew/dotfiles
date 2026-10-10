@@ -14,48 +14,6 @@ fi
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/install-common.sh"
 
-install_brew_formulae_if_missing() {
-    local formula
-    if [[ -n "${UPGRADE:-}" ]]; then
-        log "Upgrading Homebrew formulae: $*"
-        brew update
-        # A batch `brew upgrade` stops at the formula that failed and takes the
-        # rest of the list with it. The failure used to be discarded with
-        # `|| true` and only entirely-missing formulae reinstalled, so a
-        # half-finished upgrade reported success. Retry each formula on its own
-        # instead, and fail the step for whatever is still broken at the end.
-        local failed=()
-        if ! brew upgrade "$@"; then
-            log "Batch upgrade failed; retrying each formula on its own"
-            for formula in "$@"; do
-                if ! brew list --formula "${formula}" >/dev/null 2>&1; then
-                    brew install "${formula}" || failed+=("${formula}")
-                elif ! brew upgrade "${formula}"; then
-                    failed+=("${formula}")
-                fi
-            done
-        fi
-        if ((${#failed[@]} > 0)); then
-            err "Homebrew formulae failed: ${failed[*]}"
-            return 1
-        fi
-        return
-    fi
-    local missing_formulae=()
-    for formula in "$@"; do
-        if ! brew list --formula "${formula}" >/dev/null 2>&1; then
-            missing_formulae+=("${formula}")
-        fi
-    done
-    if ((${#missing_formulae[@]} == 0)); then
-        log "Homebrew formulae already installed; skipping"
-        return
-    fi
-    log "Installing missing Homebrew formulae: ${missing_formulae[*]}"
-    brew update
-    brew install "${missing_formulae[@]}"
-}
-
 install_homebrew() {
     if command -v brew >/dev/null 2>&1; then
         log "Homebrew already installed"

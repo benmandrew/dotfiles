@@ -8,6 +8,7 @@ import shutil
 from collections.abc import Sequence
 from pathlib import Path
 
+from . import fetch
 from .runner import StepContext, StepFailed
 from .sudo import sudo_command
 
@@ -33,6 +34,79 @@ def retry_once(context: StepContext, argv: Sequence[str]) -> None:
         return
     context.log(f"{argv[0]} failed; retrying once")
     context.run(argv)
+
+
+def announce(context: StepContext, label: str, present: bool) -> bool:
+    """Say what is about to happen to a tool, or return False to skip it."""
+    if not present:
+        context.log(f"Installing {label}")
+    elif context.upgrade:
+        context.log(f"Upgrading {label}")
+    else:
+        context.log(f"{label} already installed; skipping")
+        return False
+    return True
+
+
+def run_downloaded(
+    context: StepContext,
+    url: str,
+    interpreter: Sequence[str],
+    *args: str,
+    env: dict[str, str] | None = None,
+) -> None:
+    """Fetch a vendor's install script and run it from disk.
+
+    Never `curl | sh`: a download that fails half way would hand the shell half
+    a script, and the fetch would skip the TLS floor and the retries that
+    fetch.download sets.
+    """
+    script = context.tmpdir() / "install.sh"
+    fetch.download(context, url, script)
+    context.run([*interpreter, str(script), *args], env=env)
+
+
+def load_cargo_env(context: StepContext) -> None:
+    """Put cargo's bin directory on PATH, as sourcing ~/.cargo/env does."""
+    if not (context.home / ".cargo" / "env").is_file():
+        return
+    cargo_bin = str(context.home / ".cargo" / "bin")
+    path = context.env.get("PATH", "")
+    if cargo_bin not in path.split(os.pathsep):
+        context.env["PATH"] = f"{cargo_bin}{os.pathsep}{path}"
+
+
+def npm_install_g(context: StepContext, *packages: str) -> None:
+    """`npm install -g`, with npm's global prefix pinned to ~/.local.
+
+    Pinned rather than trusting `npm prefix -g`. Homebrew's node points that at
+    the versioned keg (Cellar/node/<version>), so globals installed there are
+    orphaned by the next `brew upgrade node` while stale copies left in
+    /opt/homebrew/lib/node_modules keep winning on PATH. ~/.local is
+    version-independent and user-writable, so no sudo fallback either.
+    """
+    context.succeeds(["npm", "config", "set", "prefix", str(context.home / ".local")])
+    context.run(["npm", "install", "-g", *packages])
+
+
+def safe_git(context: StepContext, directory: Path, *args: str) -> None:
+    """git in a clone, whoever owns it.
+
+    safe_git and ensure_user_owns exist because upgrade paths for git-cloned
+    tools (zinit, fzf, tpm) have hit repos owned by root, from an earlier sudo
+    or CI run, which makes plain git refuse ("dubious ownership") or fail to
+    write.
+    """
+    context.run(["git", "-c", f"safe.directory={directory}", "-C", str(directory), *args])
+
+
+def ensure_user_owns(context: StepContext, directory: Path) -> None:
+    """Take a directory back from another owner. See safe_git."""
+    if not directory.is_dir() or directory.stat().st_uid == os.geteuid():
+        return
+    # By number, which chown takes as readily as a name and which an account
+    # missing from the password database still has.
+    sudo(context, ["chown", "-R", f"{os.geteuid()}:{os.getegid()}", directory], check=False)
 
 
 def require_runs(
@@ -96,6 +170,13 @@ def sudo(context: StepContext, argv: Sequence[object], *, check: bool = True) ->
     if check and status != 0:
         raise StepFailed
     return status
+
+
+def sudo_write(context: StepContext, path: Path, text: str, *, append: bool = False) -> None:
+    """Write a root-owned file through `sudo tee`, failing the step if it cannot."""
+    tee = ["tee", "-a"] if append else ["tee"]
+    if context.feed([*sudo_command(context.env), *tee, str(path)], text) != 0:
+        raise StepFailed
 
 
 def local_bin(context: StepContext) -> Path:

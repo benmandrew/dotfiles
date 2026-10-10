@@ -19,31 +19,6 @@ source "${SCRIPT_DIR}/install-common.sh"
 # opens one, taking each package's default instead.
 export DEBIAN_FRONTEND=noninteractive
 
-install_apt_packages_if_missing() {
-    if [[ -n "${UPGRADE:-}" ]]; then
-        log "Upgrading base packages: $*"
-        sudo apt-get update || return 1
-        sudo apt-get install -y "$@"
-        return
-    fi
-    local missing_packages=()
-    local package
-    for package in "$@"; do
-        if ! dpkg -s "${package}" >/dev/null 2>&1; then
-            missing_packages+=("${package}")
-        fi
-    done
-    if ((${#missing_packages[@]} == 0)); then
-        log "Base packages already installed; skipping"
-        return
-    fi
-    log "Installing missing base packages: ${missing_packages[*]}"
-    # A fresh machine or container may never have fetched the package lists,
-    # and stale ones name versions the mirror no longer carries.
-    sudo apt-get update || return 1
-    sudo apt-get install -y "${missing_packages[@]}"
-}
-
 # Ubuntu freezes git's upstream version at release and backports fixes only, so
 # jammy is on 2.34.1 and stays there for the life of the release. That is old
 # enough to matter for the config this repo deploys: zdiff3 for
@@ -188,55 +163,4 @@ set_default_terminal_wezterm() {
     fi
     log "Setting x-terminal-emulator to WezTerm"
     sudo update-alternatives --set x-terminal-emulator "${target}"
-}
-
-remove_conflicting_libnode_dev() {
-    # The distro-provided libnode-dev ships headers (e.g. common.gypi) that
-    # the NodeSource nodejs package also ships, so dpkg refuses to unpack
-    # nodejs while libnode-dev is still installed.
-    if dpkg -s libnode-dev >/dev/null 2>&1; then
-        log "Removing distro libnode-dev (conflicts with NodeSource nodejs package)"
-        sudo apt-get remove -y libnode-dev
-    fi
-}
-
-install_node() {
-    if command -v node >/dev/null 2>&1; then
-        local node_major
-        node_major="$(node --version | cut -d. -f1 | tr -d 'v')"
-        if ((node_major >= 20)); then
-            if [[ -z "${UPGRADE:-}" ]]; then
-                log "Node.js ${node_major} already installed; skipping"
-                return
-            fi
-            # Through NodeSource's setup script again, since its apt source
-            # names one major version and an apt upgrade stays on it past
-            # end of life.
-            log "Upgrading Node.js to the current LTS"
-        else
-            log "Node.js ${node_major} < 20; upgrading to LTS"
-        fi
-    else
-        log "Installing Node.js LTS"
-    fi
-    remove_conflicting_libnode_dev
-    local setup_path
-    setup_path="$(mktemp)"
-    download https://deb.nodesource.com/setup_lts.x "${setup_path}" || return 1
-    if ! sudo -E bash "${setup_path}"; then
-        rm -f "${setup_path}"
-        err "NodeSource setup script failed"
-        return 1
-    fi
-    rm -f "${setup_path}"
-    sudo apt-get install -y nodejs || return 1
-    # Without the NodeSource repository in place, apt installs the distro's
-    # nodejs, which on jammy is 12.
-    hash -r
-    local installed_major
-    installed_major="$(node --version 2>/dev/null | cut -d. -f1 | tr -d 'v')"
-    if [[ ! "${installed_major}" =~ ^[0-9]+$ ]] || ((installed_major < 20)); then
-        err "Node.js is ${installed_major:-absent} after installing; need at least 20"
-        return 1
-    fi
 }

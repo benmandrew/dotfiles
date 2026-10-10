@@ -30,6 +30,8 @@ Each of these is deliberate. Anything else that differs from the bash installer 
 - `install-linux.sh` and `install-macos-arm64.sh` are step libraries. Run directly, each hands over to `install.sh`.
 - `--help` works, and an unknown argument exits 2 with a usage line (argparse), where bash exited 1.
 - `install_cargo_extras` tries all five tools when one needs a `cargo` that is missing. In bash the `require_cmd` ended the step at the first such tool.
+- A tool counts as present only where its file on `PATH` is executable. Bash's `command -v` also answered for a file without the execute bit, where no executable copy came after it.
+- `install_fzf` fails as soon as its `git clone` fails. Bash went on to run the install script the clone had not delivered, and failed there.
 - On SIGTERM the runner ends the bash step it is waiting on and dies of the signal at once. Bash held the signal until the step's current command had finished. A command the step started may still be running after the runner has gone.
 
 ## The gate
@@ -72,16 +74,16 @@ The functions every step calls move to Python with unit tests, and seven steps m
 Port in batches, deleting each bash function as its batch passes the gate. `retry_once`, `cpu_count`, `safe_git`, `ensure_user_owns` and `npm_install_g` move with the first step that calls them.
 
 - [x] Batch B, the cargo tools, in `steps/cargo_tools.py`: one table for 17 tools, with `install_eza`, `install_fd`, `install_bat`, `install_ripgrep`, `install_git_delta`, `install_hyperfine`, `install_zoxide`, `install_sccache`, `install_difftastic`, `install_cargo_nextest`, `install_typst`, `install_git_absorb` and `install_cargo_extras` built on it. Gate: items 1, 2 and 4 pass, and item 3 without sudo. See the log.
-- [ ] Batch C: `install_atuin`, `install_elan`, `install_nerd_font`, `install_neovim_if_missing` and `install_go`, one module each in `installer/steps/`. Their bash functions are deleted. Gate: items 1 and 2 pass, and item 3 without sudo; item 4 waits for a push. See the log.
-- [ ] Gate after each batch.
+- [ ] Batch C: `install_atuin`, `install_elan`, `install_nerd_font`, `install_neovim_if_missing` and `install_go`, one module each in `installer/steps/`. Their bash functions are deleted. Gate: items 1, 2 and 4 pass, and item 3 without sudo. See the log.
+- [x] Gate after each batch.
 
 ### Stage 4: package-manager and clone steps
 
-- [ ] Homebrew and apt helpers: `install_brew_formulae_if_missing`, `install_apt_packages_if_missing`, and the steps that only call a package manager (`install_jq`, `install_zstd`, `install_gh`, `install_clangd`, `install_node`).
-- [ ] npm globals: `install_pyright`, `install_bash_ls`, `install_ccusage`.
-- [ ] Git clones: `install_zinit`, `install_fzf`, `install_fzf_tab`, `install_fzf_git`, `install_zsh_autosuggestions`, `install_tmux_plugins`.
-- [ ] Vendor installers run from disk: `install_rust`, `install_rust_analyzer`, `install_uv`, `install_starship`, `install_direnv`, `install_nix_direnv`, `install_claude_code`, `install_rtk`, `install_tailscale`, `install_ansible_lint`.
-- [ ] Gate.
+- [x] Homebrew and apt helpers: `install_brew_formulae_if_missing`, `install_apt_packages_if_missing`, and the steps that only call a package manager (`install_jq`, `install_zstd`, `install_gh`, `install_clangd`, `install_node`).
+- [x] npm globals: `install_pyright`, `install_bash_ls`, `install_ccusage`.
+- [x] Git clones: `install_zinit`, `install_fzf`, `install_fzf_tab`, `install_fzf_git`, `install_zsh_autosuggestions`, `install_tmux_plugins`.
+- [x] Vendor installers run from disk: `install_rust`, `install_rust_analyzer`, `install_uv`, `install_starship`, `install_direnv`, `install_nix_direnv`, `install_claude_code`, `install_rtk`, `install_tailscale`, `install_ansible_lint`.
+- [x] Gate: items 1, 2 and 4 pass, and item 3 without sudo. See the log.
 
 ### Stage 5: one-off steps
 
@@ -154,7 +156,7 @@ Gates 2 to 4 leave the macOS and x86_64 install paths of a ported step unrun, si
 - **Gate 1: passed.** `nix develop --command make fmt-ci lint test-py` passes, with 164 tests, and so does the run on Python 3.9.6.
 - **Gate 2: passed.** `b3f0273` against this batch, side by side with `--no-optional` in fresh Ubuntu 22.04 arm64 containers. Each took 2,854 seconds, slower than batch B's 1,169 because the other checks ran on the same machine. The 169 lines of the install are the same in the same order, with the three baseline failures, and both verify runs end 68 passed, 3 failed. The verify output holds the same lines with `[ok] go` two lines apart: `[FAIL]` lines go to stderr, and Docker merges the two streams in no fixed order. The batch B run printed the order this batch printed, from the code that is this run's baseline. atuin, Go, elan and Neovim installed, and the font skipped, the container having no display.
 - **Gate 3: passed without sudo.** The same 66 lines as `b3f0273` on this Mac, every step skipping.
-- **Gate 4: not run.** It needs a push. It will run cold: `NEOVIM_MIN_VERSION` left `install-linux.sh` for `steps/neovim.py`, and CI builds the cache key's pin hash from every `_VERSION=` line in that file, so the restore key matches no earlier cache.
+- **Gate 4: passed, on a cold cache, at the second run.** Run 38089391495 on `8859681` failed in `lint`: two tests in `test_go.py` found the runner's own `/usr/bin/go` on the `PATH` the step tests used, and the install job was skipped. `854e7fa` takes `/usr/bin` off that `PATH`. Run 38090371590 on it passed, the install job in 457 seconds and verify ending 74 passed, 0 failed. It ran cold, as expected: `NEOVIM_MIN_VERSION` left `install-linux.sh` for `steps/neovim.py`, and CI builds the cache key's pin hash from every `_VERSION=` line in that file. Its 166 lines differ from run 38070838460 only where a step installed in place of skipping, and in three completion lines that an install prints.
 
 The real-install check from batch B, once from `b3f0273` and once from this batch:
 
@@ -163,5 +165,20 @@ The real-install check from batch B, once from `b3f0273` and once from this batc
 - `install_go` and `install_neovim_if_missing` write outside `HOME`, so each version ran as root in an x86_64 container of its own. Both left the same 19,583 entries under `/usr/local/go` and `/opt`, compared by type, size, mode and owner. Two telemetry counter files differ, which `go version` writes on every run.
 
 All 90 release URLs the ported steps build exist, the 16 this batch adds included.
+
+### Stage 4, 10 October 2026
+
+Twenty-six steps moved, in eight modules: `packages.py`, `gh.py`, `node.py`, `clones.py`, `rust.py`, `vendor.py`, `nix.py` and `ansible_lint.py`. `install-common.sh` went from 2,693 lines to 1,980 and from 90 functions to 61, `install-linux.sh` from 242 lines to 166, and `install-macos-arm64.sh` from 80 to 38. The Python installer is 3,974 lines in 34 files, with 3,115 lines of tests, and fifty-one steps are now Python.
+
+A plan's arguments reach a Python step as `context.args`, and `_step` in `plan.py` applies `fatal` and `interactive` to a ported step. `DEBIAN_FRONTEND=noninteractive` is `LINUX.env` in the plan, bash having exported it from a file the Python steps never source. `apt.py` is new, and `tools.py` gained `announce`, `run_downloaded`, `npm_install_g`, `safe_git`, `ensure_user_owns`, `sudo_write` and `load_cargo_env`. The bash `safe_git` and `ensure_user_owns` stay for the Obsidian steps.
+
+- **Gate 1: passed.** `nix develop --command make fmt-ci lint test-py` passes, with 239 tests, and so does the run on Python 3.9.6.
+- **Gate 2: passed.** `8859681` against this stage, side by side with `--no-optional` in fresh Ubuntu 22.04 arm64 containers. The old run took 1,186 seconds and the new one 1,196. Each printed 252 lines, the same once the temporary directory names are replaced, with the three baseline failures and 68 passed, 3 failed from `verify-install.sh`. Two of the three baseline failures, `install_nix_direnv` and `install_rtk`, are now Python steps, and each fails with the lines its bash version printed.
+- **Gate 3: passed without sudo.** The same 66 lines as `8859681` on this Mac, every step skipping.
+- **Gate 4: passed, on a warm cache.** Run 38092111832 on `ef141f3`: `lint` and `install` passed, the install job in 130 seconds. Its 163 `[install]` and verify lines match run 38070838460, the last warm run, and verify ends 74 passed, 0 failed. Every step skipped, so CI has not yet run an install path of this stage; the cold run that closes stage 6 will.
+
+A second reader compared the 26 ports with the bash at `8859681`, function by function, and found no difference in log lines, commands, probes or environment. It found two edge cases, both fixed before the commit: a dangling `/usr/local/bin/starship` symlink counted as a stale binary, and `ensure_user_owns` looked the user up by name, which fails for an account outside the password database. `chown` now takes the numbers. The same reading produced the first of the two behaviour changes this stage adds above.
+
+The real-install check from batch B was not repeated for this stage. Most of these steps call `apt`, `brew`, `npm` or a vendor's installer, and the container run of gate 2 installs through every Linux one of them.
 
 The port carries one risk that no gate removes: each of the 55 commits to `scripts/` since 10 July encodes a fix found on a real machine, and a fix that loses its comment in translation loses its reason. Every stage should move the comment with the code.

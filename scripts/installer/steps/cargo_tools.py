@@ -9,7 +9,6 @@ tarball is fetched instead and cargo is kept only as the fallback.
 
 from __future__ import annotations
 
-import os
 import re
 import shutil
 from dataclasses import dataclass
@@ -227,18 +226,8 @@ def _installed_version(context: StepContext, command: str) -> str:
     return found.group() if found else ""
 
 
-def _load_cargo_env(context: StepContext) -> None:
-    """Put cargo's bin directory on PATH, as sourcing ~/.cargo/env does."""
-    if not (context.home / ".cargo" / "env").is_file():
-        return
-    cargo_bin = str(context.home / ".cargo" / "bin")
-    path = context.env.get("PATH", "")
-    if cargo_bin not in path.split(os.pathsep):
-        context.env["PATH"] = f"{cargo_bin}{os.pathsep}{path}"
-
-
 def _install_from_source(context: StepContext, tool: CargoTool) -> None:
-    _load_cargo_env(context)
+    tools.load_cargo_env(context)
     tools.require_command(context, "cargo")
     # --locked builds against the dependency versions the crate was published
     # with, taken from the Cargo.lock it ships, rather than re-resolving every

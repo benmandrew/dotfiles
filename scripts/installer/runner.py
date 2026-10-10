@@ -77,6 +77,7 @@ class StepContext:
         output: IO[bytes] | None,
         interactive: bool,
         host: Host | None = None,
+        args: tuple[str, ...] = (),
     ) -> None:
         self.console = console
         self.settings = settings
@@ -84,6 +85,9 @@ class StepContext:
         # there for the next.
         self.env = env
         self.host = host or Host.current()
+        # What the plan gave the step: a package list, for the two steps that
+        # take one.
+        self.args = args
         self._output = output
         self._interactive = interactive
         self._scratch: list[Path] = []
@@ -191,6 +195,26 @@ class StepContext:
         if done.returncode != 0:
             return None
         return done.stdout.decode(errors="replace").rstrip("\n")
+
+    def feed(self, argv: Sequence[str], text: str) -> int:
+        """Run a command with `text` on its stdin and return its status.
+
+        Its stdout is thrown away, since the command this is for is `tee`,
+        which repeats what it was given.
+        """
+        try:
+            done = subprocess.run(
+                argv,
+                input=text.encode(),
+                stdout=subprocess.DEVNULL,
+                stderr=self._output,
+                env=self.env,
+                check=False,
+            )
+        except FileNotFoundError:
+            self.note(f"{argv[0]}: command not found")
+            return 127
+        return done.returncode
 
     def note(self, text: str) -> None:
         """Add a line to the step's output, which is shown only if the step fails."""
@@ -319,7 +343,7 @@ class Runner:
 
     def _attempt(self, step: Step, output: IO[bytes] | None) -> bool:
         context = StepContext(
-            self.console, self.settings, self.env, output, step.interactive, self.host
+            self.console, self.settings, self.env, output, step.interactive, self.host, step.args
         )
         try:
             step.action(context)

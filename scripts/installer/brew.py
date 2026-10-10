@@ -10,6 +10,15 @@ def formula_installed(context: StepContext, name: str) -> bool:
     return context.succeeds(["brew", "list", "--formula", name])
 
 
+def cask_installed(context: StepContext, name: str) -> bool:
+    return context.succeeds(["brew", "list", "--cask", name])
+
+
+def install_or_upgrade(context: StepContext, name: str, present: bool) -> None:
+    """`brew upgrade` a formula that is there, `brew install` one that is not."""
+    context.run(["brew", "upgrade" if present else "install", name])
+
+
 def formula(context: StepContext, name: str, command: str, *probe: str) -> None:
     """Install a formula, or upgrade it under --upgrade, and prove `command` runs."""
     if formula_installed(context, name):

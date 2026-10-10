@@ -105,7 +105,11 @@ class StepCase(ConsoleCase):
         self.fake("curl", _FAKE_CURL)
         # Not logged in, whatever the machine running the tests has.
         self.fake("gh", "#!/bin/sh\nexit 1\n")
-        self.fake("sudo", '#!/bin/sh\n[ "$1" = -A ] && shift\nexec "$@"\n')
+        self.fake(
+            "sudo",
+            '#!/bin/sh\nwhile :; do case "$1" in -A | -E | -i) shift ;; *) break ;; esac; done\n'
+            'exec "$@"\n',
+        )
 
     def fake(self, name: str, script: str, directory: Path | None = None) -> Path:
         """An executable called `name`, in the fakes directory unless told otherwise."""
@@ -123,6 +127,22 @@ class StepCase(ConsoleCase):
         self.fake(
             name,
             f'#!/bin/sh\necho "{name} $*" >>"$FAKE_CALLS"\n[ "$1" != "{failing}" ]\n',
+        )
+
+    def installer(
+        self, name: str, creates: str, output: str = "", into: Path | None = None
+    ) -> None:
+        """A recording fake that leaves an executable called `creates` behind.
+
+        The executable prints `output`, and goes in the fakes directory unless
+        `into` names another.
+        """
+        target = (into or self.bin) / creates
+        self.fake(
+            name,
+            f'#!/bin/sh\necho "{name} $*" >>"$FAKE_CALLS"\nmkdir -p "{target.parent}"\n'
+            f'printf \'#!/bin/sh\\necho "{output}"\\n\' >"{target}"\n'
+            f'chmod +x "{target}"\n',
         )
 
     def called(self) -> list[str]:

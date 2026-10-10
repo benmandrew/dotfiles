@@ -3,10 +3,46 @@
 from __future__ import annotations
 
 from ..runner import Step
-from . import atuin, cargo_tools, cmake, elan, go, lua_ls, neovim, nerd_font, release_tools
+from . import (
+    ansible_lint,
+    atuin,
+    cargo_tools,
+    clones,
+    cmake,
+    elan,
+    gh,
+    go,
+    lua_ls,
+    neovim,
+    nerd_font,
+    nix,
+    node,
+    packages,
+    release_tools,
+    rust,
+    vendor,
+)
 
 PORTED: dict[str, Step] = {
     step.name: step
-    for module in (atuin, cargo_tools, cmake, elan, go, lua_ls, neovim, nerd_font, release_tools)
+    for module in (
+        ansible_lint,
+        atuin,
+        cargo_tools,
+        clones,
+        cmake,
+        elan,
+        gh,
+        go,
+        lua_ls,
+        neovim,
+        nerd_font,
+        nix,
+        node,
+        packages,
+        release_tools,
+        rust,
+        vendor,
+    )
     for step in module.STEPS
 }

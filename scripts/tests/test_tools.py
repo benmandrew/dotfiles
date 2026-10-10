@@ -3,7 +3,7 @@ from __future__ import annotations
 import stat
 
 from installer import tools
-from installer.runner import StepContext
+from installer.runner import Step, StepContext
 
 from .support import StepCase, prints
 
@@ -115,3 +115,37 @@ class ToolsTest(StepCase):
         self.assertFalse(scratch[0].exists())
         self.assertIn("no-such-command: command not found\n", self.said())
         self.assertIn("err\n", self.said())
+
+
+class SharedStepHelpersTest(StepCase):
+    def test_sudo_write(self) -> None:
+        target = self.home / "conf"
+
+        def write(context: StepContext) -> None:
+            tools.sudo_write(context, target, "one\n")
+            tools.sudo_write(context, target, "two\n", append=True)
+
+        self.assertTrue(self.run_action(write))
+        self.assertEqual(target.read_text(), "one\ntwo\n")
+
+    def test_sudo_write_fails_the_step(self) -> None:
+        missing = self.home / "no-such-directory" / "conf"
+        self.assertFalse(self.run_action(lambda context: tools.sudo_write(context, missing, "x")))
+
+    def test_run_downloaded_needs_the_download(self) -> None:
+        url = "https://example.com/install.sh"
+
+        def run(context: StepContext) -> None:
+            tools.run_downloaded(context, url, ["sh"], "-y")
+
+        self.assertFalse(self.run_action(run))
+        self.assertIn(f"ERROR: Download failed: {url}\n", self.said())
+        self.serve(url, '#!/bin/sh\necho "script $*" >>"$FAKE_CALLS"\n')
+        self.assertTrue(self.run_action(run))
+        self.assertEqual(self.called(), ["script -y"])
+
+    def test_a_step_reads_the_arguments_the_plan_gave_it(self) -> None:
+        seen: list[tuple[str, ...]] = []
+        step = Step("step", lambda context: seen.append(context.args), args=("a", "b"))
+        self.assertTrue(self.run_step(step))
+        self.assertEqual(seen, [("a", "b")])
