@@ -42,6 +42,12 @@
             stylua
             shfmt
             shellcheck
+            # For scripts/installer: ruff formats and lints it, mypy checks its
+            # types, and python3 runs mypy's target and `make test-py` where
+            # the machine has no /usr/bin/python3.
+            ruff
+            mypy
+            python3
             lua54Packages.luacheck
             actionlint
             taplo

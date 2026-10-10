@@ -3,6 +3,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+# A library of steps: scripts/installer runs each function here in a process of
+# its own, through legacy-step.sh. Run directly, this hands over to the entry
+# point, so an old habit or an old document still installs.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    exec "${SCRIPT_DIR}/install.sh" "$@"
+fi
+
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/install-common.sh"
 
@@ -62,33 +70,6 @@ install_neovim_if_missing() {
     brew install neovim
 }
 
-# Bounded, since a dismissed or cancelled install dialog leaves nothing to
-# wait for. A rerun opens the dialog again.
-CLT_WAIT_SECONDS=1800
-
-wait_for_clt() {
-    local waited=0
-    log "Waiting for Xcode Command Line Tools installation to complete"
-    until xcode-select -p >/dev/null 2>&1; do
-        if ((waited >= CLT_WAIT_SECONDS)); then
-            err "Xcode Command Line Tools not installed after $((CLT_WAIT_SECONDS / 60)) minutes; was the dialog dismissed? Rerun to try again"
-            return 1
-        fi
-        sleep 5
-        waited=$((waited + 5))
-    done
-}
-
-install_xcode_clt() {
-    if xcode-select -p >/dev/null 2>&1; then
-        log "Xcode Command Line Tools already installed"
-        return
-    fi
-    log "Installing Xcode Command Line Tools"
-    xcode-select --install || true
-    wait_for_clt
-}
-
 install_homebrew() {
     if command -v brew >/dev/null 2>&1; then
         log "Homebrew already installed"
@@ -98,7 +79,9 @@ install_homebrew() {
     local script_path
     script_path="$(mktemp)"
     download https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh "${script_path}" || return 1
-    /bin/bash "${script_path}"
+    # This step used to be called outside the runner, under errexit, where a
+    # failed installer ended the run. Inside a step errexit is off.
+    /bin/bash "${script_path}" || return 1
     rm -f "${script_path}"
     if [[ -x /opt/homebrew/bin/brew ]]; then
         local shellenv_path
@@ -109,119 +92,3 @@ install_homebrew() {
         rm -f "${shellenv_path}"
     fi
 }
-
-main() {
-    parse_args "$@"
-    local os_name arch_name
-    os_name="$(uname -s)"
-    arch_name="$(uname -m)"
-    if [[ "${os_name}" != "Darwin" ]]; then
-        err "This script is for macOS only"
-        exit 1
-    fi
-    if [[ "${arch_name}" != "arm64" ]]; then
-        err "This script is for arm64 macOS only"
-        exit 1
-    fi
-    log "Checking prerequisites"
-    require_cmd sudo
-    require_cmd curl
-    require_cmd ssh-keygen
-    start_sudo_askpass
-    start_sudo_keepalive
-    install_xcode_clt
-
-    # Ahead of install_homebrew deliberately. Nix needs only curl and sh, and
-    # the first brew command of the run wipes the sudo timestamp, so running it
-    # here lets `sudo -i nix upgrade-nix` use the credential taken moments ago.
-    # This saves a prompt on its own, without the askpass helper.
-    run_step install_nix
-
-    install_homebrew
-
-    require_cmd brew
-
-    run_step install_brew_formulae_if_missing git zsh tmux node entr
-    run_step install_login_shell
-    run_step install_cmake
-    run_step install_direnv
-    run_step install_nix_direnv
-
-    run_step install_zinit
-    run_step install_rust
-    run_step install_rust_analyzer
-    run_step install_eza
-    run_step install_fd
-    run_step install_bat
-    run_step install_btop
-    run_step install_ripgrep
-    run_step install_git_delta
-    run_step install_jq
-    run_step install_zstd
-    run_step install_hyperfine
-    run_step install_zoxide
-    run_step install_fzf
-    run_step install_fzf_tab
-    run_step install_zsh_autosuggestions
-    run_step install_atuin
-    run_step install_gh
-    run_step install_gh_stack
-    run_step install_gh_stack_skill
-    run_step install_tailscale
-    run_step install_claude_code
-    run_step install_rtk
-    run_step install_uv
-    run_step install_clangd
-    run_step install_pyright
-    run_step install_bash_ls
-    run_step install_lua_ls
-    run_step install_opam
-    run_step install_moor
-    run_step install_glow
-    run_step install_treehouse
-    run_step install_git_absorb
-    run_step install_gitleaks
-    run_step install_sccache
-    run_step install_ripgrep_all
-    run_step install_difftastic
-    run_step install_cargo_nextest
-    run_step install_ansible_lint
-    run_step install_elan
-    run_step install_fzf_git
-    run_step install_cargo_extras
-    run_step install_ccusage
-    run_step install_starship
-    run_step install_tmux_plugins
-    run_step install_wezterm
-    run_step install_nerd_font
-
-    run_optional_step obsidian \
-        "Obsidian: notes app, plus obsync and the 15-minute vault sync LaunchAgent it schedules. Ships the 'obsidian' CLI, but needs the GUI app running — a dev-machine tool, not a server one." \
-        install_obsidian_stack
-
-    run_optional_step zathura \
-        "zathura: keyboard-driven PDF viewer, with SyncTeX inverse search into VS Code. A GUI app — noise on a server." \
-        install_zathura
-
-    run_optional_step latex \
-        "LaTeX: TeX Live with latexmk and biber, for building papers. Several gigabytes, and pointless where no one writes documents." \
-        install_latex
-
-    run_optional_step typst \
-        "Typst: markup typesetting compiler, a single binary in ~/.local/bin. For writing documents, not for a server." \
-        install_typst
-
-    run_optional_step docker \
-        "Docker: container engine with the buildx and compose plugins. Docker Desktop on macOS, a GUI app that runs a Linux VM." \
-        install_docker
-
-    run_step install_neovim_if_missing
-
-    # After every other step: it runs each tool to get its completion script.
-    run_step install_zsh_completions
-
-    print_chezmoi_init_hint
-    check_failed
-}
-
-main "$@"
