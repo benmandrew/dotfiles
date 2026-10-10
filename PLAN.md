@@ -32,6 +32,7 @@ Each of these is deliberate. Anything else that differs from the bash installer 
 - `install_cargo_extras` tries all five tools when one needs a `cargo` that is missing. In bash the `require_cmd` ended the step at the first such tool.
 - A tool counts as present only where its file on `PATH` is executable. Bash's `command -v` also answered for a file without the execute bit, where no executable copy came after it.
 - `install_fzf` fails as soon as its `git clone` fails. Bash went on to run the install script the clone had not delivered, and failed there.
+- `install_nix` fails when it cannot write `trusted-users` to `/etc/nix/nix.conf`. Bash logged the line and went on, leaving a Nix that asks before it uses a flake's cache.
 - On SIGTERM the runner ends the bash step it is waiting on and dies of the signal at once. Bash held the signal until the step's current command had finished. A command the step started may still be running after the runner has gone.
 
 ## The gate
@@ -89,7 +90,7 @@ Port in batches, deleting each bash function as its batch passes the gate. `retr
 
 One step per change, each with its own gate, because each holds fixes that no other step shares.
 
-- [ ] `install_nix`, `enable_nix_flakes`, `configure_nix_trusted_user`, `source_nix_profile`.
+- [x] `install_nix`, `enable_nix_flakes`, `configure_nix_trusted_user`, `source_nix_profile`.
 - [ ] `install_homebrew`, `install_login_shell`, `install_git`, `install_perf`, `install_inotify_limits`, `install_vscode_unattended_upgrades`.
 - [ ] `install_tmux_from_source`, `install_btop`.
 - [ ] `install_opam`, `install_ocaml_tools`. The opam cache key in `ci.yml` reads these function bodies with `sed` and must move with them.
@@ -180,5 +181,11 @@ A plan's arguments reach a Python step as `context.args`, and `_step` in `plan.p
 A second reader compared the 26 ports with the bash at `8859681`, function by function, and found no difference in log lines, commands, probes or environment. It found two edge cases, both fixed before the commit: a dangling `/usr/local/bin/starship` symlink counted as a stale binary, and `ensure_user_owns` looked the user up by name, which fails for an account outside the password database. `chown` now takes the numbers. The same reading produced the first of the two behaviour changes this stage adds above.
 
 The real-install check from batch B was not repeated for this stage. Most of these steps call `apt`, `brew`, `npm` or a vendor's installer, and the container run of gate 2 installs through every Linux one of them.
+
+### Stage 5, 10 October 2026
+
+Each group below is one commit. Gate 2 compares a fresh Ubuntu 22.04 arm64 container run of the group, with `--no-optional`, against the run of the commit before it, and gate 3 compares the macOS run without sudo against the 66 lines of `8859681`.
+
+- **Nix.** `install_nix` and its three helpers are in `steps/nix.py`. `installer/shell.py` is new: `shell.source` runs a script in bash and takes the environment it leaves, which is how the Nix profile reaches later steps. Gate 1 passed with 248 tests, in the nix shell and on Python 3.9.6. Gate 2 passed: 252 lines, the same as stage 4's, in 931 seconds. `install_nix` is one of the three baseline failures in a container, and the Python step fails there with the lines bash printed. Gate 3 passed.
 
 The port carries one risk that no gate removes: each of the 55 commits to `scripts/` since 10 July encodes a fix found on a real machine, and a fix that loses its comment in translation loses its reason. Every stage should move the comment with the code.
