@@ -257,7 +257,7 @@ install_neovim_if_missing() {
     local nvim_dir="nvim-linux-${nvim_arch}"
     local nvim_path="/opt/${nvim_dir}/bin/nvim"
     local tag
-    # shellcheck disable=SC2154  # NEOVIM_VERSION is in install-common.sh's pin block
+    # shellcheck disable=SC2154  # NEOVIM_VERSION is in pins.sh
     tag="$(pinned_tag "${NEOVIM_VERSION}" neovim/neovim)" || return 1
     # The first line of `nvim --version` is "NVIM v0.12.5", or for a nightly
     # "NVIM v0.13.0-dev-123+gabcdef", whose suffix version_gte cannot read.

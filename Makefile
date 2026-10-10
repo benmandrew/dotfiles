@@ -76,11 +76,11 @@ deps:
 	@printf '$(BOLD_BLUE)[building dev shell]$(RESET)\n'
 	@nix develop --command true
 
-# Each pinned tool version in scripts/install-common.sh beside the tag upstream
+# Each pinned tool version in scripts/pins.sh beside the tag upstream
 # publishes now. A line showing an arrow is a pin that can be bumped by hand.
 pins:
 	@printf '$(BOLD_BLUE)[checking pinned versions]$(RESET)\n'
-	@bash -c '. scripts/install-common.sh && print_pin_updates'
+	@cd scripts && $(PYTHON) -B -m installer.pins
 
 fmt:
 	@printf '$(BOLD_BLUE)[formatting]$(RESET)\n'

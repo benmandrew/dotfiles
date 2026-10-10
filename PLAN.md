@@ -14,7 +14,9 @@
 
 **Bash steps run under `/bin/bash`.** That is bash 3.2 on macOS and 5.1 on Ubuntu 22.04. The old entry point used whichever `bash` came first on `PATH`.
 
-**A pinned version has one home.** A `*_VERSION` constant moves out of bash only when the last bash step that reads it has gone (stage 2 settles where the pins live).
+**A pinned version has one home.** Every `*_VERSION` constant is in `scripts/pins.sh`, which the bash steps source and `scripts/installer/pins.py` parses. Each line is a plain `NAME_VERSION="value"`, so the two languages cannot read different values. The table that gives each pin its repository is Python alone, since only `make pins` and the Python steps read it.
+
+**A ported step keeps its name and its log lines.** `plan.py` lists steps by name and takes the Python one where it exists. The step prints what its bash function printed, so the gate can compare two runs line by line.
 
 **`verify-install.sh` and `lint-templates.sh` stay bash.** They are 365 and 160 lines, and neither shares code with the installer.
 
@@ -51,24 +53,24 @@ Python takes over everything around the steps. Every step stays bash.
 - [x] `scripts/CLAUDE.md` and the root `CLAUDE.md` describe the new layout.
 - [ ] Gate: items 1, 2 and 4 pass, and item 3 without sudo. Item 3 from a terminal is owed. See the log.
 
-### Stage 2: shared helpers
+### Stage 2: shared helpers and the first release-binary steps
 
-The functions every step calls move to Python, with unit tests. The bash copies stay until the last bash step that calls them has gone.
+The functions every step calls move to Python with unit tests, and seven steps move with them. Helpers alone would have deleted nothing from bash and left no step to prove them on, so this stage takes batch A from stage 3. The bash copy of a helper stays until the last bash step that calls it has gone.
 
-- [ ] `download`, `sha256_file`, `verify_sha256`, `download_verified`, `download_verified_github`.
-- [ ] `github_api_token`, `github_api_curl`, `_github_api_failure`, `github_latest_tag`, `github_asset_sha256`, with the standard `json` module in place of `grep` and `awk`.
-- [ ] `pinned_tag`, `print_pin_updates` and the pin table. `make pins` and the pin hash in `ci.yml` move with them. Decide here whether pins live in a data file both languages read.
-- [ ] `require_runs`, `note_shadowed`, `retry_once`, `version_gte`, `cpu_count`, `safe_git`, `ensure_user_owns`, `npm_install_g`.
-- [ ] A step context for Python steps: `run()` raising on a non-zero exit, a temporary directory per step, `sudo` with `-A` when the askpass helper is live.
-- [ ] Gate.
+- [x] `fetch.py`: `download`, `sha256_file`, `verify_sha256`, `download_verified`.
+- [x] `github.py`: `api_token`, `failure_reason`, `latest_tag`, `asset_sha256`, `download_verified`, with the standard `json` module in place of `grep` and `awk`.
+- [x] `pins.py` and `scripts/pins.sh`: the pins as a data file, `pinned_tag`, and the report behind `make pins`. `print_pin_updates` is deleted from bash, and the pin hashes in `ci.yml` read `pins.sh`.
+- [x] `tools.py`: `require_runs`, `note_shadowed`, `version_gte`, `sudo`, `install_binary`. `brew.py`: `formula`.
+- [x] The step context: `run()` raising on a non-zero exit, `capture()`, `succeeds()`, a temporary directory per step, and a `Host` a test can set.
+- [x] `release.py`: download a release asset, unpack it, find a binary by name.
+- [x] Batch A: `install_gitleaks`, `install_glow` and `install_ripgrep_all` from one table, and `install_moor`, `install_treehouse`, `install_lua_ls` and `install_cmake` as functions. Their bash functions are deleted.
+- [ ] Gate. See the log.
 
-### Stage 3: release-binary steps as a table
+### Stage 3: the remaining release-binary steps
 
-One function installs a GitHub release asset, and a table gives it the repository, the pin, the asset name per architecture, the checksum source and the probe. Port in batches, deleting each bash function as its batch passes the gate.
+Port in batches, deleting each bash function as its batch passes the gate. `retry_once`, `cpu_count`, `safe_git`, `ensure_user_owns` and `npm_install_g` move with the first step that calls them.
 
-- [ ] The release installer and its table type, tested against recorded asset lists.
-- [ ] Batch A, Homebrew on macOS and a release tarball on Linux: `install_gitleaks`, `install_glow`, `install_moor`, `install_treehouse`, `install_typst`, `install_lua_ls`, `install_ripgrep_all`, `install_cmake`.
-- [ ] Batch B, the cargo tools: `_rust_tool_spec`, `_install_rust_tool_binary`, `install_cargo_tool` and the steps built on them (`install_eza`, `install_fd`, `install_bat`, `install_ripgrep`, `install_git_delta`, `install_hyperfine`, `install_zoxide`, `install_sccache`, `install_difftastic`, `install_git_absorb`, `install_cargo_nextest`, `install_cargo_extras`).
+- [ ] Batch B, the cargo tools, `install_typst` among them: `_rust_tool_spec`, `_install_rust_tool_binary`, `install_cargo_tool` and the steps built on them (`install_eza`, `install_fd`, `install_bat`, `install_ripgrep`, `install_git_delta`, `install_hyperfine`, `install_zoxide`, `install_sccache`, `install_difftastic`, `install_git_absorb`, `install_cargo_nextest`, `install_cargo_extras`).
 - [ ] Batch C: `install_atuin`, `install_elan`, `install_nerd_font`, `install_neovim_if_missing`, `install_go`.
 - [ ] Gate after each batch.
 
@@ -113,6 +115,20 @@ One step per change, each with its own gate, because each holds fixes that no ot
 - **Gate 4: passed, on a warm cache.** Pull request 4, run 38060789112 on commit `49c9073`: `lint` and `install` passed on GitHub's `ubuntu-latest` runner, the install step in 75 seconds. It restored a 1,070 MB cache through a restore key, so 64 lines were skips and 15 reported real work, among them the apt packages, Nix, fzf, the GitHub CLI, Tailscale, clangd and elan. Its 162 `[install]` and verify lines match the last install run on `main` (`cd06b38`, run 37508327592) except for the opam lines, where the run on `main` had missed the opam cache. No cold run has happened: the weekly schedule runs on `main` alone.
 - An interrupted run was checked by hand: SIGINT and SIGTERM during a bash step each end the run with the matching signal status and name the step's log.
 
-Stage 2 waits on the terminal run for gate 3.
+Stage 2 started without the terminal run for gate 3, which is still owed.
+
+### Stage 2, 10 October 2026
+
+`install-common.sh` went from 3,989 lines to 3,393, and from 123 functions to 115. The Python installer is 2,173 lines in 19 files, with 1,453 lines of tests.
+
+- **Gate 1: passed.** `nix develop --command make fmt-ci lint test-py` passes, with 111 tests. `make test-py PYTHON=/Library/Developer/CommandLineTools/usr/bin/python3` passes on Python 3.9.6. The step tests run each port against a fake `curl`, `brew`, `go` and `sudo`, and cover both platforms' branches on one machine.
+- **Gate 2: running.**
+- **Gate 3: passed without sudo.** `--no-optional` on this Mac printed the same 66 lines as `b1ed1a5` run the same way. All seven ported steps skip here, so this run covers their guards alone. The terminal run is still owed from stage 1.
+- **Gate 4: waiting on the push.** The pin hash in `ci.yml` now reads `scripts/pins.sh`, so no cache key matches and the install runs cold.
+- `make pins` prints the same 32 lines from Python as `print_pin_updates` printed from `b1ed1a5`.
+
+Three things differ from the bash steps, all on failure paths. `install_gitleaks`, `install_glow` and `install_treehouse` find their binary by name inside the tarball, as `install_ripgrep_all` always did, and report "No gitleaks binary inside ..." where `install` used to fail on a fixed path. A binary is copied beside its target and renamed over it, so an interrupted copy leaves the old one. `lua-language-server`'s link is replaced the same way.
+
+`install_typst` was listed in batch A by mistake. It calls `install_cargo_tool`, so it moves with batch B.
 
 The port carries one risk that no gate removes: each of the 55 commits to `scripts/` since 10 July encodes a fix found on a real machine, and a fix that loses its comment in translation loses its reason. Every stage should move the comment with the code.

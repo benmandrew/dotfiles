@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import platform
+import shutil
 import subprocess
 import tempfile
 import termios
@@ -36,6 +38,18 @@ class Settings:
 
 
 @dataclass(frozen=True)
+class Host:
+    """The machine the run is on, as `uname -s` and `uname -m` name it."""
+
+    system: str
+    machine: str
+
+    @classmethod
+    def current(cls) -> Host:
+        return cls(platform.system(), platform.machine())
+
+
+@dataclass(frozen=True)
 class Step:
     name: str
     action: Callable[[StepContext], None]
@@ -62,14 +76,42 @@ class StepContext:
         env: dict[str, str],
         output: IO[bytes] | None,
         interactive: bool,
+        host: Host | None = None,
     ) -> None:
         self.console = console
         self.settings = settings
         # Shared with every other step, so a change one step makes to PATH is
         # there for the next.
         self.env = env
+        self.host = host or Host.current()
         self._output = output
         self._interactive = interactive
+        self._scratch: list[Path] = []
+
+    @property
+    def upgrade(self) -> bool:
+        return self.settings.upgrade
+
+    @property
+    def home(self) -> Path:
+        return Path(self.env["HOME"])
+
+    def log(self, message: str) -> None:
+        self.console.log(message)
+
+    def which(self, command: str) -> str | None:
+        """Where `command` is on the steps' PATH, as `command -v` would say."""
+        return shutil.which(command, path=self.env.get("PATH", os.defpath))
+
+    def tmpdir(self) -> Path:
+        """A new scratch directory, removed when the step ends."""
+        path = Path(tempfile.mkdtemp(prefix="dotfiles-step.", dir=self.env.get("TMPDIR") or None))
+        self._scratch.append(path)
+        return path
+
+    def cleanup(self) -> None:
+        while self._scratch:
+            shutil.rmtree(self._scratch.pop(), ignore_errors=True)
 
     def call(
         self,
@@ -84,19 +126,75 @@ class StepContext:
         whether it is interactive decides it is not, and prints rather than
         prompting or drawing a TUI that nobody can see.
         """
-        proc = subprocess.Popen(
-            argv,
-            stdin=None if self._interactive else subprocess.DEVNULL,
-            stdout=self._output,
-            stderr=self._output,
-            env=self.env if env is None else env,
-            pass_fds=pass_fds,
-        )
+        try:
+            proc = subprocess.Popen(
+                argv,
+                stdin=None if self._interactive else subprocess.DEVNULL,
+                stdout=self._output,
+                stderr=self._output,
+                env=self.env if env is None else env,
+                pass_fds=pass_fds,
+            )
+        except FileNotFoundError:
+            # What a shell says and returns, so a missing tool reads the same
+            # in a step's log whichever language the step is in.
+            self._say(f"{argv[0]}: command not found\n")
+            return 127
         try:
             return proc.wait()
         except BaseException:
             _stop(proc)
             raise
+
+    def run(self, argv: Sequence[str], *, env: dict[str, str] | None = None) -> None:
+        """`call`, failing the step on a non-zero exit.
+
+        No message: the command has said why in the step's output, which the
+        runner prints.
+        """
+        if self.call(argv, env=env) != 0:
+            raise StepFailed
+
+    def succeeds(self, argv: Sequence[str]) -> bool:
+        """Whether a command exits 0. Its output is thrown away."""
+        try:
+            done = subprocess.run(
+                argv,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=self.env,
+                check=False,
+            )
+        except OSError:
+            return False
+        return done.returncode == 0
+
+    def capture(self, argv: Sequence[str], *, quiet: bool = False) -> str | None:
+        """What a command prints, without the trailing newlines, or None if it fails.
+
+        stderr goes with the step's output, or nowhere when `quiet`.
+        """
+        try:
+            done = subprocess.run(
+                argv,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL if quiet else self._output,
+                env=self.env,
+                check=False,
+            )
+        except OSError:
+            return None
+        if done.returncode != 0:
+            return None
+        return done.stdout.decode(errors="replace").rstrip("\n")
+
+    def _say(self, text: str) -> None:
+        if self._output is None:
+            self.console.write(text.encode())
+        else:
+            self._output.write(text.encode())
 
 
 def _stop(proc: subprocess.Popen[bytes]) -> None:
@@ -163,10 +261,17 @@ class Runner:
     behind.
     """
 
-    def __init__(self, console: Console, settings: Settings, env: dict[str, str]) -> None:
+    def __init__(
+        self,
+        console: Console,
+        settings: Settings,
+        env: dict[str, str],
+        host: Host | None = None,
+    ) -> None:
         self.console = console
         self.settings = settings
         self.env = env
+        self.host = host or Host.current()
         self.failed: list[str] = []
         self._log_dir: Path | None = None
         self._tty: list[Any] | None = None
@@ -209,7 +314,9 @@ class Runner:
         return False
 
     def _attempt(self, step: Step, output: IO[bytes] | None) -> bool:
-        context = StepContext(self.console, self.settings, self.env, output, step.interactive)
+        context = StepContext(
+            self.console, self.settings, self.env, output, step.interactive, self.host
+        )
         try:
             step.action(context)
         except StepFailed as failure:
@@ -225,6 +332,8 @@ class Runner:
             else:
                 output.write(trace)
             return False
+        finally:
+            context.cleanup()
         return True
 
     def _log_path(self, name: str) -> Path:

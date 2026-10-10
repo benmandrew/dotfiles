@@ -53,6 +53,7 @@ jobs:
               - 'scripts/installer/**'
               - 'scripts/legacy-step.sh'
               - 'scripts/install-common.sh'
+              - 'scripts/pins.sh'
               - 'scripts/install-linux.sh'
               - 'scripts/verify-install.sh'
 
@@ -139,7 +140,7 @@ jobs:
         id: pins
         if: github.event_name != 'schedule'
         run: |
-          hash="$(grep -hE '^[A-Z_]+_VERSION=' scripts/install-common.sh scripts/install-linux.sh | sha256sum | cut -c1-16)"
+          hash="$(grep -hE '^[A-Z_]+_VERSION=' scripts/pins.sh scripts/install-linux.sh | sha256sum | cut -c1-16)"
           echo "hash=${hash}" >> "${GITHUB_OUTPUT}"
 
       - name: Cache installed tools
@@ -158,7 +159,7 @@ jobs:
             /opt/nvim-linux-x86_64
             /usr/local/bin
             /usr/local/lib/node_modules
-          key: install-${{ runner.os }}-${{ steps.pins.outputs.hash }}-${{ hashFiles('scripts/install.sh', 'scripts/install.py', 'scripts/installer/**', 'scripts/legacy-step.sh', 'scripts/install-common.sh', 'scripts/install-linux.sh') }}
+          key: install-${{ runner.os }}-${{ steps.pins.outputs.hash }}-${{ hashFiles('scripts/install.sh', 'scripts/install.py', 'scripts/installer/**', 'scripts/legacy-step.sh', 'scripts/install-common.sh', 'scripts/pins.sh', 'scripts/install-linux.sh') }}
           # The primary key can never hit. It hashes the installer, and this
           # job only runs when part of it changed, so the key is new on every
           # run that reaches here — measured as a 0s restore and a 3m save of a
@@ -186,7 +187,7 @@ jobs:
         run: |
           hash="$({
             echo "${ImageOS:-}"
-            grep -h '^OPAM_VERSION=' scripts/install-common.sh
+            grep -h '^OPAM_VERSION=' scripts/pins.sh
             sed -n '/^install_opam()/,/^}/p;/^install_ocaml_tools()/,/^}/p' scripts/install-common.sh
           } | sha256sum | cut -c1-16)"
           echo "hash=${hash}" >> "${GITHUB_OUTPUT}"

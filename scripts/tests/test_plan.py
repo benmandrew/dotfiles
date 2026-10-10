@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from installer.legacy import SCRIPTS_DIR
 from installer.plan import LINUX, MACOS, OptionalStep, Plan, Require, UnsupportedPlatform, plan_for
 from installer.runner import Step
+from installer.steps import PORTED
 
 _FUNCTION = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\(\) \{", re.M)
 
@@ -29,14 +30,25 @@ def steps(plan: Plan) -> Iterator[Step]:
 class PlanTest(unittest.TestCase):
     def check_defined(self, plan: Plan, platform_script: str) -> None:
         defined = functions("install-common.sh", platform_script)
-        missing = [step.name for step in steps(plan) if step.name not in defined]
+        names = [step.name for step in steps(plan)]
+        missing = [name for name in names if name not in defined and name not in PORTED]
         self.assertEqual(missing, [], f"no such bash function in {platform_script}")
+        # A step has one home: its bash function goes when the Python one lands.
+        both = [name for name in names if name in defined and name in PORTED]
+        self.assertEqual(both, [], "ported, and still a bash function")
+        for step in steps(plan):
+            if step.name in PORTED:
+                self.assertIs(step, PORTED[step.name])
 
-    def test_every_linux_step_is_a_bash_function(self) -> None:
+    def test_every_linux_step_is_defined_once(self) -> None:
         self.check_defined(LINUX, "install-linux.sh")
 
-    def test_every_macos_step_is_a_bash_function(self) -> None:
+    def test_every_macos_step_is_defined_once(self) -> None:
         self.check_defined(MACOS, "install-macos-arm64.sh")
+
+    def test_every_ported_step_is_in_a_plan(self) -> None:
+        planned = {step.name for plan in (LINUX, MACOS) for step in steps(plan)}
+        self.assertEqual(set(PORTED) - planned, set())
 
     def test_no_step_runs_twice(self) -> None:
         for plan in (LINUX, MACOS):
