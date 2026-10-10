@@ -183,18 +183,6 @@ download_verified() {
     verify_sha256 "${dest}" "${manifest_url}" "${url##*/}" || return 1
 }
 
-# nproc is coreutils and absent on macOS. Only Linux calls the two steps that
-# build from source, but neither should depend on that staying true.
-cpu_count() {
-    if command -v nproc >/dev/null 2>&1; then
-        nproc
-    elif command -v sysctl >/dev/null 2>&1; then
-        sysctl -n hw.ncpu 2>/dev/null || echo 1
-    else
-        echo 1
-    fi
-}
-
 # The pinned versions, which the Python steps read too (installer/pins.py).
 # shellcheck source=scripts/pins.sh
 source "$(dirname -- "${BASH_SOURCE[0]}")/pins.sh"
@@ -429,107 +417,6 @@ install_zsh_completions() {
     rm -f "${ZDOTDIR:-${HOME}}/.zcompdump" "${ZDOTDIR:-${HOME}}/.zcompdump.zwc"
 }
 
-install_btop() {
-    local os_name
-    os_name="$(uname -s)"
-
-    if [[ "${os_name}" == "Darwin" ]]; then
-        if command -v btop >/dev/null 2>&1; then
-            if [[ -z "${UPGRADE:-}" ]]; then
-                log "btop already installed; skipping"
-                return
-            fi
-            log "Upgrading btop"
-            brew upgrade btop || return 1
-            require_runs btop
-            return
-        fi
-        log "Installing btop"
-        brew install btop || return 1
-        require_runs btop
-        return
-    fi
-
-    # Linux: build from source, because neither packaged option can show GPU
-    # metrics. apt (jammy/universe) is pinned at 1.2.3, which predates GPU
-    # monitoring entirely (added in 1.3.0). The upstream release binaries are
-    # newer but built STATIC=true, and btop's Makefile force-disables
-    # GPU_SUPPORT for static builds since the NVIDIA/AMD backends dlopen their
-    # vendor libraries. A stock source build turns GPU_SUPPORT on by default on
-    # linux/x86_64 and resolves libnvidia-ml.so at runtime, so it needs no CUDA
-    # toolkit at build time -- just the driver already being present.
-    #
-    local version="${BTOP_VERSION}"
-
-    # ~/.local/bin is appended after /usr/bin on PATH, so a leftover apt btop
-    # would shadow the binary installed below.
-    if dpkg -s btop >/dev/null 2>&1; then
-        log "Removing apt btop (predates GPU support, and shadows ~/.local/bin)"
-        sudo apt-get purge -y btop || return 1
-    fi
-
-    if command -v btop >/dev/null 2>&1; then
-        # Matched out of the output rather than cut from a field, because
-        # `btop --version` wraps the number in bold (`btop version: ^[[1m1.4.4`),
-        # prints two more lines of compiler and make flags after it, and — built
-        # from the clone below — appends the commit it was built from,
-        # `1.4.4+0f398ab`, which the tarball builds this step used to make had no
-        # .git to produce. A field-splitting read picks up the escape and the
-        # suffix, so `--upgrade` never matched the pinned version and rebuilt
-        # every run.
-        local current raw
-        raw="$(btop --version 2>/dev/null)" || raw=""
-        current=""
-        if [[ "${raw}" =~ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-            current="${BASH_REMATCH[1]}"
-        fi
-        if [[ -z "${UPGRADE:-}" ]]; then
-            log "btop ${current} already installed; skipping"
-            return
-        fi
-        if [[ "${current}" == "${version}" ]]; then
-            log "btop ${current} already at pinned version; skipping"
-            return
-        fi
-        log "Upgrading btop to ${version}"
-    else
-        log "Installing btop ${version}"
-    fi
-
-    local tmp_dir src_dir
-    tmp_dir="$(mktemp -d)"
-    src_dir="${tmp_dir}/btop"
-    trap 'rm -rf "${tmp_dir}"; trap - RETURN' RETURN
-    # A shallow clone of the tag, rather than the release tarball this used to
-    # fetch. codeload.github.com — the host every /archive/refs/tags/ URL
-    # redirects to — rate-limits by source address and answers 429 to
-    # unauthenticated requests from a busy or NAT'd one; a 17 August 2026 install
-    # got 429 on all six attempts while api.github.com, release assets and git
-    # itself were all serving this machine normally. Cloning takes the git
-    # endpoint instead, which is not on that budget, and --depth 1 fetches the
-    # same one commit the tarball held.
-    if ! git clone --quiet --depth 1 --branch "v${version}" \
-        https://github.com/aristocratos/btop.git "${src_dir}"; then
-        err "Failed to clone btop v${version}"
-        return 1
-    fi
-    # Build with a pruned PATH and an explicit CXX. If nix is on PATH its
-    # binutils/glibc get picked up alongside the system g++, and the link fails
-    # on __isoc23_* symbols that the older system glibc does not export.
-    local jobs
-    jobs="$(cpu_count)"
-    env PATH=/usr/local/bin:/usr/bin:/bin CXX=/usr/bin/g++ \
-        make -C "${src_dir}" -j"${jobs}" || return 1
-    mkdir -p "${HOME}/.local/bin"
-    install -m755 "${src_dir}/bin/btop" "${HOME}/.local/bin/btop" || return 1
-    # The apt package supplied themes via /usr/share/btop/themes, which the purge
-    # above removes; ship them to the user theme dir so theme selection still works.
-    mkdir -p "${HOME}/.config/btop/themes"
-    install -m644 "${src_dir}"/themes/*.theme "${HOME}/.config/btop/themes/" || return 1
-    note_shadowed btop "${HOME}/.local/bin/btop"
-    require_runs "${HOME}/.local/bin/btop"
-}
-
 # Both gh-stack steps hit the GitHub API — to resolve the extension's release
 # and to read the skill's contents — so both need an authenticated gh. Nothing
 # in these scripts runs `gh auth login`, and it cannot be automated, so on a
@@ -584,77 +471,6 @@ install_gh_stack_skill() {
     fi
     log "Installing gh-stack skill for Claude Code"
     gh skill install github/gh-stack gh-stack --agent claude-code --scope user --force
-}
-
-install_tmux_from_source() {
-    # 3.4, for the `hyperlinks` terminal feature dot_tmux.conf.tmpl sets; 3.3
-    # rejects the name, and tmux strips OSC 8 links without it.
-    local required_major=3 required_minor=4
-    local build_version
-
-    if [[ -n "${UPGRADE:-}" ]]; then
-        build_version="$(github_latest_tag tmux/tmux)" || return 1
-        if command -v tmux >/dev/null 2>&1; then
-            local tmux_v_output tmux_v_word current_version
-            tmux_v_output="$(tmux -V)"
-            tmux_v_word="$(awk '{print $2}' <<<"${tmux_v_output}")"
-            current_version="${tmux_v_word%%[[:alpha:]]*}"
-            local latest_bare="${build_version#v}"
-            if [[ "${tmux_v_word}" == "${latest_bare}" ]]; then
-                log "tmux ${tmux_v_word} already at latest; skipping"
-                return
-            fi
-            log "Upgrading tmux to ${build_version}"
-        else
-            log "Installing tmux ${build_version}"
-        fi
-    else
-        build_version="${TMUX_VERSION}"
-        if command -v tmux >/dev/null 2>&1; then
-            local current_version
-            local tmux_v_output tmux_v_word
-            tmux_v_output="$(tmux -V)"
-            tmux_v_word="$(awk '{print $2}' <<<"${tmux_v_output}")"
-            current_version="${tmux_v_word%%[[:alpha:]]*}"
-            local current_major current_minor
-            current_major="$(echo "${current_version}" | cut -d. -f1)"
-            current_minor="$(echo "${current_version}" | cut -d. -f2)"
-            if ((current_major > required_major)) || ((current_major == required_major && current_minor >= required_minor)); then
-                log "tmux ${current_version} already satisfies >= ${required_major}.${required_minor}; skipping"
-                return
-            fi
-            log "tmux ${current_version} < ${required_major}.${required_minor}; building from source"
-        else
-            log "Installing tmux from source"
-        fi
-    fi
-
-    local tarball="tmux-${build_version}.tar.gz"
-    local build_dir
-    build_dir="$(mktemp -d)"
-    trap 'rm -rf "${build_dir}"; trap - RETURN' RETURN
-    download "https://github.com/tmux/tmux/releases/download/${build_version}/${tarball}" \
-        "${build_dir}/${tarball}" || return 1
-    tar -C "${build_dir}" -xf "${build_dir}/${tarball}" || return 1
-    local jobs
-    jobs="$(cpu_count)"
-    # configure and make run with a pruned PATH and an explicit CC, for the same
-    # reason install_btop does. direnv activates this repo's own flake for anyone
-    # running the installer from a shell sat in it, and pkgs.mkShell puts
-    # stdenv's gcc wrapper on PATH ahead of /usr/bin. That wrapper searches
-    # /nix/store alone for headers, so the header check fails against a
-    # /usr/include/event2/event.h it cannot see and configure stops at "libevent
-    # not found" — one line after /usr/bin/pkg-config reported libevent_core
-    # present, since pkg-config is the system one and needs no -I for it.
-    local build_env=(env PATH=/usr/local/bin:/usr/bin:/bin CC=/usr/bin/gcc)
-    (
-        cd "${build_dir}/tmux-${build_version}" &&
-            "${build_env[@]}" ./configure &&
-            "${build_env[@]}" make -j"${jobs}" &&
-            sudo make install
-    ) || return 1
-    note_shadowed tmux /usr/local/bin/tmux
-    require_runs /usr/local/bin/tmux -V
 }
 
 install_wezterm() {

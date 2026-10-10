@@ -6,6 +6,7 @@ from ..runner import Step
 from . import (
     ansible_lint,
     atuin,
+    builds,
     cargo_tools,
     clones,
     cmake,
@@ -30,6 +31,7 @@ PORTED: dict[str, Step] = {
     for module in (
         ansible_lint,
         atuin,
+        builds,
         cargo_tools,
         clones,
         cmake,

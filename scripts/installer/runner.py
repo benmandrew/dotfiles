@@ -123,6 +123,7 @@ class StepContext:
         *,
         env: dict[str, str] | None = None,
         pass_fds: Sequence[int] = (),
+        cwd: Path | None = None,
     ) -> int:
         """Run a command with the step's output handling and return its status.
 
@@ -138,6 +139,7 @@ class StepContext:
                 stderr=self._output,
                 env=self.env if env is None else env,
                 pass_fds=pass_fds,
+                cwd=cwd,
             )
         except FileNotFoundError:
             # What a shell says and returns, so a missing tool reads the same
@@ -150,13 +152,19 @@ class StepContext:
             _stop(proc)
             raise
 
-    def run(self, argv: Sequence[str], *, env: dict[str, str] | None = None) -> None:
+    def run(
+        self,
+        argv: Sequence[str],
+        *,
+        env: dict[str, str] | None = None,
+        cwd: Path | None = None,
+    ) -> None:
         """`call`, failing the step on a non-zero exit.
 
         No message: the command has said why in the step's output, which the
         runner prints.
         """
-        if self.call(argv, env=env) != 0:
+        if self.call(argv, env=env, cwd=cwd) != 0:
             raise StepFailed
 
     def succeeds(self, argv: Sequence[str], *, env: dict[str, str] | None = None) -> bool:

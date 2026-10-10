@@ -175,6 +175,13 @@ def version_gte(current: str, required: str) -> bool:
     return parts(current) >= parts(required)
 
 
+def cpu_count() -> int:
+    """How many processors a build may use, as `nproc` counts them."""
+    # macOS has no affinity mask to ask for.
+    affinity = getattr(os, "sched_getaffinity", None)
+    return len(affinity(0)) if affinity else os.cpu_count() or 1
+
+
 def sudo(context: StepContext, argv: Sequence[object], *, check: bool = True) -> int:
     """Run a command as root, through the askpass helper when one is live.
 

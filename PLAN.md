@@ -92,7 +92,7 @@ One step per change, each with its own gate, because each holds fixes that no ot
 
 - [x] `install_nix`, `enable_nix_flakes`, `configure_nix_trusted_user`, `source_nix_profile`.
 - [x] `install_homebrew`, `install_login_shell`, `install_git`, `install_perf`, `install_inotify_limits`, `install_vscode_unattended_upgrades`.
-- [ ] `install_tmux_from_source`, `install_btop`.
+- [x] `install_tmux_from_source`, `install_btop`.
 - [ ] `install_opam`, `install_ocaml_tools`. The opam cache key in `ci.yml` reads these function bodies with `sed` and must move with them.
 - [ ] `install_wezterm`, `set_default_terminal_wezterm`.
 - [ ] `install_gh_stack`, `install_gh_stack_skill`.
@@ -188,5 +188,6 @@ Each group below is one commit. Gate 2 compares a fresh Ubuntu 22.04 arm64 conta
 
 - **Nix.** `install_nix` and its three helpers are in `steps/nix.py`. `installer/shell.py` is new: `shell.source` runs a script in bash and takes the environment it leaves, which is how the Nix profile reaches later steps. Gate 1 passed with 248 tests, in the nix shell and on Python 3.9.6. Gate 2 passed: 252 lines, the same as stage 4's, in 931 seconds. `install_nix` is one of the three baseline failures in a container, and the Python step fails there with the lines bash printed. Gate 3 passed.
 - **System.** `install_git` is in `steps/git.py`, and `install_homebrew`, `install_login_shell`, `install_perf`, `install_inotify_limits` and `install_vscode_unattended_upgrades` in `steps/system.py`. `install_homebrew` sources `brew shellenv` through `shell.source`. `install-linux.sh` is down to 40 lines and `install-common.sh` to 1,805. Gate 1 passed with 270 tests, in the nix shell and on Python 3.9.6. Gate 2 passed: the same 252 lines, in 941 seconds. Gate 3 passed.
+- **Builds.** `install_tmux_from_source` and `install_btop` are in `steps/builds.py`, with the `SYSTEM_PATH` both builds run under. `context.run` and `context.call` take a `cwd`, and `cpu_count` moves to `tools.py`. `install-common.sh` is down to 1,621 lines. Gate 1 passed with 281 tests, in the nix shell and on Python 3.9.6. Gate 2 passed: the same 252 lines, in 1,596 seconds beside two other container runs. Gate 3 passed.
 
 The port carries one risk that no gate removes: each of the 55 commits to `scripts/` since 10 July encodes a fix found on a real machine, and a fix that loses its comment in translation loses its reason. Every stage should move the comment with the code.
