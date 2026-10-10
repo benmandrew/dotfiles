@@ -49,7 +49,7 @@ Python takes over everything around the steps. Every step stays bash.
 - [x] `scripts/legacy-step.sh` added. The runner functions, the traps and both `main` functions are deleted from bash.
 - [x] Tooling: `ruff` and `mypy` in the flake, `lint-py`, `test-py` and `test-container` in the Makefile, Python arms in the pre-commit hook, CI path filters and cache key.
 - [x] `scripts/CLAUDE.md` and the root `CLAUDE.md` describe the new layout.
-- [ ] Gate: items 1 and 4 pass, and item 3 without sudo. Item 2 has not run, and item 3 from a terminal is owed. See the log.
+- [ ] Gate: items 1, 2 and 4 pass, and item 3 without sudo. Item 3 from a terminal is owed. See the log.
 
 ### Stage 2: shared helpers
 
@@ -108,11 +108,11 @@ One step per change, each with its own gate, because each holds fixes that no ot
 `install-common.sh` went from 4,385 lines to 3,989. The Python runner is 1,145 lines in nine files, with 626 lines of tests.
 
 - **Gate 1: passed.** `nix develop --command make fmt-ci lint test-py` passes, with 56 tests. `make test-py PYTHON=/Library/Developer/CommandLineTools/usr/bin/python3` passes on Python 3.9.6.
-- **Gate 2: not run.** The network was too slow on 10 October: the host downloaded at 56 to 159 kB/s, and the image build stalled on Ubuntu's 17.2 MB package index, so it was cancelled. `make test-container` and `scripts/tests/Dockerfile` are written and have never run to the end. The baseline for the comparison is commit `227f824`, where `bash scripts/install.sh --no-optional` is the old installer.
+- **Gate 2: passed.** Both installers ran side by side with `--no-optional` in fresh Ubuntu 22.04 arm64 containers, `main` at `227f824` against this branch. Each took 880 seconds and printed 253 lines, and the logs are the same after the first two lines, where the old dispatcher named the platform and the bootstrap installs `python3`. Both exit 1 with the same three failed steps, and `verify-install.sh` reports 68 passed and 3 failed in both. The three are the baseline for later stages: `install_nix` and `install_nix_direnv` fail because the container has no systemd, and `install_rtk` fails because its arm64 binary needs glibc 2.39 where Ubuntu 22.04 ships 2.35.
 - **Gate 3: passed without sudo, owed with it.** With the sudo authentication replaced as the gate describes, `--no-optional` ran all 55 macOS steps and exited 0. The old installer at `227f824`, run the same way straight after, printed the same 66 lines; it took 8.1 seconds and the new one 8.8. The step order in `plan.py` was also compared with both bash `main` functions before they were deleted: 72 items on Linux and 65 on macOS, identical in order, arguments, descriptions and which steps are fatal. Still owed: one run from a terminal, which covers the password prompt, the askpass helper, the keepalive thread and the five optional tools.
 - **Gate 4: passed, on a warm cache.** Pull request 4, run 38060789112 on commit `49c9073`: `lint` and `install` passed on GitHub's `ubuntu-latest` runner, the install step in 75 seconds. It restored a 1,070 MB cache through a restore key, so 64 lines were skips and 15 reported real work, among them the apt packages, Nix, fzf, the GitHub CLI, Tailscale, clangd and elan. Its 162 `[install]` and verify lines match the last install run on `main` (`cd06b38`, run 37508327592) except for the opam lines, where the run on `main` had missed the opam cache. No cold run has happened: the weekly schedule runs on `main` alone.
 - An interrupted run was checked by hand: SIGINT and SIGTERM during a bash step each end the run with the matching signal status and name the step's log.
 
-Stage 2 waits on the terminal run for gate 3, and on a decision whether the CI run stands in for gate 2 while the network is slow.
+Stage 2 waits on the terminal run for gate 3.
 
 The port carries one risk that no gate removes: each of the 55 commits to `scripts/` since 10 July encodes a fix found on a real machine, and a fix that loses its comment in translation loses its reason. Every stage should move the comment with the code.
