@@ -25,6 +25,7 @@ from . import (
     rust,
     system,
     vendor,
+    wezterm,
 )
 
 PORTED: dict[str, Step] = {
@@ -51,6 +52,7 @@ PORTED: dict[str, Step] = {
         rust,
         system,
         vendor,
+        wezterm,
     )
     for step in module.STEPS
 }
