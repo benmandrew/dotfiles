@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import termios
+import time
 import traceback
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -18,6 +19,11 @@ from .console import Console
 
 # How much of a failed step's log is printed where it failed.
 LOG_LINES = 50
+
+# A step that runs for at least this many seconds says how long it took. Most
+# skip, or fetch one file, and end inside a second; a line for each of those
+# would bury the few worth reading.
+SLOW_SECONDS = 2.0
 
 
 class StepFailed(Exception):
@@ -301,11 +307,13 @@ class Runner:
         settings: Settings,
         env: dict[str, str],
         host: Host | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.console = console
         self.settings = settings
         self.env = env
         self.host = host or Host.current()
+        self._clock = clock
         self.failed: list[str] = []
         self._log_dir: Path | None = None
         self._tty: list[Any] | None = None
@@ -317,6 +325,7 @@ class Runner:
         """Run a step. A failure is recorded, or raised if the step is fatal."""
         self._tty = _tty_settings()
         log_path: Path | None = None
+        started = self._clock()
         try:
             if self.settings.verbose or step.interactive:
                 ok = self._attempt(step, None)
@@ -328,6 +337,12 @@ class Runner:
                     ok = self._attempt(step, output)
         finally:
             self.restore_tty()
+
+        # Whole seconds, passed or failed: the time is for finding the slow
+        # step in a log, and a failure that took ten minutes is one.
+        elapsed = self._clock() - started
+        if elapsed >= SLOW_SECONDS:
+            self.console.log(f"{step.name} took {round(elapsed)}s")
 
         if log_path is not None:
             if ok:

@@ -15,9 +15,13 @@ def python(code: str) -> list[str]:
 
 
 class RunnerTest(ConsoleCase):
-    def runner(self, verbose: bool = False) -> Runner:
+    def runner(self, verbose: bool = False, times: tuple[float, ...] = ()) -> Runner:
+        """A runner whose clock reads `times` in turn, or stands still."""
         env = dict(os.environ, TMPDIR=self.scratch)
-        runner = Runner(self.console, Settings(verbose=verbose), env)
+        readings = iter(times)
+        runner = Runner(
+            self.console, Settings(verbose=verbose), env, clock=lambda: next(readings, 0.0)
+        )
         self.addCleanup(runner.close)
         return runner
 
@@ -55,6 +59,24 @@ class RunnerTest(ConsoleCase):
         self.assertNotIn("line 29\n", said)
         self.assertIn("ERROR: Step failed: noisy a b", said)
         self.assertEqual(runner.failed, ["noisy a b"])
+
+    def test_slow_step_says_how_long_it_took(self) -> None:
+        runner = self.runner(times=(100.0, 142.4))
+        self.assertTrue(runner.run(Step("slow_step", lambda _context: None, args=("a",))))
+        self.assertEqual(self.said(), "[install] slow_step took 42s\n")
+
+    def test_quick_step_says_nothing_of_its_time(self) -> None:
+        runner = self.runner(times=(100.0, 101.9))
+        self.assertTrue(runner.run(Step("quick_step", lambda _context: None)))
+        self.assertEqual(self.said(), "")
+
+    def test_failed_slow_step_says_how_long_it_took(self) -> None:
+        def fail(_context: StepContext) -> None:
+            raise StepFailed
+
+        runner = self.runner(times=(0.0, 2.0))
+        self.assertFalse(runner.run(Step("slow_step", fail)))
+        self.assertIn("[install] slow_step took 2s\n", self.said())
 
     def test_finish_names_every_failed_step(self) -> None:
         def fail(_context: StepContext) -> None:

@@ -172,7 +172,15 @@ class StepCase(ConsoleCase):
     def run_step(
         self, step: Step, *, upgrade: bool = False, system: str = "Linux", machine: str = "x86_64"
     ) -> bool:
-        runner = Runner(self.console, Settings(upgrade=upgrade), self.env, Host(system, machine))
+        # A stopped clock, so a step that is slow under test adds no
+        # "took" line to the output the test asserts.
+        runner = Runner(
+            self.console,
+            Settings(upgrade=upgrade),
+            self.env,
+            Host(system, machine),
+            clock=lambda: 0.0,
+        )
         try:
             return runner.run(step)
         finally:
