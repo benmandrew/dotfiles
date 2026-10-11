@@ -123,7 +123,6 @@ LINUX = Plan(
             "install_pyright",
             "install_bash_ls",
             "install_lua_ls",
-            "install_opam",
             "install_go",
             "install_moor",
             "install_glow",
@@ -176,6 +175,14 @@ LINUX = Plan(
             "Docker: container engine with the buildx and compose plugins. Adds you to the"
             " docker group, which is root-equivalent.",
             _step("install_docker"),
+        ),
+        OptionalStep(
+            "opam",
+            "opam: OCaml package manager, with a default switch holding ocaml-lsp-server"
+            " and ocamlformat for Neovim. Compiles OCaml itself where the machine has"
+            " none, seven to ten minutes in CI — only for a machine someone writes OCaml"
+            " on.",
+            _step("install_opam"),
         ),
         _step("install_neovim_if_missing"),
         # After every other step: it runs each tool to get its completion
@@ -234,7 +241,6 @@ MACOS = Plan(
             "install_pyright",
             "install_bash_ls",
             "install_lua_ls",
-            "install_opam",
             "install_moor",
             "install_glow",
             "install_treehouse",
@@ -284,6 +290,14 @@ MACOS = Plan(
             "Docker: container engine with the buildx and compose plugins. Docker Desktop"
             " on macOS, a GUI app that runs a Linux VM.",
             _step("install_docker"),
+        ),
+        OptionalStep(
+            "opam",
+            "opam: OCaml package manager, with a default switch holding ocaml-lsp-server"
+            " and ocamlformat for Neovim. Compiles OCaml itself where the machine has"
+            " none, seven to ten minutes in CI — only for a machine someone writes OCaml"
+            " on.",
+            _step("install_opam"),
         ),
         _step("install_neovim_if_missing"),
         # After every other step: it runs each tool to get its completion

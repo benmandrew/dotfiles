@@ -1,8 +1,4 @@
-"""opam, its root, and the two OCaml tools the Neovim config expects.
-
-The opam cache key in .github/workflows/ci.yml hashes this file, since it is
-what decides the contents of the switch.
-"""
+"""opam, its root, and the two OCaml tools the Neovim config expects."""
 
 from __future__ import annotations
 

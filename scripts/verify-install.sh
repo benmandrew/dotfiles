@@ -111,7 +111,6 @@ check_cmd direnv
 check_cmd pyright
 check_cmd bash-language-server
 check_cmd lua-language-server
-check_cmd opam
 check_cmd moor
 check_cmd glow
 check_cmd treehouse
@@ -206,10 +205,6 @@ check_login_shell() {
 }
 
 check_login_shell
-
-# Editor and formatter for OCaml, installed into the default opam switch.
-check_cmd ocamllsp
-check_cmd ocamlformat
 
 check_cmd git-absorb
 check_cmd gitleaks
@@ -317,6 +312,12 @@ check_cmd_optional latexmk -v
 check_cmd_optional biber
 check_cmd_optional typst
 check_cmd_optional docker
+
+# Optional per machine. ocamllsp and ocamlformat are the editor and formatter
+# for OCaml, installed into the default opam switch.
+check_cmd_optional opam
+check_cmd_optional ocamllsp
+check_cmd_optional ocamlformat
 
 check_dir "tpm" "${HOME}/.tmux/plugins/tpm"
 # tpm clones its plugins beside itself, so a declared plugin that is not there
