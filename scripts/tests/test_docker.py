@@ -156,9 +156,11 @@ class DockerMacosTest(StepCase):
     def setUp(self) -> None:
         super().setUp()
         self.cli = self.bin / "docker-desktop-cli"
-        patch = mock.patch.object(docker, "DESKTOP_CLI", str(self.cli))
-        patch.start()
-        self.addCleanup(patch.stop)
+        self.app = Path(self.scratch) / "Docker.app"
+        for name, value in (("DESKTOP_CLI", str(self.cli)), ("DESKTOP_APP", self.app)):
+            patch = mock.patch.object(docker, name, value)
+            patch.start()
+            self.addCleanup(patch.stop)
 
     def mac(self, upgrade: bool = False) -> bool:
         return self.run_step(
@@ -178,6 +180,17 @@ class DockerMacosTest(StepCase):
             "[install] Open Docker.app once to start the engine and accept its licence\n",
         )
         self.assertEqual(self.called(), ["brew install --cask docker-desktop"])
+
+    def test_an_app_installed_by_hand(self) -> None:
+        self.app.mkdir()
+        self.recording("brew", failing="list")
+        for upgrade in (False, True):
+            self.assertTrue(self.mac(upgrade=upgrade))
+        self.assertEqual(
+            self.said(),
+            "[install] Docker Desktop already installed outside Homebrew; skipping\n" * 2,
+        )
+        self.assertEqual(self.called(), ["brew list --cask docker-desktop"] * 2)
 
     def test_present_and_upgrade(self) -> None:
         self.recording("brew")

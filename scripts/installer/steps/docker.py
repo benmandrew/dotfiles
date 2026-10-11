@@ -22,6 +22,7 @@ PACKAGES = (
 # it. Pinned because the key is fetched over TLS with nothing else to check it.
 KEY_FINGERPRINT = "9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
 CASK = "docker-desktop"
+DESKTOP_APP = Path("/Applications/Docker.app")
 # Where the cask links the client.
 DESKTOP_CLI = "/usr/local/bin/docker"
 SYSTEMD = Path("/run/systemd/system")
@@ -33,6 +34,12 @@ def _install_macos(context: StepContext) -> None:
     # once the app has been opened and its licence accepted, which cannot be
     # scripted, so only the client is probed.
     if not brew.cask_installed(context, CASK):
+        # A Docker.app installed by hand stays as it is. brew refuses to
+        # overwrite it, and --adopt fails in its chgrp of the bundle unless the
+        # terminal holds App Management permission, which sudo does not bypass.
+        if DESKTOP_APP.is_dir():
+            context.log("Docker Desktop already installed outside Homebrew; skipping")
+            return
         context.log("Installing Docker Desktop")
         context.run(["brew", "install", "--cask", CASK])
         context.log("Open Docker.app once to start the engine and accept its licence")
