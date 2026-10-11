@@ -95,7 +95,7 @@ One step per change, each with its own gate, because each holds fixes that no ot
 - [x] `install_tmux_from_source`, `install_btop`.
 - [x] `install_opam`, `install_ocaml_tools`. The opam cache key in `ci.yml` reads these function bodies with `sed` and must move with them.
 - [x] `install_wezterm`, `set_default_terminal_wezterm`.
-- [ ] `install_gh_stack`, `install_gh_stack_skill`.
+- [x] `install_gh_stack`, `install_gh_stack_skill`.
 - [ ] `install_obsidian`, `install_obsync` and the cron and launchd schedulers.
 - [ ] `install_zathura`, `install_latex`, `install_docker`.
 - [ ] `install_zsh_completions`.
@@ -191,5 +191,6 @@ Each group below is one commit. Gate 2 compares a fresh Ubuntu 22.04 arm64 conta
 - **Builds.** `install_tmux_from_source` and `install_btop` are in `steps/builds.py`, with the `SYSTEM_PATH` both builds run under. `context.run` and `context.call` take a `cwd`, and `cpu_count` moves to `tools.py`. `install-common.sh` is down to 1,621 lines. Gate 1 passed with 281 tests, in the nix shell and on Python 3.9.6. Gate 2 passed: the same 252 lines, in 1,596 seconds beside two other container runs. Gate 3 passed.
 - **opam.** `install_opam` and `install_ocaml_tools` are in `steps/opam.py`, and `install_ocaml_tools` stays a function `install_opam` calls. The opam cache key in `ci.yml` hashes that module where it read two bash function bodies with `sed`, so the first CI run after this commit builds the switch again. `install-common.sh` is down to 1,371 lines. Gate 1 passed with 290 tests, in the nix shell and on Python 3.9.6. Gate 2 passed: the same 252 lines, in 1,641 seconds beside two other container runs. Gate 3 passed.
 - **WezTerm.** `install_wezterm` and `set_default_terminal_wezterm` are in `steps/wezterm.py`. The nightly `.deb` comes through `release.download` with its `.sha256` manifest, and the default-terminal step reads `update-alternatives --query`. `install-common.sh` is down to 1,298 lines. Gate 1 passed with 301 tests, in the nix shell and on Python 3.9.6. Gate 2 passed: the same 252 lines, in 1,625 seconds beside two other container runs. Gate 3 passed.
+- **gh-stack.** `install_gh_stack` and `install_gh_stack_skill` join `install_gh` in `steps/gh.py`, with `_authenticated` in place of `gh_authenticated`. Their upgrade commands run under `tools.retry_once`. `install-common.sh` is down to 1,242 lines. Gate 1 passed with 305 tests, in the nix shell and on Python 3.9.6. Gate 2 passed at the second attempt: the same 252 lines, in 1,262 seconds beside one other container run. The first attempt ran this group and the three after it beside a TeX Live install, five containers at once, and Docker ran out of disk, so those four logs were thrown away. Gate 3 passed.
 
 The port carries one risk that no gate removes: each of the 55 commits to `scripts/` since 10 July encodes a fix found on a real machine, and a fix that loses its comment in translation loses its reason. Every stage should move the comment with the code.

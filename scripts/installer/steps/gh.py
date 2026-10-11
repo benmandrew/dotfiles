@@ -1,4 +1,5 @@
-"""The GitHub CLI: Homebrew on macOS, GitHub's own apt repository on Linux."""
+"""The GitHub CLI, from Homebrew on macOS and GitHub's own apt repository on
+Linux, and the gh-stack extension and skill."""
 
 from __future__ import annotations
 
@@ -59,4 +60,64 @@ def install(context: StepContext) -> None:
     tools.require_runs(context, "gh")
 
 
-STEPS = (Step("install_gh", install),)
+def _authenticated(context: StepContext) -> bool:
+    """Whether gh holds a credential.
+
+    Both gh-stack steps hit the GitHub API, to resolve the extension's release
+    and to read the skill's contents, so both need an authenticated gh. Nothing
+    here runs `gh auth login`, and it cannot be automated, so on a freshly
+    provisioned box the credential is not there yet. The steps skip with a
+    warning rather than failing the run; the next install after the user has
+    authenticated picks both up.
+    """
+    return context.which("gh") is not None and context.succeeds(["gh", "auth", "status"])
+
+
+def install_gh_stack(context: StepContext) -> None:
+    if not _authenticated(context):
+        context.log(
+            "gh is not authenticated; skipping gh-stack extension"
+            " (run 'gh auth login', then re-run)"
+        )
+        return
+    # Match on the source repo rather than the extension name, so a same-named
+    # extension from another owner is replaced rather than mistaken for this one.
+    extensions = context.capture(["gh", "extension", "list"], quiet=True) or ""
+    if "github/gh-stack" not in extensions:
+        context.log("Installing gh-stack extension")
+        context.run(["gh", "extension", "install", "github/gh-stack"])
+    elif context.upgrade:
+        context.log("Upgrading gh-stack extension")
+        tools.retry_once(context, ["gh", "extension", "upgrade", "gh-stack"])
+    else:
+        context.log("gh-stack extension already installed; skipping")
+
+
+def install_gh_stack_skill(context: StepContext) -> None:
+    if not _authenticated(context):
+        context.log(
+            "gh is not authenticated; skipping gh-stack skill (run 'gh auth login', then re-run)"
+        )
+        return
+    # User scope, so the skill applies in every repo instead of only whichever
+    # one the install happened to run from. It lands in ~/.claude/skills/gh-stack,
+    # a directory chezmoi manages through skills/.keep alone, so it leaves the
+    # skill itself untouched.
+    scope = ["--agent", "claude-code", "--scope", "user"]
+    listing = ["gh", "skill", "list", *scope, "--json", "skillName", "--jq", ".[].skillName"]
+    skills = (context.capture(listing, quiet=True) or "").splitlines()
+    if "gh-stack" not in skills:
+        context.log("Installing gh-stack skill for Claude Code")
+        context.run(["gh", "skill", "install", "github/gh-stack", "gh-stack", *scope, "--force"])
+    elif context.upgrade:
+        context.log("Upgrading gh-stack skill")
+        tools.retry_once(context, ["gh", "skill", "update", "gh-stack", "--all"])
+    else:
+        context.log("gh-stack skill already installed; skipping")
+
+
+STEPS = (
+    Step("install_gh", install),
+    Step("install_gh_stack", install_gh_stack),
+    Step("install_gh_stack_skill", install_gh_stack_skill),
+)

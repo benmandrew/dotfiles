@@ -82,3 +82,70 @@ class GhTest(StepCase):
             self.run_step(PORTED["install_gh"], system="Darwin", machine="arm64", upgrade=True)
         )
         self.assertEqual(self.called()[-1], "brew upgrade gh")
+
+
+# A gh that is logged in, lists what the two files hold and records the rest.
+GH = """#!/bin/sh
+case "$*" in
+    "auth status") exit 0 ;;
+    "extension list") cat "$HOME/extensions" 2>/dev/null ;;
+    "skill list"*) cat "$HOME/skills" 2>/dev/null ;;
+    *) echo "gh $*" >>"$FAKE_CALLS" ;;
+esac
+"""
+
+
+class GhStackTest(StepCase):
+    def test_without_a_credential_both_skip(self) -> None:
+        self.assertTrue(self.run_step(PORTED["install_gh_stack"]))
+        self.assertTrue(self.run_step(PORTED["install_gh_stack_skill"]))
+        self.assertEqual(
+            self.said(),
+            "[install] gh is not authenticated; skipping gh-stack extension"
+            " (run 'gh auth login', then re-run)\n"
+            "[install] gh is not authenticated; skipping gh-stack skill"
+            " (run 'gh auth login', then re-run)\n",
+        )
+        (self.bin / "gh").unlink()
+        self.assertTrue(self.run_step(PORTED["install_gh_stack"]))
+
+    def test_install(self) -> None:
+        self.fake("gh", GH)
+        # The name alone, from another owner, is not this extension.
+        (self.home / "extensions").write_text("gh stack\tsomeone/gh-stack\tv1.0.0\n")
+        self.assertTrue(self.run_step(PORTED["install_gh_stack"]))
+        self.assertTrue(self.run_step(PORTED["install_gh_stack_skill"]))
+        self.assertEqual(
+            self.said(),
+            "[install] Installing gh-stack extension\n"
+            "[install] Installing gh-stack skill for Claude Code\n",
+        )
+        self.assertEqual(
+            self.called(),
+            [
+                "gh extension install github/gh-stack",
+                "gh skill install github/gh-stack gh-stack --agent claude-code --scope user"
+                " --force",
+            ],
+        )
+
+    def test_present_and_upgrade(self) -> None:
+        self.fake("gh", GH)
+        (self.home / "extensions").write_text("gh stack\tgithub/gh-stack\tv0.0.3\n")
+        (self.home / "skills").write_text("other\ngh-stack\n")
+        self.assertTrue(self.run_step(PORTED["install_gh_stack"]))
+        self.assertTrue(self.run_step(PORTED["install_gh_stack_skill"]))
+        self.assertEqual(
+            self.said(),
+            "[install] gh-stack extension already installed; skipping\n"
+            "[install] gh-stack skill already installed; skipping\n",
+        )
+        self.assertTrue(self.run_step(PORTED["install_gh_stack"], upgrade=True))
+        self.assertTrue(self.run_step(PORTED["install_gh_stack_skill"], upgrade=True))
+        self.assertEqual(
+            self.called(), ["gh extension upgrade gh-stack", "gh skill update gh-stack --all"]
+        )
+
+    def test_a_failed_install_fails_the_step(self) -> None:
+        self.fake("gh", GH.replace("*) echo", '"extension install"*) exit 1 ;;\n    *) echo'))
+        self.assertFalse(self.run_step(PORTED["install_gh_stack"]))
