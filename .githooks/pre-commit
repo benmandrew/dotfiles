@@ -110,9 +110,8 @@ if ((${#install_files[@]} > 0)); then
 fi
 
 # The whole installer rather than the staged files, since mypy and the tests
-# read across modules and all of it runs in about two seconds. The tests call
-# the bash steps through legacy-step.sh, so a staged change to those runs them
-# too.
+# read across modules. A staged scripts/*.sh runs them too: pins.sh is one, and
+# the tests read it.
 if [[ "${python_staged}" == true ]] || ((${#install_files[@]} > 0)); then
     py_sources=(scripts/install.py scripts/installer scripts/tests)
     check ruff ruff format -q --no-cache --check "${py_sources[@]}"

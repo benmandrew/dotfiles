@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from unittest import mock
 
-from installer.steps import PORTED, obsidian
+from installer.steps import STEPS, obsidian
 
 from .support import StepCase
 
@@ -380,7 +380,7 @@ class StackTest(ObsidianCase):
     def test_a_failed_app_install_still_sets_up_obsync(self) -> None:
         self.env["DISPLAY"] = ":0"
         self.fake("git", GIT)
-        self.assertFalse(self.run_step(PORTED["install_obsidian_stack"]))
+        self.assertFalse(self.run_step(STEPS["install_obsidian_stack"]))
         said = self.said()
         self.assertIn("Download failed", said)
         self.assertIn("[install] Cloning obsync\n", said)
@@ -390,14 +390,14 @@ class StackTest(ObsidianCase):
         self.fake("git", GIT)
         denied = PermissionError(13, "Permission denied", "/opt/obsidian")
         with mock.patch.object(obsidian, "install_obsidian", side_effect=denied):
-            self.assertFalse(self.run_step(PORTED["install_obsidian_stack"]))
+            self.assertFalse(self.run_step(STEPS["install_obsidian_stack"]))
         said = self.said()
         self.assertIn("Permission denied: '/opt/obsidian'\n", said)
         self.assertIn("[install] Cloning obsync\n", said)
 
     def test_both_halves(self) -> None:
         self.fake("git", GIT)
-        self.assertTrue(self.run_step(PORTED["install_obsidian_stack"]))
+        self.assertTrue(self.run_step(STEPS["install_obsidian_stack"]))
         self.assertTrue(
             self.said().startswith(
                 "[install] Obsidian: no display session detected; skipping on headless Linux\n"

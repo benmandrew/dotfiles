@@ -16,8 +16,7 @@ class Console:
 
     The descriptor is a copy of stderr taken before any step runs. A step's
     stdout and stderr both go to its log, so everything the installer says for
-    itself goes through here instead, and a bash step is handed the same
-    descriptor for its own `log` and `err` (see legacy.py).
+    itself goes through here instead, a step's `context.log` lines included.
     """
 
     def __init__(self, fd: int) -> None:

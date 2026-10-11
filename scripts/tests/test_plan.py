@@ -1,22 +1,11 @@
 from __future__ import annotations
 
-import re
 import unittest
 from collections.abc import Iterator
 
-from installer.legacy import SCRIPTS_DIR
 from installer.plan import LINUX, MACOS, OptionalStep, Plan, Require, UnsupportedPlatform, plan_for
 from installer.runner import Step
-from installer.steps import PORTED
-
-_FUNCTION = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\(\) \{", re.M)
-
-
-def functions(*scripts: str) -> set[str]:
-    found: set[str] = set()
-    for script in scripts:
-        found.update(_FUNCTION.findall((SCRIPTS_DIR / script).read_text()))
-    return found
+from installer.steps import STEPS
 
 
 def steps(plan: Plan) -> Iterator[Step]:
@@ -28,27 +17,14 @@ def steps(plan: Plan) -> Iterator[Step]:
 
 
 class PlanTest(unittest.TestCase):
-    def check_defined(self, plan: Plan, platform_script: str) -> None:
-        defined = functions("install-common.sh", platform_script)
-        names = [step.name for step in steps(plan)]
-        missing = [name for name in names if name not in defined and name not in PORTED]
-        self.assertEqual(missing, [], f"no such bash function in {platform_script}")
-        # A step has one home: its bash function goes when the Python one lands.
-        both = [name for name in names if name in defined and name in PORTED]
-        self.assertEqual(both, [], "ported, and still a bash function")
-        for step in steps(plan):
-            if step.name in PORTED:
-                self.assertIs(step.action, PORTED[step.name].action)
+    def test_every_planned_step_is_the_registered_one(self) -> None:
+        for plan in (LINUX, MACOS):
+            for step in steps(plan):
+                self.assertIs(step.action, STEPS[step.name].action)
 
-    def test_every_linux_step_is_defined_once(self) -> None:
-        self.check_defined(LINUX, "install-linux.sh")
-
-    def test_every_macos_step_is_defined_once(self) -> None:
-        self.check_defined(MACOS, "install-macos-arm64.sh")
-
-    def test_every_ported_step_is_in_a_plan(self) -> None:
+    def test_every_step_is_in_a_plan(self) -> None:
         planned = {step.name for plan in (LINUX, MACOS) for step in steps(plan)}
-        self.assertEqual(set(PORTED) - planned, set())
+        self.assertEqual(set(STEPS) - planned, set())
 
     def test_no_step_runs_twice(self) -> None:
         for plan in (LINUX, MACOS):
@@ -77,7 +53,7 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(second.name, "install_perf")
         self.assertTrue(first.fatal and second.fatal)
 
-    def test_a_ported_step_keeps_what_the_plan_gave_it(self) -> None:
+    def test_a_step_keeps_what_the_plan_gave_it(self) -> None:
         first = next(steps(LINUX))
         self.assertIn("build-essential", first.args)
         self.assertEqual(first.title.split()[:2], ["install_apt_packages_if_missing", "git"])

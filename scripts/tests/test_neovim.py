@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest import mock
 
 from installer import pins
-from installer.steps import PORTED, neovim
+from installer.steps import STEPS, neovim
 
 from .support import StepCase, prints, sha256
 
@@ -39,9 +39,7 @@ class NeovimTest(StepCase):
         self.serve(f"{API}/tags/{tag}", json.dumps({"tag_name": tag, "assets": [asset]}))
 
     def run_neovim(self, upgrade: bool = False) -> bool:
-        return self.run_step(
-            PORTED["install_neovim_if_missing"], machine="aarch64", upgrade=upgrade
-        )
+        return self.run_step(STEPS["install_neovim_if_missing"], machine="aarch64", upgrade=upgrade)
 
     def test_install(self) -> None:
         self.serve_release()
@@ -89,7 +87,7 @@ class NeovimTest(StepCase):
 
     def test_homebrew_on_macos(self) -> None:
         def run(upgrade: bool = False) -> bool:
-            step = PORTED["install_neovim_if_missing"]
+            step = STEPS["install_neovim_if_missing"]
             return self.run_step(step, system="Darwin", machine="arm64", upgrade=upgrade)
 
         self.recording("brew", failing="list")

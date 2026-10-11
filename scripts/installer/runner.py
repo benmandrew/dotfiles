@@ -122,7 +122,6 @@ class StepContext:
         argv: Sequence[str],
         *,
         env: dict[str, str] | None = None,
-        pass_fds: Sequence[int] = (),
         cwd: Path | None = None,
     ) -> int:
         """Run a command with the step's output handling and return its status.
@@ -138,7 +137,6 @@ class StepContext:
                 stdout=self._output,
                 stderr=self._output,
                 env=self.env if env is None else env,
-                pass_fds=pass_fds,
                 cwd=cwd,
             )
         except FileNotFoundError:

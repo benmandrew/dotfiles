@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest import mock
 
-from installer.steps import PORTED, completions
+from installer.steps import STEPS, completions
 
 from .support import StepCase
 
@@ -19,7 +19,7 @@ class CompletionsTest(StepCase):
         self.out = self.home / ".local/share/zsh/site-functions"
 
     def step(self) -> bool:
-        return self.run_step(PORTED["install_zsh_completions"])
+        return self.run_step(STEPS["install_zsh_completions"])
 
     def test_generate(self) -> None:
         self.fake(

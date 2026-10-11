@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from unittest import mock
 
-from installer.steps import PORTED, latex
+from installer.steps import STEPS, latex
 
 from .support import StepCase
 
@@ -68,7 +68,7 @@ class LatexLinuxTest(StepCase):
         return texdir
 
     def step(self, upgrade: bool = False) -> bool:
-        return self.run_step(PORTED["install_latex"], upgrade=upgrade)
+        return self.run_step(STEPS["install_latex"], upgrade=upgrade)
 
     def test_install(self) -> None:
         self.assertTrue(self.step())
@@ -192,7 +192,7 @@ class LatexMacosTest(StepCase):
 
     def mac(self, upgrade: bool = False) -> bool:
         return self.run_step(
-            PORTED["install_latex"], system="Darwin", machine="arm64", upgrade=upgrade
+            STEPS["install_latex"], system="Darwin", machine="arm64", upgrade=upgrade
         )
 
     def test_install(self) -> None:

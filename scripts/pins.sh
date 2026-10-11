@@ -1,9 +1,10 @@
 #!/bin/bash
-# shellcheck disable=SC2034  # read by whatever sources this, and by installer/pins.py
+# shellcheck disable=SC2034  # read by installer/pins.py
 
-# Pinned upstream versions. The bash steps source this file and the Python
-# steps parse it, so every line that sets a pin is NAME_VERSION="value" and
-# nothing else: no expansion, no command, no trailing comment.
+# Pinned upstream versions. installer/pins.py parses this file, and the bash
+# steps the installer was ported from sourced it, so every line that sets a pin
+# is NAME_VERSION="value" and nothing else: no expansion, no command, no
+# trailing comment.
 #
 # Ten steps used to resolve their tag through github_latest_tag on every run, so
 # two machines provisioned months apart came up with different builds of every

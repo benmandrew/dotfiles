@@ -12,8 +12,8 @@ from . import fetch, github
 from .console import Console
 from .runner import Settings, StepContext, StepFailed
 
-# The pins live in a file the bash steps source, so each has one home while
-# both languages install from it. See the comment at the top of that file.
+# The pins live in a file of plain NAME_VERSION="value" lines, as they did
+# when bash steps sourced it. See the comment at the top of that file.
 PINS_FILE = Path(__file__).resolve().parent.parent / "pins.sh"
 
 _PIN = re.compile(r'([A-Z][A-Z0-9_]*_VERSION)="([^"$`\\]*)"')

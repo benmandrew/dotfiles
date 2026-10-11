@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 from installer import pins
-from installer.steps import PORTED, opam
+from installer.steps import STEPS, opam
 
 from .support import StepCase
 
@@ -38,7 +38,7 @@ class OpamTest(StepCase):
 
     def test_everything_present(self) -> None:
         self.ready(installed="dune\nocaml-lsp-server\nocamlformat\n")
-        self.assertTrue(self.run_step(PORTED["install_opam"]))
+        self.assertTrue(self.run_step(STEPS["install_opam"]))
         self.assertEqual(
             self.said(),
             "[install] opam already installed; skipping\n"
@@ -54,7 +54,7 @@ class OpamTest(StepCase):
         )
         self.env["PATH"] = f"{self.home}/.local/bin:{self.env['PATH']}"
         self.fake("bwrap", "#!/bin/sh\n")
-        self.assertTrue(self.run_step(PORTED["install_opam"], machine="aarch64"))
+        self.assertTrue(self.run_step(STEPS["install_opam"], machine="aarch64"))
         self.assertEqual(
             self.said(),
             "[install] Installing opam\n"
@@ -73,7 +73,7 @@ class OpamTest(StepCase):
     def test_no_sandbox_and_a_system_compiler(self) -> None:
         self.fake("opam", OPAM)
         self.fake("ocamlc", "#!/bin/sh\n")
-        self.assertTrue(self.run_step(PORTED["install_opam"]))
+        self.assertTrue(self.run_step(STEPS["install_opam"]))
         self.assertIn(
             "[install] bwrap sandboxing unavailable (container/VM); initialising opam with"
             " --disable-sandboxing\n",
@@ -91,7 +91,7 @@ class OpamTest(StepCase):
         self.fake("opam", OPAM)
         self.root.mkdir()
         (self.root / "half").write_text("")
-        self.assertTrue(self.run_step(PORTED["install_opam"]))
+        self.assertTrue(self.run_step(STEPS["install_opam"]))
         (aside,) = self.home.glob(".opam.broken.*")
         self.assertIn(
             f"[install] {self.root} is unusable; moving it to {aside} and initialising afresh\n",
@@ -101,7 +101,7 @@ class OpamTest(StepCase):
 
     def test_one_tool_missing(self) -> None:
         self.ready(installed="ocamlformat\n")
-        self.assertTrue(self.run_step(PORTED["install_opam"]))
+        self.assertTrue(self.run_step(STEPS["install_opam"]))
         self.assertIn(
             "[install] Installing ocaml-lsp-server into the default opam switch\n", self.said()
         )
@@ -113,7 +113,7 @@ class OpamTest(StepCase):
             "https://api.github.com/repos/ocaml/opam/releases/latest", '{"tag_name": "9.9.9"}'
         )
         self.env["OPAM_SAYS"] = "9.9.9"
-        self.assertTrue(self.run_step(PORTED["install_opam"], upgrade=True))
+        self.assertTrue(self.run_step(STEPS["install_opam"], upgrade=True))
         self.assertEqual(
             self.said(),
             "[install] Upgrading opam\n"
@@ -128,7 +128,7 @@ class OpamTest(StepCase):
     def test_a_failed_install_fails_the_step(self) -> None:
         self.ready()
         self.fake("opam", OPAM.replace("*) echo", "install*) exit 1 ;;\n    *) echo"))
-        self.assertFalse(self.run_step(PORTED["install_opam"]))
+        self.assertFalse(self.run_step(STEPS["install_opam"]))
 
     def test_macos(self) -> None:
         include = Path(self.scratch) / "zlib" / "include"
@@ -139,9 +139,7 @@ class OpamTest(StepCase):
         self.env["CPATH"] = "/somewhere"
         with mock.patch.object(opam, "ZLIB_INCLUDES", (Path("/no/such/include"), include)):
             self.assertTrue(
-                self.run_step(
-                    PORTED["install_opam"], system="Darwin", machine="arm64", upgrade=True
-                )
+                self.run_step(STEPS["install_opam"], system="Darwin", machine="arm64", upgrade=True)
             )
         self.assertEqual(self.called()[0], "brew upgrade opam")
         self.assertEqual(self.env["CPATH"], f"{include}:/somewhere")
@@ -157,9 +155,7 @@ class OpamTest(StepCase):
             mock.patch.object(opam, "ZLIB_INCLUDES", (missing,)),
             mock.patch.object(opam, "CLT_INCLUDE", missing),
         ):
-            self.assertFalse(
-                self.run_step(PORTED["install_opam"], system="Darwin", machine="arm64")
-            )
+            self.assertFalse(self.run_step(STEPS["install_opam"], system="Darwin", machine="arm64"))
         self.assertIn(
             "ERROR: No zlib.h on this Mac; opam packages with C stubs will not build\n", self.said()
         )

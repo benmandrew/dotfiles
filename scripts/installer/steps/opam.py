@@ -130,8 +130,8 @@ def install_ocaml_tools(context: StepContext) -> None:
         include = _macos_c_search_path(context)
         if include is None:
             raise StepFailed("No zlib.h on this Mac; opam packages with C stubs will not build")
-        # Left in the environment for the steps that follow, as the bash step
-        # left them: a later build of a C stub on this Mac wants the same two.
+        # Left in the environment for the steps that follow: a later build of
+        # a C stub on this Mac wants the same two.
         env = context.env
         env["CPATH"] = _prepended(include, env.get("CPATH"))
         env["LIBRARY_PATH"] = _prepended(include.parent / "lib", env.get("LIBRARY_PATH"))

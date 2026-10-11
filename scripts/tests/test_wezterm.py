@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 from installer import tools
-from installer.steps import PORTED
+from installer.steps import STEPS
 
 from .support import StepCase, sha256
 
@@ -26,7 +26,7 @@ class WeztermTest(StepCase):
         self.serve(f"{BASE}/{deb}.sha256", f"{sha256(b'deb')}  {deb}\n")
 
     def test_headless_linux(self) -> None:
-        self.assertTrue(self.run_step(PORTED["install_wezterm"]))
+        self.assertTrue(self.run_step(STEPS["install_wezterm"]))
         self.assertEqual(
             self.said(),
             "[install] WezTerm: no display session detected; skipping on headless Linux\n",
@@ -35,14 +35,14 @@ class WeztermTest(StepCase):
     def test_present(self) -> None:
         self.env["WAYLAND_DISPLAY"] = "wayland-0"
         self.fake("wezterm", "#!/bin/sh\n")
-        self.assertTrue(self.run_step(PORTED["install_wezterm"]))
+        self.assertTrue(self.run_step(STEPS["install_wezterm"]))
         self.assertEqual(self.said(), "[install] WezTerm already installed; skipping\n")
 
     def test_install_the_package_for_this_ubuntu(self) -> None:
         self.env["DISPLAY"] = ":0"
         self.publish("24.04")
         self.installer("apt-get", creates="wezterm")
-        self.assertTrue(self.run_step(PORTED["install_wezterm"]))
+        self.assertTrue(self.run_step(STEPS["install_wezterm"]))
         self.assertEqual(self.said(), "[install] Installing WezTerm\n")
         (call,) = self.called()
         self.assertTrue(call.startswith("apt-get install -y /"))
@@ -54,7 +54,7 @@ class WeztermTest(StepCase):
         self.publish("22.04")
         self.fake("wezterm", "#!/bin/sh\n")
         self.recording("apt-get")
-        self.assertTrue(self.run_step(PORTED["install_wezterm"], upgrade=True))
+        self.assertTrue(self.run_step(STEPS["install_wezterm"], upgrade=True))
         self.assertEqual(self.said(), "[install] Upgrading WezTerm\n")
         self.assertTrue(self.called()[0].endswith("/wezterm-nightly.Ubuntu22.04.deb"))
 
@@ -64,12 +64,12 @@ class WeztermTest(StepCase):
         self.serve(f"{BASE}/{deb}", b"deb")
         self.serve(f"{BASE}/{deb}.sha256", f"{sha256(b'other')}  {deb}\n")
         self.recording("apt-get")
-        self.assertFalse(self.run_step(PORTED["install_wezterm"]))
+        self.assertFalse(self.run_step(STEPS["install_wezterm"]))
         self.assertEqual(self.called(), [])
 
     def test_arm64_linux(self) -> None:
         self.env["DISPLAY"] = ":0"
-        self.assertTrue(self.run_step(PORTED["install_wezterm"], machine="aarch64"))
+        self.assertTrue(self.run_step(STEPS["install_wezterm"], machine="aarch64"))
         self.assertEqual(
             self.said(),
             "[install] Installing WezTerm\n"
@@ -78,7 +78,7 @@ class WeztermTest(StepCase):
 
     def test_macos(self) -> None:
         self.installer("brew", creates="wezterm")
-        self.assertTrue(self.run_step(PORTED["install_wezterm"], system="Darwin", machine="arm64"))
+        self.assertTrue(self.run_step(STEPS["install_wezterm"], system="Darwin", machine="arm64"))
         self.assertEqual(self.said(), "[install] Installing WezTerm\n")
         self.assertEqual(self.called(), ["brew install --cask wezterm@nightly"])
 
@@ -86,7 +86,7 @@ class WeztermTest(StepCase):
         self.fake("wezterm", "#!/bin/sh\n")
         self.recording("brew", failing="upgrade")
         self.assertTrue(
-            self.run_step(PORTED["install_wezterm"], system="Darwin", machine="arm64", upgrade=True)
+            self.run_step(STEPS["install_wezterm"], system="Darwin", machine="arm64", upgrade=True)
         )
         self.assertEqual(
             self.said(),
@@ -121,7 +121,7 @@ class DefaultTerminalTest(StepCase):
 
     def test_set(self) -> None:
         self.alternatives(QUERY.format(value="/usr/bin/gnome-terminal.wrapper"))
-        self.assertTrue(self.run_step(PORTED["set_default_terminal_wezterm"]))
+        self.assertTrue(self.run_step(STEPS["set_default_terminal_wezterm"]))
         self.assertEqual(self.said(), "[install] Setting x-terminal-emulator to WezTerm\n")
         self.assertEqual(
             self.called(),
@@ -130,14 +130,14 @@ class DefaultTerminalTest(StepCase):
 
     def test_already_set(self) -> None:
         self.alternatives(QUERY.format(value="/usr/bin/open-wezterm-here"))
-        self.assertTrue(self.run_step(PORTED["set_default_terminal_wezterm"]))
+        self.assertTrue(self.run_step(STEPS["set_default_terminal_wezterm"]))
         self.assertEqual(self.said(), "[install] x-terminal-emulator already WezTerm; skipping\n")
 
     def test_not_registered(self) -> None:
         for query in (None, QUERY.format(value="x").split("Alternative: /usr/bin/open")[0]):
             if query is not None:
                 self.alternatives(query)
-            self.assertTrue(self.run_step(PORTED["set_default_terminal_wezterm"]))
+            self.assertTrue(self.run_step(STEPS["set_default_terminal_wezterm"]))
         line = (
             "[install] x-terminal-emulator: /usr/bin/open-wezterm-here not registered; skipping\n"
         )

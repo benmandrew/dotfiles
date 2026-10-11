@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 from installer import pins
-from installer.steps import PORTED, cmake
+from installer.steps import STEPS, cmake
 
 from .support import StepCase, prints
 
@@ -41,7 +41,7 @@ class CmakeTest(StepCase):
 
     def test_install_on_linux(self) -> None:
         self.serve_installer("linux-aarch64")
-        self.assertTrue(self.run_step(PORTED["install_cmake"], machine="aarch64"))
+        self.assertTrue(self.run_step(STEPS["install_cmake"], machine="aarch64"))
         self.assertEqual(self.said(), f"[install] Installing cmake {VERSION}\n")
         self.assertTrue((self.prefix / "bin/cmake").is_file())
         (call,) = self.called()
@@ -49,7 +49,7 @@ class CmakeTest(StepCase):
 
     def test_new_enough_is_skipped(self) -> None:
         self.fake("cmake", prints("cmake version 99.0.0"))
-        self.assertTrue(self.run_step(PORTED["install_cmake"]))
+        self.assertTrue(self.run_step(STEPS["install_cmake"]))
         self.assertEqual(
             self.said(), f"[install] cmake 99.0.0 already satisfies >= {VERSION}; skipping\n"
         )
@@ -58,7 +58,7 @@ class CmakeTest(StepCase):
     def test_too_old_is_replaced(self) -> None:
         self.fake("cmake", prints("cmake version 3.22.1"))
         self.serve_installer("linux-x86_64")
-        self.assertTrue(self.run_step(PORTED["install_cmake"]))
+        self.assertTrue(self.run_step(STEPS["install_cmake"]))
         said = self.said()
         self.assertIn(f"[install] cmake 3.22.1 < {VERSION}; installing {VERSION}\n", said)
         self.assertIn(f"Note: cmake on PATH is {self.bin}/cmake, which shadows", said)
@@ -69,14 +69,12 @@ class CmakeTest(StepCase):
             "https://api.github.com/repos/Kitware/CMake/releases/latest",
             f'{{"tag_name":"v{VERSION}"}}',
         )
-        self.assertTrue(self.run_step(PORTED["install_cmake"], upgrade=True))
+        self.assertTrue(self.run_step(STEPS["install_cmake"], upgrade=True))
         self.assertEqual(self.said(), f"[install] cmake {VERSION} already at latest; skipping\n")
 
     def test_macos(self) -> None:
         def run(**kwargs: bool) -> bool:
-            return self.run_step(
-                PORTED["install_cmake"], system="Darwin", machine="arm64", **kwargs
-            )
+            return self.run_step(STEPS["install_cmake"], system="Darwin", machine="arm64", **kwargs)
 
         self.recording("brew", failing="list")
         self.fake("cmake", prints("cmake version 3.0.0"))

@@ -5,7 +5,7 @@ import pwd
 from pathlib import Path
 from unittest import mock
 
-from installer.steps import PORTED, nix
+from installer.steps import STEPS, nix
 
 from .support import StepCase
 
@@ -48,7 +48,7 @@ class NixTest(StepCase):
     def test_present_and_set_up(self) -> None:
         self.fake("nix", "#!/bin/sh\n")
         self.flakes_on()
-        self.assertTrue(self.run_step(PORTED["install_nix"]))
+        self.assertTrue(self.run_step(STEPS["install_nix"]))
         self.assertEqual(self.said(), "[install] Nix already installed; skipping\n")
         self.assertEqual(self.called(), [])
 
@@ -56,7 +56,7 @@ class NixTest(StepCase):
         self.fake("nix", "#!/bin/sh\n")
         self.system_conf.write_text("trusted-users = root\n")
         self.recording("systemctl")
-        self.assertTrue(self.run_step(PORTED["install_nix"]))
+        self.assertTrue(self.run_step(STEPS["install_nix"]))
         self.assertEqual(
             self.said(),
             "[install] Nix already installed; skipping\n"
@@ -76,21 +76,21 @@ class NixTest(StepCase):
         self.flakes_on()
         self.system_conf.write_text("")
         self.recording("launchctl")
-        self.assertTrue(self.run_step(PORTED["install_nix"], system="Darwin", machine="arm64"))
+        self.assertTrue(self.run_step(STEPS["install_nix"], system="Darwin", machine="arm64"))
         self.assertEqual(self.called(), ["launchctl kickstart -k system/org.nixos.nix-daemon"])
 
     def test_a_daemon_that_will_not_restart_fails_the_step(self) -> None:
         self.fake("nix", "#!/bin/sh\n")
         self.system_conf.write_text("")
         self.recording("systemctl", failing="restart")
-        self.assertFalse(self.run_step(PORTED["install_nix"]))
+        self.assertFalse(self.run_step(STEPS["install_nix"]))
 
     def test_a_conf_that_cannot_be_written_fails_the_step(self) -> None:
         self.fake("nix", "#!/bin/sh\n")
         self.recording("systemctl")
         missing = Path(self.scratch) / "no-such-directory" / "nix.conf"
         with mock.patch.object(nix, "SYSTEM_CONF", missing):
-            self.assertFalse(self.run_step(PORTED["install_nix"]))
+            self.assertFalse(self.run_step(STEPS["install_nix"]))
         self.assertEqual(self.called(), [])
 
     def test_an_installed_nix_off_path_is_sourced(self) -> None:
@@ -106,7 +106,7 @@ class NixTest(StepCase):
         )
         self.flakes_on()
         before = dict(self.env)
-        self.assertTrue(self.run_step(PORTED["install_nix"], upgrade=True))
+        self.assertTrue(self.run_step(STEPS["install_nix"], upgrade=True))
         self.assertEqual(self.said(), "[install] Upgrading Nix\n")
         self.assertEqual(self.env["PATH"], f"{self.default_nix.parent}:{before['PATH']}")
         self.assertEqual(
@@ -117,7 +117,7 @@ class NixTest(StepCase):
     def test_install(self) -> None:
         self.serve(nix.INSTALL_URL, INSTALLER)
         self.flakes_on()
-        self.assertTrue(self.run_step(PORTED["install_nix"]))
+        self.assertTrue(self.run_step(STEPS["install_nix"]))
         self.assertEqual(self.said(), "[install] Installing Nix\n")
         self.assertEqual(self.called(), ["installer --daemon --yes"])
         # The steps that follow find nix.
@@ -125,7 +125,7 @@ class NixTest(StepCase):
 
     def test_an_install_that_leaves_no_nix_fails_the_step(self) -> None:
         self.serve(nix.INSTALL_URL, "#!/bin/sh\n")
-        self.assertFalse(self.run_step(PORTED["install_nix"]))
+        self.assertFalse(self.run_step(STEPS["install_nix"]))
         self.assertIn("ERROR: nix does not run after installing (not on PATH", self.said())
 
     def test_upgrade_retries_once(self) -> None:
@@ -136,7 +136,7 @@ class NixTest(StepCase):
             f'[ -e "{marker}" ] && exit 0\n: >"{marker}"\nexit 1\n',
         )
         self.flakes_on()
-        self.assertTrue(self.run_step(PORTED["install_nix"], upgrade=True))
+        self.assertTrue(self.run_step(STEPS["install_nix"], upgrade=True))
         self.assertEqual(
             self.said(), "[install] Upgrading Nix\n[install] sudo failed; retrying once\n"
         )
@@ -170,7 +170,7 @@ class NixDirenvTest(StepCase):
         (share / "direnvrc").write_text("")
 
     def run_nix_direnv(self, system: str = "Linux", upgrade: bool = False) -> bool:
-        return self.run_step(PORTED["install_nix_direnv"], system=system, upgrade=upgrade)
+        return self.run_step(STEPS["install_nix_direnv"], system=system, upgrade=upgrade)
 
     def test_install_on_linux(self) -> None:
         self.linked()

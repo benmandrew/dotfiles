@@ -22,9 +22,8 @@ KEEPALIVE_INTERVAL = 50
 def sudo_command(env: dict[str, str]) -> list[str]:
     """`sudo`, with -A when the askpass helper is in place.
 
-    Homebrew adds -A itself whenever SUDO_ASKPASS is set, and the bash steps
-    get it from the `sudo` function in install-common.sh. This is for the
-    Python side. Leave -A off where the call must never prompt, as in the
+    Homebrew adds -A itself whenever SUDO_ASKPASS is set. This is for the
+    steps' own calls. Leave -A off where the call must never prompt, as in the
     keepalive's `sudo -n true`.
     """
     if env.get("SUDO_ASKPASS"):

@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 from installer import pins
-from installer.steps import PORTED, go
+from installer.steps import STEPS, go
 
 from .support import StepCase, sha256
 
@@ -35,7 +35,7 @@ class GoTest(StepCase):
         self.serve(f"https://dl.google.com/go/{name}.sha256", digest or sha256(tarball))
 
     def run_go(self, upgrade: bool = False) -> bool:
-        return self.run_step(PORTED["install_go"], machine="aarch64", upgrade=upgrade)
+        return self.run_step(STEPS["install_go"], machine="aarch64", upgrade=upgrade)
 
     def test_install(self) -> None:
         self.serve_release()
@@ -105,7 +105,7 @@ class GoTest(StepCase):
         self.assertIn("ERROR: go.dev returned no version\n", self.said())
 
     def test_unsupported_arch(self) -> None:
-        self.assertTrue(self.run_step(PORTED["install_go"], machine="riscv64"))
+        self.assertTrue(self.run_step(STEPS["install_go"], machine="riscv64"))
         self.assertEqual(
             self.said(),
             "[install] Installing Go\n"

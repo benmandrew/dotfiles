@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 from installer import apt, tools
-from installer.steps import PORTED, docker
+from installer.steps import STEPS, docker
 
 from .support import StepCase
 
@@ -44,7 +44,7 @@ class DockerLinuxTest(StepCase):
         self.serve("https://download.docker.com/linux/ubuntu/gpg", "key")
 
     def step(self, upgrade: bool = False) -> bool:
-        return self.run_step(PORTED["install_docker"], upgrade=upgrade)
+        return self.run_step(STEPS["install_docker"], upgrade=upgrade)
 
     def test_install(self) -> None:
         self.installer("apt-get", creates="docker")
@@ -162,7 +162,7 @@ class DockerMacosTest(StepCase):
 
     def mac(self, upgrade: bool = False) -> bool:
         return self.run_step(
-            PORTED["install_docker"], system="Darwin", machine="arm64", upgrade=upgrade
+            STEPS["install_docker"], system="Darwin", machine="arm64", upgrade=upgrade
         )
 
     def test_install(self) -> None:

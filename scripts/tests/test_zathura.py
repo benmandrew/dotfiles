@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from installer.steps import PORTED
+from installer.steps import STEPS
 
 from .support import StepCase
 
@@ -38,7 +38,7 @@ class ZathuraMacosTest(StepCase):
 
     def mac(self, upgrade: bool = False) -> bool:
         return self.run_step(
-            PORTED["install_zathura"], system="Darwin", machine="arm64", upgrade=upgrade
+            STEPS["install_zathura"], system="Darwin", machine="arm64", upgrade=upgrade
         )
 
     def test_install(self) -> None:
@@ -96,7 +96,7 @@ class ZathuraMacosTest(StepCase):
 
 class ZathuraLinuxTest(StepCase):
     def test_headless(self) -> None:
-        self.assertTrue(self.run_step(PORTED["install_zathura"]))
+        self.assertTrue(self.run_step(STEPS["install_zathura"]))
         self.assertEqual(
             self.said(),
             "[install] zathura: no display session detected; skipping on headless Linux\n",
@@ -106,7 +106,7 @@ class ZathuraLinuxTest(StepCase):
         self.env["DISPLAY"] = ":0"
         self.fake("dpkg", "#!/bin/sh\nexit 1\n")
         self.installer("apt-get", creates="zathura")
-        self.assertTrue(self.run_step(PORTED["install_zathura"]))
+        self.assertTrue(self.run_step(STEPS["install_zathura"]))
         self.assertEqual(self.said(), "[install] Installing zathura\n")
         self.assertEqual(self.called(), ["apt-get install -y zathura zathura-pdf-poppler"])
 
@@ -115,9 +115,9 @@ class ZathuraLinuxTest(StepCase):
         self.fake("dpkg", "#!/bin/sh\nexit 0\n")
         self.fake("zathura", "#!/bin/sh\n")
         self.recording("apt-get")
-        self.assertTrue(self.run_step(PORTED["install_zathura"]))
+        self.assertTrue(self.run_step(STEPS["install_zathura"]))
         self.assertEqual(self.said(), "[install] zathura already installed; skipping\n")
-        self.assertTrue(self.run_step(PORTED["install_zathura"], upgrade=True))
+        self.assertTrue(self.run_step(STEPS["install_zathura"], upgrade=True))
         self.assertEqual(len(self.called()), 1)
 
     def test_a_viewer_without_its_backend_is_installed(self) -> None:
@@ -125,5 +125,5 @@ class ZathuraLinuxTest(StepCase):
         self.fake("dpkg", "#!/bin/sh\nexit 1\n")
         self.fake("zathura", "#!/bin/sh\n")
         self.recording("apt-get")
-        self.assertTrue(self.run_step(PORTED["install_zathura"]))
+        self.assertTrue(self.run_step(STEPS["install_zathura"]))
         self.assertEqual(self.said(), "[install] Installing zathura\n")

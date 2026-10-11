@@ -1,4 +1,4 @@
-"""The steps that are Python. The rest are still bash: see legacy.py."""
+"""Every install step, by name. plan.py puts them in order."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ from . import (
     zathura,
 )
 
-PORTED: dict[str, Step] = {
+STEPS: dict[str, Step] = {
     step.name: step
     for module in (
         ansible_lint,

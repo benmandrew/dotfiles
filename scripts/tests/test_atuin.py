@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from installer import pins
-from installer.steps import PORTED
+from installer.steps import STEPS
 
 from .support import StepCase, prints, sha256
 
@@ -21,7 +21,7 @@ class AtuinTest(StepCase):
         self.serve(f"{BASE}/{tag}/{asset}.sha256", f"{sha256(tarball)}  {asset}\n")
 
     def run_atuin(self, upgrade: bool = False) -> bool:
-        return self.run_step(PORTED["install_atuin"], machine="aarch64", upgrade=upgrade)
+        return self.run_step(STEPS["install_atuin"], machine="aarch64", upgrade=upgrade)
 
     def test_install(self) -> None:
         self.serve_release()
@@ -58,7 +58,7 @@ class AtuinTest(StepCase):
         self.assertIn("99.0.0", (self.home / ".local/bin/atuin").read_text())
 
     def test_unsupported_arch(self) -> None:
-        self.assertTrue(self.run_step(PORTED["install_atuin"], machine="riscv64"))
+        self.assertTrue(self.run_step(STEPS["install_atuin"], machine="riscv64"))
         self.assertIn(
             "[install] Unsupported arch riscv64 for atuin install; skipping\n", self.said()
         )
@@ -66,5 +66,5 @@ class AtuinTest(StepCase):
     def test_homebrew_on_macos(self) -> None:
         self.recording("brew", failing="list")
         self.fake("atuin", prints("atuin 18.21.0"))
-        self.assertTrue(self.run_step(PORTED["install_atuin"], system="Darwin", machine="arm64"))
+        self.assertTrue(self.run_step(STEPS["install_atuin"], system="Darwin", machine="arm64"))
         self.assertEqual(self.called(), ["brew list --formula atuin", "brew install atuin"])

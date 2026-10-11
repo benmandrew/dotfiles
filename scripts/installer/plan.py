@@ -5,9 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Union
 
-from .legacy import legacy
 from .runner import Step
-from .steps import PORTED
+from .steps import STEPS
 
 
 @dataclass(frozen=True)
@@ -44,13 +43,11 @@ class UnsupportedPlatform(Exception):
 
 
 def _step(name: str, *args: str, interactive: bool = False, fatal: bool = False) -> Step:
-    """The step of that name: the Python one where it is ported, else the bash one."""
-    ported = PORTED.get(name)
-    if ported is None:
-        return legacy(name, *args, interactive=interactive, fatal=fatal)
+    """The step of that name, with what this plan gives it."""
+    step = STEPS[name]
     if not (args or interactive or fatal):
-        return ported
-    return replace(ported, args=args, interactive=interactive, fatal=fatal)
+        return step
+    return replace(step, args=args, interactive=interactive, fatal=fatal)
 
 
 def _steps(*names: str) -> tuple[Step, ...]:

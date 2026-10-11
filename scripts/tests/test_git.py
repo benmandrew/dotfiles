@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 from installer import apt, tools
-from installer.steps import PORTED, git
+from installer.steps import STEPS, git
 
 from .support import StepCase, prints
 
@@ -45,27 +45,27 @@ class GitTest(StepCase):
 
     def test_new_enough_is_skipped(self) -> None:
         self.fake("git", prints("git version 2.43.0"))
-        self.assertTrue(self.run_step(PORTED["install_git"]))
+        self.assertTrue(self.run_step(STEPS["install_git"]))
         self.assertEqual(self.said(), "[install] git 2.43.0 is at least 2.35.0; skipping\n")
         self.fake("git", prints("git version 2.35.0"))
-        self.assertTrue(self.run_step(PORTED["install_git"]))
+        self.assertTrue(self.run_step(STEPS["install_git"]))
         self.assertIn("[install] git 2.35.0 is at least 2.35.0; skipping\n", self.said())
         self.assertEqual(self.requests(), [])
 
     def test_a_ppa_is_for_ubuntu_alone(self) -> None:
         self.os_release.write_text('ID=debian\nVERSION_CODENAME="bookworm"\n')
-        self.assertTrue(self.run_step(PORTED["install_git"]))
+        self.assertTrue(self.run_step(STEPS["install_git"]))
         self.assertEqual(
             self.said(), "[install] not Ubuntu; keeping git 2.34.1 as the distro ships it\n"
         )
         (self.bin / "git").unlink()
         self.os_release.unlink()
-        self.assertTrue(self.run_step(PORTED["install_git"]))
+        self.assertTrue(self.run_step(STEPS["install_git"]))
         self.assertIn("keeping git (absent) as the distro ships it\n", self.said())
 
     def test_install_from_the_ppa(self) -> None:
         self.installer("apt-get", creates="git", output="git version 2.47.1")
-        self.assertTrue(self.run_step(PORTED["install_git"]))
+        self.assertTrue(self.run_step(STEPS["install_git"]))
         self.assertEqual(
             self.said(),
             "[install] Installing git from the git-core PPA (distro git is 2.34.1)\n"
@@ -85,7 +85,7 @@ class GitTest(StepCase):
     def test_upgrade_goes_to_the_ppa_whatever_is_installed(self) -> None:
         self.fake("git", prints("git version 2.43.0"))
         self.recording("apt-get")
-        self.assertTrue(self.run_step(PORTED["install_git"], upgrade=True))
+        self.assertTrue(self.run_step(STEPS["install_git"], upgrade=True))
         self.assertEqual(
             self.said(),
             "[install] Installing git from the git-core PPA (distro git is 2.43.0)\n"
@@ -95,7 +95,7 @@ class GitTest(StepCase):
     def test_another_key_is_refused(self) -> None:
         self.serve(git.KEY_URL, "0" * 40)
         self.recording("apt-get")
-        self.assertFalse(self.run_step(PORTED["install_git"]))
+        self.assertFalse(self.run_step(STEPS["install_git"]))
         self.assertIn(
             "ERROR: git-core PPA key does not carry the pinned fingerprint\n", self.said()
         )
@@ -104,7 +104,7 @@ class GitTest(StepCase):
 
     def test_apt_leaving_the_old_git_fails_the_step(self) -> None:
         self.recording("apt-get")
-        self.assertFalse(self.run_step(PORTED["install_git"]))
+        self.assertFalse(self.run_step(STEPS["install_git"]))
         self.assertIn(
             "ERROR: git is 2.34.1 after installing from the PPA; need at least 2.35.0\n",
             self.said(),

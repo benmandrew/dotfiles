@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from installer.steps import PORTED
+from installer.steps import STEPS
 
 from .support import StepCase
 
@@ -12,7 +12,7 @@ DPKG = '#!/bin/sh\ncase "$2" in git | curl) exit 0 ;; esac\nexit 1\n'
 
 class AptPackagesTest(StepCase):
     def run_apt(self, *packages: str, upgrade: bool = False) -> bool:
-        step = replace(PORTED["install_apt_packages_if_missing"], args=packages)
+        step = replace(STEPS["install_apt_packages_if_missing"], args=packages)
         return self.run_step(step, upgrade=upgrade)
 
     def setUp(self) -> None:
@@ -43,7 +43,7 @@ class AptPackagesTest(StepCase):
 
 class BrewFormulaeTest(StepCase):
     def run_brew(self, *formulae: str, upgrade: bool = False) -> bool:
-        step = replace(PORTED["install_brew_formulae_if_missing"], args=formulae)
+        step = replace(STEPS["install_brew_formulae_if_missing"], args=formulae)
         return self.run_step(step, upgrade=upgrade, system="Darwin", machine="arm64")
 
     def test_missing_formulae_are_installed(self) -> None:
@@ -86,29 +86,29 @@ class BrewFormulaeTest(StepCase):
 class PackageToolsTest(StepCase):
     def test_jq_from_apt(self) -> None:
         self.installer("apt-get", creates="jq")
-        self.assertTrue(self.run_step(PORTED["install_jq"]))
+        self.assertTrue(self.run_step(STEPS["install_jq"]))
         self.assertEqual(self.said(), "[install] Installing jq\n")
         self.assertEqual(self.called(), ["apt-get install -y jq"])
 
     def test_jq_present(self) -> None:
         self.fake("jq", "#!/bin/sh\n")
         self.recording("apt-get")
-        self.assertTrue(self.run_step(PORTED["install_jq"]))
+        self.assertTrue(self.run_step(STEPS["install_jq"]))
         self.assertEqual(self.said(), "[install] jq already installed; skipping\n")
-        self.assertTrue(self.run_step(PORTED["install_jq"], upgrade=True))
+        self.assertTrue(self.run_step(STEPS["install_jq"], upgrade=True))
         self.assertEqual(self.called(), ["apt-get install -y jq"])
 
     def test_jq_that_does_not_run_fails_the_step(self) -> None:
         self.recording("apt-get")
-        self.assertFalse(self.run_step(PORTED["install_jq"]))
+        self.assertFalse(self.run_step(STEPS["install_jq"]))
         self.assertIn("ERROR: jq does not run after installing (not on PATH", self.said())
 
     def test_jq_from_brew(self) -> None:
         self.installer("brew", creates="jq")
-        self.assertTrue(self.run_step(PORTED["install_jq"], system="Darwin", machine="arm64"))
+        self.assertTrue(self.run_step(STEPS["install_jq"], system="Darwin", machine="arm64"))
         self.assertEqual(self.called(), ["brew install jq"])
         self.assertTrue(
-            self.run_step(PORTED["install_jq"], system="Darwin", machine="arm64", upgrade=True)
+            self.run_step(STEPS["install_jq"], system="Darwin", machine="arm64", upgrade=True)
         )
         self.assertEqual(self.called()[-1], "brew upgrade jq")
 
@@ -116,19 +116,19 @@ class PackageToolsTest(StepCase):
         self.fake("zstd", "#!/bin/sh\n")
         self.fake("dpkg", "#!/bin/sh\nexit 1\n")
         self.recording("apt-get")
-        self.assertTrue(self.run_step(PORTED["install_zstd"]))
+        self.assertTrue(self.run_step(STEPS["install_zstd"]))
         self.assertEqual(self.said(), "[install] Installing zstd\n")
         self.assertEqual(self.called(), ["apt-get install -y zstd libzstd-dev"])
 
     def test_zstd_with_headers_is_skipped(self) -> None:
         self.fake("zstd", "#!/bin/sh\n")
         self.fake("dpkg", "#!/bin/sh\n")
-        self.assertTrue(self.run_step(PORTED["install_zstd"]))
+        self.assertTrue(self.run_step(STEPS["install_zstd"]))
         self.assertEqual(self.said(), "[install] zstd already installed; skipping\n")
 
     def test_zstd_on_macos_is_one_formula(self) -> None:
         self.fake("zstd", "#!/bin/sh\n")
-        self.assertTrue(self.run_step(PORTED["install_zstd"], system="Darwin", machine="arm64"))
+        self.assertTrue(self.run_step(STEPS["install_zstd"], system="Darwin", machine="arm64"))
         self.assertEqual(self.said(), "[install] zstd already installed; skipping\n")
 
     def test_clangd_on_macos_is_probed_inside_the_keg(self) -> None:
@@ -138,13 +138,13 @@ class PackageToolsTest(StepCase):
             '#!/bin/sh\necho "brew $*" >>"$FAKE_CALLS"\n'
             f'[ "$1" = --prefix ] && echo "{keg}"\nexit 0\n',
         )
-        self.assertFalse(self.run_step(PORTED["install_clangd"], system="Darwin", machine="arm64"))
+        self.assertFalse(self.run_step(STEPS["install_clangd"], system="Darwin", machine="arm64"))
         self.assertIn(f"ERROR: {keg}/bin/clangd does not run after installing", self.said())
         self.fake("clangd", "#!/bin/sh\n", keg / "bin")
-        self.assertTrue(self.run_step(PORTED["install_clangd"], system="Darwin", machine="arm64"))
+        self.assertTrue(self.run_step(STEPS["install_clangd"], system="Darwin", machine="arm64"))
         self.assertEqual(self.called()[-2:], ["brew install llvm", "brew --prefix llvm"])
 
     def test_clangd_from_apt(self) -> None:
         self.installer("apt-get", creates="clangd")
-        self.assertTrue(self.run_step(PORTED["install_clangd"]))
+        self.assertTrue(self.run_step(STEPS["install_clangd"]))
         self.assertEqual(self.called(), ["apt-get install -y clangd"])

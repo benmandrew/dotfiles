@@ -76,8 +76,7 @@ def run(console: Console, settings: Settings, env: dict[str, str], plan: Plan) -
     # upgrade` stop for a [y/n] confirmation whenever the plan reaches past the
     # packages named on the command line: a dependency bump, a cask's
     # dependants. Nothing here answers those prompts, so an install left to run
-    # unattended stalls on the first one. install-common.sh exports the same
-    # for the bash steps.
+    # unattended stalls on the first one.
     env["HOMEBREW_NO_ASK"] = "1"
     env.update(plan.env)
     runner = Runner(console, settings, env)
@@ -126,7 +125,7 @@ def _die_of(signum: int) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     settings = parse_args(sys.argv[1:] if argv is None else argv)
     # A copy of stderr for the installer's own lines, taken before any step
-    # runs and handed to each bash step. See console.py.
+    # runs. See console.py.
     console = Console(os.dup(sys.stderr.fileno()))
     try:
         plan = plan_for(platform.system(), platform.machine())

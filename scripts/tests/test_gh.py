@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 from installer import apt
-from installer.steps import PORTED, gh
+from installer.steps import STEPS, gh
 
 from .support import StepCase, prints
 
@@ -39,7 +39,7 @@ class GhTest(StepCase):
 
     def test_install_from_the_official_repository(self) -> None:
         self.installer("apt-get", creates="gh")
-        self.assertTrue(self.run_step(PORTED["install_gh"]))
+        self.assertTrue(self.run_step(STEPS["install_gh"]))
         self.assertEqual(self.said(), "[install] Installing GitHub CLI from official apt repo\n")
         keyring = self.keyrings / "githubcli-archive-keyring.gpg"
         self.assertEqual(keyring.read_bytes(), b"key")
@@ -53,7 +53,7 @@ class GhTest(StepCase):
         self.fake("gh", "#!/bin/sh\n")
         (self.sources / "github-cli.list").write_text("deb\n")
         self.policy(OFFICIAL)
-        self.assertTrue(self.run_step(PORTED["install_gh"]))
+        self.assertTrue(self.run_step(STEPS["install_gh"]))
         self.assertEqual(self.said(), "[install] GitHub CLI already installed; skipping\n")
 
     def test_the_distro_gh_is_migrated(self) -> None:
@@ -62,24 +62,24 @@ class GhTest(StepCase):
         (self.sources / "github-cli.list").write_text("deb\n")
         self.policy(DISTRO)
         self.recording("apt-get")
-        self.assertTrue(self.run_step(PORTED["install_gh"]))
+        self.assertTrue(self.run_step(STEPS["install_gh"]))
         self.assertEqual(self.called()[-1], "apt-get install -y gh")
 
     def test_no_keyring_no_repository(self) -> None:
         (self.web / "cli.github.com/packages/githubcli-archive-keyring.gpg").unlink()
         self.recording("apt-get")
-        self.assertFalse(self.run_step(PORTED["install_gh"]))
+        self.assertFalse(self.run_step(STEPS["install_gh"]))
         self.assertFalse((self.sources / "github-cli.list").exists())
         self.assertEqual(self.called(), [])
 
     def test_macos(self) -> None:
         (self.bin / "gh").unlink()
         self.installer("brew", creates="gh")
-        self.assertTrue(self.run_step(PORTED["install_gh"], system="Darwin", machine="arm64"))
+        self.assertTrue(self.run_step(STEPS["install_gh"], system="Darwin", machine="arm64"))
         self.assertEqual(self.said(), "[install] Installing GitHub CLI\n")
         self.assertEqual(self.called(), ["brew install gh"])
         self.assertTrue(
-            self.run_step(PORTED["install_gh"], system="Darwin", machine="arm64", upgrade=True)
+            self.run_step(STEPS["install_gh"], system="Darwin", machine="arm64", upgrade=True)
         )
         self.assertEqual(self.called()[-1], "brew upgrade gh")
 
@@ -97,8 +97,8 @@ esac
 
 class GhStackTest(StepCase):
     def test_without_a_credential_both_skip(self) -> None:
-        self.assertTrue(self.run_step(PORTED["install_gh_stack"]))
-        self.assertTrue(self.run_step(PORTED["install_gh_stack_skill"]))
+        self.assertTrue(self.run_step(STEPS["install_gh_stack"]))
+        self.assertTrue(self.run_step(STEPS["install_gh_stack_skill"]))
         self.assertEqual(
             self.said(),
             "[install] gh is not authenticated; skipping gh-stack extension"
@@ -107,14 +107,14 @@ class GhStackTest(StepCase):
             " (run 'gh auth login', then re-run)\n",
         )
         (self.bin / "gh").unlink()
-        self.assertTrue(self.run_step(PORTED["install_gh_stack"]))
+        self.assertTrue(self.run_step(STEPS["install_gh_stack"]))
 
     def test_install(self) -> None:
         self.fake("gh", GH)
         # The name alone, from another owner, is not this extension.
         (self.home / "extensions").write_text("gh stack\tsomeone/gh-stack\tv1.0.0\n")
-        self.assertTrue(self.run_step(PORTED["install_gh_stack"]))
-        self.assertTrue(self.run_step(PORTED["install_gh_stack_skill"]))
+        self.assertTrue(self.run_step(STEPS["install_gh_stack"]))
+        self.assertTrue(self.run_step(STEPS["install_gh_stack_skill"]))
         self.assertEqual(
             self.said(),
             "[install] Installing gh-stack extension\n"
@@ -133,19 +133,19 @@ class GhStackTest(StepCase):
         self.fake("gh", GH)
         (self.home / "extensions").write_text("gh stack\tgithub/gh-stack\tv0.0.3\n")
         (self.home / "skills").write_text("other\ngh-stack\n")
-        self.assertTrue(self.run_step(PORTED["install_gh_stack"]))
-        self.assertTrue(self.run_step(PORTED["install_gh_stack_skill"]))
+        self.assertTrue(self.run_step(STEPS["install_gh_stack"]))
+        self.assertTrue(self.run_step(STEPS["install_gh_stack_skill"]))
         self.assertEqual(
             self.said(),
             "[install] gh-stack extension already installed; skipping\n"
             "[install] gh-stack skill already installed; skipping\n",
         )
-        self.assertTrue(self.run_step(PORTED["install_gh_stack"], upgrade=True))
-        self.assertTrue(self.run_step(PORTED["install_gh_stack_skill"], upgrade=True))
+        self.assertTrue(self.run_step(STEPS["install_gh_stack"], upgrade=True))
+        self.assertTrue(self.run_step(STEPS["install_gh_stack_skill"], upgrade=True))
         self.assertEqual(
             self.called(), ["gh extension upgrade gh-stack", "gh skill update gh-stack --all"]
         )
 
     def test_a_failed_install_fails_the_step(self) -> None:
         self.fake("gh", GH.replace("*) echo", '"extension install"*) exit 1 ;;\n    *) echo'))
-        self.assertFalse(self.run_step(PORTED["install_gh_stack"]))
+        self.assertFalse(self.run_step(STEPS["install_gh_stack"]))

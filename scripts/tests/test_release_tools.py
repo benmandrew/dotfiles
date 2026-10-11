@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from installer import pins
-from installer.steps import PORTED
+from installer.steps import STEPS
 
 from .support import StepCase, prints, sha256
 
@@ -29,7 +29,7 @@ class ReleaseToolTest(StepCase):
 
     def test_install_on_linux(self) -> None:
         self.serve_gitleaks()
-        self.assertTrue(self.run_step(PORTED["install_gitleaks"], machine="aarch64"))
+        self.assertTrue(self.run_step(STEPS["install_gitleaks"], machine="aarch64"))
         self.assertEqual(self.said(), "[install] Installing gitleaks\n")
         self.assertIn("gitleaks 1", (self.home / ".local/bin/gitleaks").read_text())
         # A pinned install asks the API nothing.
@@ -37,21 +37,21 @@ class ReleaseToolTest(StepCase):
 
     def test_checksum_mismatch_installs_nothing(self) -> None:
         self.serve_gitleaks(body=b"something else")
-        self.assertFalse(self.run_step(PORTED["install_gitleaks"], machine="aarch64"))
+        self.assertFalse(self.run_step(STEPS["install_gitleaks"], machine="aarch64"))
         self.assertIn("ERROR: Checksum mismatch for gitleaks_", self.said())
         self.assertIn("ERROR: Step failed: install_gitleaks\n", self.said())
         self.assertFalse((self.home / ".local/bin/gitleaks").exists())
 
     def test_present_is_skipped_and_upgraded(self) -> None:
         self.fake("gitleaks", prints("gitleaks 0"))
-        self.assertTrue(self.run_step(PORTED["install_gitleaks"], machine="aarch64"))
+        self.assertTrue(self.run_step(STEPS["install_gitleaks"], machine="aarch64"))
         self.assertEqual(self.said(), "[install] gitleaks already installed; skipping\n")
         self.assertEqual(self.requests(), [])
 
         self.serve_gitleaks()
         tag = pins.pin("GITLEAKS_VERSION")
         self.serve(f"{API}/gitleaks/gitleaks/releases/latest", f'{{"tag_name":"{tag}"}}')
-        self.assertTrue(self.run_step(PORTED["install_gitleaks"], machine="aarch64", upgrade=True))
+        self.assertTrue(self.run_step(STEPS["install_gitleaks"], machine="aarch64", upgrade=True))
         self.assertIn("[install] Upgrading gitleaks\n", self.said())
         # The copy in the fakes directory comes first on PATH.
         self.assertIn(
@@ -68,11 +68,11 @@ class ReleaseToolTest(StepCase):
         )
         self.serve(url("GLOW_VERSION", f"{name}.tar.gz"), tarball)
         self.serve(url("GLOW_VERSION", "checksums.txt"), f"{sha256(tarball)}  {name}.tar.gz\n")
-        self.assertTrue(self.run_step(PORTED["install_glow"]))
+        self.assertTrue(self.run_step(STEPS["install_glow"]))
         self.assertTrue((self.home / ".local/bin/glow").is_file())
 
     def test_unsupported_arch(self) -> None:
-        self.assertTrue(self.run_step(PORTED["install_glow"], machine="riscv64"))
+        self.assertTrue(self.run_step(STEPS["install_glow"], machine="riscv64"))
         self.assertEqual(
             self.said(),
             "[install] Installing glow\n"
@@ -83,7 +83,7 @@ class ReleaseToolTest(StepCase):
         tag = pins.pin("RIPGREP_ALL_VERSION")
         asset = f"ripgrep_all-{tag}-x86_64-unknown-linux-musl.tar.gz"
         self.serve(url("RIPGREP_ALL_VERSION", asset), self.tarball(files))
-        return self.run_step(PORTED["install_ripgrep_all"])
+        return self.run_step(STEPS["install_ripgrep_all"])
 
     def test_two_binaries(self) -> None:
         self.assertTrue(
@@ -101,7 +101,7 @@ class ReleaseToolTest(StepCase):
         self.fake("rga", prints("rga"))
         self.fake("gitleaks", '#!/bin/sh\n[ "$1" = version ]\n')
         for step in ("install_ripgrep_all", "install_gitleaks"):
-            self.assertTrue(self.run_step(PORTED[step], system="Darwin", machine="arm64"))
+            self.assertTrue(self.run_step(STEPS[step], system="Darwin", machine="arm64"))
         self.assertEqual(
             self.called(),
             [
@@ -116,9 +116,9 @@ class ReleaseToolTest(StepCase):
     def test_homebrew_formula_already_there(self) -> None:
         self.recording("brew")
         self.fake("glow", prints("glow"))
-        self.assertTrue(self.run_step(PORTED["install_glow"], system="Darwin", machine="arm64"))
+        self.assertTrue(self.run_step(STEPS["install_glow"], system="Darwin", machine="arm64"))
         self.assertTrue(
-            self.run_step(PORTED["install_glow"], system="Darwin", machine="arm64", upgrade=True)
+            self.run_step(STEPS["install_glow"], system="Darwin", machine="arm64", upgrade=True)
         )
         self.assertEqual(
             self.said(), "[install] glow already installed; skipping\n[install] Upgrading glow\n"
@@ -130,7 +130,7 @@ class MoorTest(StepCase):
     def test_release_binary_on_x86_64(self) -> None:
         tag = pins.pin("MOOR_VERSION")
         self.serve(url("MOOR_VERSION", f"moor-{tag}-linux-amd64"), prints("moor"))
-        self.assertTrue(self.run_step(PORTED["install_moor"]))
+        self.assertTrue(self.run_step(STEPS["install_moor"]))
         self.assertEqual(self.said(), "[install] Installing moor\n")
         self.assertIn("moor", (self.home / ".local/bin/moor").read_text())
 
@@ -142,7 +142,7 @@ class MoorTest(StepCase):
             '#!/bin/sh\necho "go $* GOTOOLCHAIN=$GOTOOLCHAIN" >>"$FAKE_CALLS"\n'
             f'[ "$2" = GOPATH ] && echo "{self.home}/go"\nexit 0\n',
         )
-        self.assertTrue(self.run_step(PORTED["install_moor"], machine="aarch64"))
+        self.assertTrue(self.run_step(STEPS["install_moor"], machine="aarch64"))
         tag = pins.pin("MOOR_VERSION")
         self.assertEqual(
             self.called()[0],
@@ -152,7 +152,7 @@ class MoorTest(StepCase):
 
     def test_homebrew_on_macos(self) -> None:
         self.recording("brew")
-        self.assertTrue(self.run_step(PORTED["install_moor"], system="Darwin", machine="arm64"))
+        self.assertTrue(self.run_step(STEPS["install_moor"], system="Darwin", machine="arm64"))
         self.assertEqual(self.said(), "[install] moor already installed; skipping\n")
 
 
@@ -166,14 +166,12 @@ class TreehouseTest(StepCase):
     def test_install_on_macos_too(self) -> None:
         tag = pins.pin("TREEHOUSE_VERSION")
         self.serve_release(tag, "darwin", "arm64")
-        self.assertTrue(
-            self.run_step(PORTED["install_treehouse"], system="Darwin", machine="arm64")
-        )
+        self.assertTrue(self.run_step(STEPS["install_treehouse"], system="Darwin", machine="arm64"))
         self.assertEqual(self.said(), f"[install] Installing treehouse {tag}\n")
 
     def test_present_costs_no_request(self) -> None:
         self.fake("treehouse", prints("treehouse version v1.0.0"))
-        self.assertTrue(self.run_step(PORTED["install_treehouse"]))
+        self.assertTrue(self.run_step(STEPS["install_treehouse"]))
         self.assertEqual(self.said(), "[install] treehouse v1.0.0 already installed; skipping\n")
         self.assertEqual(self.requests(), [])
 
@@ -181,11 +179,11 @@ class TreehouseTest(StepCase):
         self.fake("treehouse", prints("treehouse version v1.0.0"))
         latest = f"{API}/kunchenguid/treehouse/releases/latest"
         self.serve(latest, '{"tag_name":"v1.0.0"}')
-        self.assertTrue(self.run_step(PORTED["install_treehouse"], upgrade=True))
+        self.assertTrue(self.run_step(STEPS["install_treehouse"], upgrade=True))
         self.assertEqual(self.said(), "[install] treehouse v1.0.0 already at latest; skipping\n")
 
         self.serve(latest, '{"tag_name":"v9.0.0"}')
         self.serve_release("v9.0.0")
-        self.assertTrue(self.run_step(PORTED["install_treehouse"], upgrade=True))
+        self.assertTrue(self.run_step(STEPS["install_treehouse"], upgrade=True))
         self.assertIn("[install] Upgrading treehouse to v9.0.0\n", self.said())
         self.assertIn("v9.0.0", (self.home / ".local/bin/treehouse").read_text())
