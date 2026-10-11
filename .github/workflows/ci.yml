@@ -120,7 +120,9 @@ jobs:
     # default before anyone hears about it. The slowest run measured took 14
     # minutes, with an opam build this job no longer does.
     timeout-minutes: 30
-    needs: [lint, changes]
+    # Not gated on lint, which would add its 46 to 116 seconds to the wait for
+    # every install run.
+    needs: changes
     if: needs.changes.outputs.install == 'true' || github.event_name == 'schedule'
     steps:
       - name: Checkout
