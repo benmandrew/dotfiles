@@ -11,7 +11,7 @@ on:
     # skips the restore and installs everything from scratch.
     - cron: '0 4 * * 1'
 
-# The install job below runs scripts/install-linux.sh with this token in its
+# The install job below runs scripts/install.sh with this token in its
 # environment, so the workflow gets the narrowest scope that still works: the
 # token is only ever used to lift GitHub's 60-request-per-hour anonymous API
 # limit on the release lookups.
@@ -44,12 +44,12 @@ jobs:
         uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
         id: filter
         with:
-          # install-macos-arm64.sh is deliberately excluded: this runner is
-          # ubuntu-latest, so a macOS-only script change can't be exercised here
           filters: |
             install:
-              - 'scripts/install-common.sh'
-              - 'scripts/install-linux.sh'
+              - 'scripts/install.sh'
+              - 'scripts/install.py'
+              - 'scripts/installer/**'
+              - 'scripts/pins.sh'
               - 'scripts/verify-install.sh'
 
   lint:
@@ -101,6 +101,12 @@ jobs:
       - name: Lint check
         run: nix develop --command make lint
 
+      # The installer's own tests. They run each step against stand-ins for
+      # the network and the tools it calls, in about two minutes. The install
+      # job below is the end-to-end run.
+      - name: Installer unit tests
+        run: nix develop --command make test-py
+
       # `make lint` scans the working tree. This reads every commit, so a
       # secret that was committed and then deleted is still caught; it is kept
       # out of `lint` because it needs the full history a local checkout does
@@ -129,7 +135,7 @@ jobs:
         id: pins
         if: github.event_name != 'schedule'
         run: |
-          hash="$(grep -hE '^[A-Z_]+_VERSION=' scripts/install-common.sh scripts/install-linux.sh | sha256sum | cut -c1-16)"
+          hash="$(grep -hE '^[A-Z_]+_VERSION=' scripts/pins.sh | sha256sum | cut -c1-16)"
           echo "hash=${hash}" >> "${GITHUB_OUTPUT}"
 
       - name: Cache installed tools
@@ -148,9 +154,9 @@ jobs:
             /opt/nvim-linux-x86_64
             /usr/local/bin
             /usr/local/lib/node_modules
-          key: install-${{ runner.os }}-${{ steps.pins.outputs.hash }}-${{ hashFiles('scripts/install-common.sh', 'scripts/install-linux.sh') }}
-          # The primary key can never hit. It hashes the two scripts, and this
-          # job only runs when one of them changed, so the key is new on every
+          key: install-${{ runner.os }}-${{ steps.pins.outputs.hash }}-${{ hashFiles('scripts/install.sh', 'scripts/install.py', 'scripts/installer/**', 'scripts/pins.sh') }}
+          # The primary key can never hit. It hashes the installer, and this
+          # job only runs when part of it changed, so the key is new on every
           # run that reaches here — measured as a 0s restore and a 3m save of a
           # 1.1 GB cache nothing would ever read. The prefix restores the
           # previous run's tools instead, which the install steps then skip
@@ -164,7 +170,7 @@ jobs:
       # rebuilt it: 437s of a 521s install job on 5 September, the runner
       # having no OCaml, so the switch compiles ocaml-base-compiler before
       # ocaml-lsp-server and ocamlformat. The key covers only what decides the
-      # switch's contents (the opam pin, the two functions that build it, and
+      # switch's contents (the opam pin, the step module that builds it, and
       # the runner image), so it hits across unrelated script edits, and a hit
       # saves nothing. No restore-keys: a change to that code should rebuild
       # from scratch, which is what it needs testing against. install_opam
@@ -176,8 +182,8 @@ jobs:
         run: |
           hash="$({
             echo "${ImageOS:-}"
-            grep -h '^OPAM_VERSION=' scripts/install-common.sh
-            sed -n '/^install_opam()/,/^}/p;/^install_ocaml_tools()/,/^}/p' scripts/install-common.sh
+            grep -h '^OPAM_VERSION=' scripts/pins.sh
+            cat scripts/installer/steps/opam.py
           } | sha256sum | cut -c1-16)"
           echo "hash=${hash}" >> "${GITHUB_OUTPUT}"
 
@@ -194,7 +200,7 @@ jobs:
       - name: Run install script
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash scripts/install-linux.sh
+        run: bash scripts/install.sh
 
       - name: Verify installed tools
         run: bash scripts/verify-install.sh

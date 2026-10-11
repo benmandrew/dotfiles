@@ -22,12 +22,13 @@ unset _zsh_nvm_plugin
 # shellcheck disable=SC1036  # zsh glob qualifier, read as bash by the linter
 fpath=($HOME/.rustup/toolchains/stable-*/share/zsh/site-functions(N) $fpath)
 # Completion functions no package manager puts on fpath: the ones
-# scripts/install-common.sh generates out of the tool itself (uv, fd, delta and
-# the rest of install_zsh_completions) plus anything hand-written. On Linux this
-# is the only source of them, since those tools arrive as bare binaries in
-# ~/.local/bin with no site-functions directory alongside. Prepended last, so it
-# sits at fpath[1] and a generated function beats a system one claiming the same
-# command name — which is what points `delta` away from zsh's _sccs.
+# scripts/installer/steps/completions.py generates out of the tool itself (uv,
+# fd, delta and the rest of install_zsh_completions) plus anything
+# hand-written. On Linux this is the only source of them, since those tools
+# arrive as bare binaries in ~/.local/bin with no site-functions directory
+# alongside. Prepended last, so it sits at fpath[1] and a generated function
+# beats a system one claiming the same command name — which is what points
+# `delta` away from zsh's _sccs.
 fpath=("${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions" $fpath)
 
 autoload -Uz compinit
