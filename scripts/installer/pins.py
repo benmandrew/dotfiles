@@ -44,6 +44,7 @@ UPSTREAM = {
     "MOOR_VERSION": "walles/moor",
     "NEOVIM_VERSION": "neovim/neovim",
     "NERD_FONTS_VERSION": "ryanoasis/nerd-fonts",
+    "NIX_DIRENV_VERSION": "nix-community/nix-direnv",
     "OPAM_VERSION": "ocaml/opam",
     "RIPGREP_ALL_VERSION": "phiresky/ripgrep-all",
     "RIPGREP_VERSION": "BurntSushi/ripgrep",

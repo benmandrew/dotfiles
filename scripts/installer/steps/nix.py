@@ -5,9 +5,10 @@ from __future__ import annotations
 import os
 import pwd
 import re
+import shutil
 from pathlib import Path
 
-from .. import shell, tools
+from .. import fetch, pins, shell, tools
 from ..runner import Step, StepContext, StepFailed
 from ..sudo import sudo_command
 
@@ -24,8 +25,21 @@ PROFILE_SCRIPTS = (
 
 _FLAKES = re.compile(r"^\s*(extra-)?experimental-features.*\bflakes\b", re.MULTILINE)
 
+PIN = "NIX_DIRENV_VERSION"
+# nix-direnv is one file. Upstream attaches nothing to a release, so there is
+# no digest to ask GitHub for; its README gives this hash of the file at the
+# pinned tag, in base64, for direnv's `source_url`. It moves with the pin.
+DIRENVRC_SHA256 = "856e8d0b5247b9edc88d9377b8333a97a2363cc69abaa7760fb857609d597ebe"
+DIRENVRC_URL = "https://raw.githubusercontent.com/{repository}/{tag}/direnvrc"
+_DIRENVRC_VERSION = re.compile(r"^NIX_DIRENV_VERSION=(\S+)$", re.MULTILINE)
+
 # What direnvrc loads. $HOME is for direnv's bash to expand.
-SOURCE_LINE = "source $HOME/.nix-profile/share/nix-direnv/direnvrc"
+SOURCE_LINE = "source $HOME/.local/share/nix-direnv/direnvrc"
+# The nix to use where PATH has none, as under an editor started outside a
+# login shell. The nixpkgs build this step used to install had one patched in.
+FALLBACK_LINE = f"NIX_DIRENV_FALLBACK_NIX=${{NIX_DIRENV_FALLBACK_NIX:-{DEFAULT_NIX}}}"
+# The line that loaded the nixpkgs build, however it spelt the home directory.
+_PROFILE_SOURCE = re.compile(r"\s*(?:source|\.)\s+\S*\.nix-profile/share/nix-direnv/direnvrc\s*")
 
 
 def _read(path: Path) -> str:
@@ -144,32 +158,88 @@ def _install_modern_bash(context: StepContext) -> None:
     tools.require_runs(context, bash)
 
 
+def _installed_version(direnvrc: Path) -> str:
+    """The version a nix-direnv file declares, or "" if it is not one."""
+    found = _DIRENVRC_VERSION.search(_read(direnvrc))
+    return found.group(1) if found else ""
+
+
+def _fetch_direnvrc(context: StepContext, tag: str, target: Path) -> None:
+    fetched = context.tmpdir() / "direnvrc"
+    url = DIRENVRC_URL.format(repository=pins.repository(PIN), tag=tag)
+    fetch.download(context, url, fetched)
+    # Only the pinned tag has a known hash. --upgrade takes whatever tag is
+    # newest, so that file is checked for its version line alone.
+    if tag == pins.pin(PIN):
+        fetch.check_sha256(fetched, DIRENVRC_SHA256, "direnvrc")
+    declared = _installed_version(fetched)
+    if declared != tag:
+        raise StepFailed(f"{url} is not nix-direnv {tag} (it declares '{declared}')")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # Copied beside the target and renamed over it, so direnv never loads half
+    # a file. The scratch directory may be on another filesystem.
+    pending = target.with_name(f"{target.name}.tmp")
+    shutil.copyfile(fetched, pending)
+    pending.replace(target)
+
+
+def _wire(context: StepContext) -> None:
+    """Make direnvrc load the downloaded file.
+
+    A line loading the nixpkgs build, which this step installed until October
+    2026, is replaced where it stands, so whatever the user wrote around it
+    keeps its order.
+    """
+    direnvrc = context.home / ".config" / "direnv" / "direnvrc"
+    lines = _read(direnvrc).splitlines()
+    stale = [line for line in lines if _PROFILE_SOURCE.fullmatch(line)]
+    if SOURCE_LINE in lines and not stale:
+        return
+    block = [] if SOURCE_LINE in lines else [FALLBACK_LINE, SOURCE_LINE]
+    wired: list[str] = []
+    for line in lines:
+        if line not in stale:
+            wired.append(line)
+        elif block:
+            wired.extend(block)
+            block = []
+    if stale:
+        context.log("Pointing direnvrc at the downloaded nix-direnv")
+    else:
+        context.log("Wiring nix-direnv into direnvrc")
+    wired.extend(block)
+    direnvrc.parent.mkdir(parents=True, exist_ok=True)
+    pending = direnvrc.with_name(f"{direnvrc.name}.tmp")
+    pending.write_text("".join(f"{line}\n" for line in wired))
+    pending.replace(direnvrc)
+
+
 def install_nix_direnv(context: StepContext) -> None:
+    """nix-direnv, as upstream's direnvrc at the pinned tag.
+
+    `nix profile install nixpkgs#nix-direnv` fetched and unpacked the whole
+    nixpkgs flake to install this one file, 18 seconds of a 109-second CI
+    install job, and took whichever version nixpkgs-unstable held that day.
+    """
     tools.require_command(context, "nix")
     _install_modern_bash(context)
-    if _profile_has(context, "nix-direnv"):
-        if context.upgrade:
-            context.log("Upgrading nix-direnv")
-            context.run(["nix", "profile", "upgrade", "nix-direnv"])
-        else:
-            context.log("nix-direnv already installed; skipping")
+    target = context.home / ".local" / "share" / "nix-direnv" / "direnvrc"
+    current = _installed_version(target)
+    if current and not context.upgrade:
+        context.log(f"nix-direnv {current} already installed; skipping")
     else:
-        context.log("Installing nix-direnv")
-        context.run(["nix", "profile", "install", "nixpkgs#nix-direnv"])
-    # The file the source line below loads. A profile entry whose package
-    # failed to link would otherwise leave direnvrc sourcing nothing.
-    if not (context.home / ".nix-profile" / "share" / "nix-direnv" / "direnvrc").is_file():
-        raise StepFailed(
-            "nix-direnv is not in the nix profile"
-            " (~/.nix-profile/share/nix-direnv/direnvrc missing)"
-        )
-    direnvrc = context.home / ".config" / "direnv" / "direnvrc"
-    if direnvrc.is_file() and "nix-direnv/direnvrc" in direnvrc.read_text(errors="replace"):
-        return
-    context.log("Wiring nix-direnv into direnvrc")
-    direnvrc.parent.mkdir(parents=True, exist_ok=True)
-    with direnvrc.open("a") as handle:
-        handle.write(f"{SOURCE_LINE}\n")
+        tag = pins.pinned_tag(context, PIN)
+        if current == tag:
+            context.log(f"nix-direnv {current} already at latest; skipping")
+        else:
+            verb = "Upgrading nix-direnv to" if current else "Installing nix-direnv"
+            context.log(f"{verb} {tag}")
+            _fetch_direnvrc(context, tag, target)
+    _wire(context)
+    # Last, once nothing in direnvrc loads the profile's copy.
+    if _profile_has(context, "nix-direnv"):
+        context.log("Removing nix-direnv from the nix profile")
+        context.run(["nix", "profile", "remove", "nix-direnv"])
 
 
 STEPS = (

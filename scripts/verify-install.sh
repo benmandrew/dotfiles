@@ -134,10 +134,10 @@ if [[ "${os_name}" == "Linux" ]]; then
     check_cmd go version
 fi
 
-# nix-direnv is a nix profile entry rather than a command, and the line that
+# nix-direnv is a downloaded file rather than a command, and the line that
 # loads it is what actually makes it do anything. Both ends are checked: a
-# direnvrc sourcing a file the profile does not hold loads nothing.
-check_file "nix-direnv in the nix profile" "${HOME}/.nix-profile/share/nix-direnv/direnvrc"
+# direnvrc sourcing a file that is not there loads nothing.
+check_file "nix-direnv" "${HOME}/.local/share/nix-direnv/direnvrc"
 check_file "nix-direnv wired into direnvrc" "${HOME}/.config/direnv/direnvrc"
 
 # nix-direnv's `use flake` refuses to run under bash older than 4.4, and macOS

