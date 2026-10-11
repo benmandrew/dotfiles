@@ -10,10 +10,12 @@ from . import (
     cargo_tools,
     clones,
     cmake,
+    docker,
     elan,
     gh,
     git,
     go,
+    latex,
     lua_ls,
     neovim,
     nerd_font,
@@ -27,6 +29,7 @@ from . import (
     system,
     vendor,
     wezterm,
+    zathura,
 )
 
 PORTED: dict[str, Step] = {
@@ -38,10 +41,12 @@ PORTED: dict[str, Step] = {
         cargo_tools,
         clones,
         cmake,
+        docker,
         elan,
         gh,
         git,
         go,
+        latex,
         lua_ls,
         neovim,
         nerd_font,
@@ -55,6 +60,7 @@ PORTED: dict[str, Step] = {
         system,
         vendor,
         wezterm,
+        zathura,
     )
     for step in module.STEPS
 }

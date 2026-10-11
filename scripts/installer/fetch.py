@@ -19,9 +19,7 @@ from .runner import StepContext, StepFailed
 #
 # The TLS floor matters as much for an API call as for a download, since the
 # API calls decide which version gets installed.
-CURL = (
-    "curl",
-    "-fsSL",
+_OPTIONS = (
     "--proto",
     "=https",
     "--tlsv1.2",
@@ -31,6 +29,7 @@ CURL = (
     "--retry-max-time",
     "120",
 )
+CURL = ("curl", "-fsSL", *_OPTIONS)
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 
@@ -43,6 +42,15 @@ def download(context: StepContext, url: str, dest: Path) -> None:
     """Fetch a URL to a path, failing the step if it cannot be had."""
     if context.call([*CURL, url, "-o", str(dest)]) != 0:
         raise StepFailed(f"Download failed: {url}")
+
+
+def resolve(context: StepContext, url: str) -> str | None:
+    """Where a URL leads once its redirects are followed, or None.
+
+    Only headers are fetched, so nothing is written.
+    """
+    probe = ["curl", "-fsSLI", *_OPTIONS, "-o", "/dev/null", "-w", "%{url_effective}", url]
+    return context.capture(probe) or None
 
 
 def sha256_file(path: Path) -> str:

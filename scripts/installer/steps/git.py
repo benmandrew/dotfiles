@@ -31,12 +31,6 @@ def _version(context: StepContext) -> str:
     return found.group() if found else ""
 
 
-def _fingerprints(context: StepContext, key: object) -> list[str]:
-    listing = context.capture(["gpg", "--show-keys", "--with-colons", str(key)], quiet=True) or ""
-    fields = (line.split(":") for line in listing.splitlines() if line.startswith("fpr:"))
-    return [line[9] for line in fields if len(line) > 9]
-
-
 def install_git(context: StepContext) -> None:
     version = _version(context)
     if version and tools.version_gte(version, GIT_MIN_VERSION) and not context.upgrade:
@@ -55,7 +49,7 @@ def install_git(context: StepContext) -> None:
     fetch.download(context, KEY_URL, armored)
     # Check the key that came back is the pinned one before apt is told to
     # trust everything it signs.
-    if GIT_CORE_PPA_FINGERPRINT not in _fingerprints(context, armored):
+    if GIT_CORE_PPA_FINGERPRINT not in apt.key_fingerprints(context, armored):
         raise StepFailed("git-core PPA key does not carry the pinned fingerprint")
     tools.sudo(context, ["mkdir", "-p", "-m", "755", apt.KEYRINGS])
     binary = scratch / KEYRING

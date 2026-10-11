@@ -28,6 +28,13 @@ def install(context: StepContext, *packages: object) -> None:
     tools.sudo(context, ["apt-get", "install", "-y", *packages])
 
 
+def key_fingerprints(context: StepContext, key: Path) -> list[str]:
+    """The fingerprints of every key in a file, armoured or not."""
+    listing = context.capture(["gpg", "--show-keys", "--with-colons", str(key)], quiet=True) or ""
+    fields = (line.split(":") for line in listing.splitlines() if line.startswith("fpr:"))
+    return [line[9] for line in fields if len(line) > 9]
+
+
 def architecture(context: StepContext) -> str:
     """The architecture as dpkg names it: amd64, arm64."""
     return context.capture(["dpkg", "--print-architecture"]) or ""
