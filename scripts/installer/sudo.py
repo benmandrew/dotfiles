@@ -18,6 +18,9 @@ from .runner import Fatal
 # 15 minutes by default, and less on some configs.
 KEEPALIVE_INTERVAL = 50
 
+# Wrong passwords accepted before the run gives up, sudo's own default.
+PASSWORD_ATTEMPTS = 3
+
 
 def sudo_command(env: dict[str, str]) -> list[str]:
     """`sudo`, with -A when the askpass helper is in place.
@@ -108,30 +111,39 @@ class SudoSession:
         self.console.log(
             "Reading the sudo password once, so brew's timestamp reset cannot force a re-prompt"
         )
-        try:
-            password = getpass.getpass("[install] Password: ")
-        except EOFError:
-            password = ""
+        password = self._read_password()
         if not password:
             self.console.log("No password given; falling back to prompting per step")
             return
 
-        # Verify now rather than let a typo surface halfway through the run as
-        # a helper quietly feeding the wrong password to every step.
-        check = subprocess.run(
-            ["sudo", "-S", "-v"],
-            input=f"{password}\n".encode(),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            env=self.env,
-            check=False,
-        )
-        if check.returncode != 0:
-            raise Fatal("sudo authentication failed")
-
         helper = write_askpass(password, self.env.get("TMPDIR"))
         self._askpass_dir = helper.parent
         self.env["SUDO_ASKPASS"] = str(helper)
+
+    def _read_password(self) -> str:
+        """The sudo password, or nothing where the user gave none."""
+        for left in range(PASSWORD_ATTEMPTS - 1, -1, -1):
+            try:
+                password = getpass.getpass("[install] Password: ")
+            except EOFError:
+                return ""
+            if not password:
+                return ""
+            # Verify now rather than let a typo surface halfway through the
+            # run as a helper quietly feeding the wrong password to every step.
+            check = subprocess.run(
+                ["sudo", "-S", "-v"],
+                input=f"{password}\n".encode(),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=self.env,
+                check=False,
+            )
+            if check.returncode == 0:
+                return password
+            if left:
+                self.console.log("Sorry, try again")
+        raise Fatal("sudo authentication failed")
 
     def start_keepalive(self) -> None:
         """Authenticate, then refresh the timestamp from the background.
