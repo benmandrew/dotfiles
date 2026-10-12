@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 from pathlib import Path
 from unittest import mock
 
@@ -54,6 +55,30 @@ class OptionalToolsTest(ConsoleCase):
         self.assertFalse(self.tools().enabled("typst", "Typst: a compiler"))
         self.assertIn("typst: optional and no terminal to prompt on; skipping", self.said())
         self.assertFalse(self.state().exists())
+
+    def answer_on_a_terminal(self, reply: bytes) -> tuple[bool, bytes]:
+        # A pseudo-terminal cannot seek, as /dev/tty cannot.
+        master, slave = os.openpty()
+        self.addCleanup(os.close, master)
+        self.addCleanup(os.close, slave)
+        os.write(master, reply)
+        env = {"HOME": "/nonexistent", "XDG_CONFIG_HOME": self.scratch}
+        tools = OptionalTools(
+            self.console, env, None, False, has_tty=lambda: True, tty_path=os.ttyname(slave)
+        )
+        enabled = tools.enabled("typst", "Typst: a compiler")
+        return enabled, os.read(master, 1024)
+
+    def test_a_terminal_answer_of_yes_is_recorded(self) -> None:
+        enabled, shown = self.answer_on_a_terminal(b"y\n")
+        self.assertTrue(enabled)
+        self.assertIn(b"[install] Install typst? [y/N] ", shown)
+        self.assertEqual(self.state().read_text(), "typst=yes\n")
+
+    def test_a_bare_return_on_a_terminal_means_no(self) -> None:
+        enabled, _ = self.answer_on_a_terminal(b"\n")
+        self.assertFalse(enabled)
+        self.assertEqual(self.state().read_text(), "typst=no\n")
 
     def test_reconfigure_ignores_the_recorded_answer(self) -> None:
         self.write_state("latex=yes\n")

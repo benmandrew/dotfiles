@@ -31,11 +31,13 @@ class OptionalTools:
         mode: str | None,
         reconfigure: bool,
         has_tty: Callable[[], bool] = tty_available,
+        tty_path: str = "/dev/tty",
     ) -> None:
         self.console = console
         self.mode = mode
         self.reconfigure = reconfigure
         self._has_tty = has_tty
+        self._tty_path = tty_path
         config = env.get("XDG_CONFIG_HOME") or os.path.join(env.get("HOME", ""), ".config")
         self.state_file = Path(config) / "dotfiles" / "optional-tools.conf"
 
@@ -78,10 +80,11 @@ class OptionalTools:
         self.console.ask(description)
         prompt = f"[install] Install {name}? [y/N] "
         if has_tty:
-            with open("/dev/tty", "r+") as tty:
-                tty.write(prompt)
-                tty.flush()
-                reply = tty.readline()
+            # Unbuffered bytes: a terminal cannot seek, and Python refuses to
+            # put a read-write buffer, which text mode needs, over such a file.
+            with open(self._tty_path, "r+b", buffering=0) as tty:
+                tty.write(prompt.encode())
+                reply = tty.readline().decode(errors="replace")
         else:
             self.console.write(prompt.encode())
             reply = sys.stdin.readline()
