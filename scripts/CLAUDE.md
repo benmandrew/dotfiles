@@ -4,7 +4,7 @@
 
 ## Python
 
-The installer supports Python 3.9 and newer, since the CLT ship 3.9.6, and uses the standard library alone, so a fresh machine needs nothing installed first. `install.py` puts `scripts/` on `sys.path` itself; an exported `PYTHONPATH` would reach every tool a step runs. `make lint-py` runs ruff and mypy, and `make test-py` runs `scripts/tests` on the interpreter `install.sh` would pick. mypy checks against 3.10, the oldest target it accepts, so run `make test-py PYTHON=/Library/Developer/CommandLineTools/usr/bin/python3` for the floor. The linters write no cache and python runs with `-B`, so nothing they leave can reach a commit. `make test-container` runs a whole install in a fresh Ubuntu 22.04 container.
+The installer supports Python 3.9 and newer, since the CLT ship 3.9.6, and uses the standard library alone, so a fresh machine needs nothing installed first. `install.py` puts `scripts/` on `sys.path` itself; an exported `PYTHONPATH` would reach every tool a step runs. `make lint-py` runs ruff and mypy, and `make test-py` runs `scripts/tests` on the interpreter `install.sh` would pick. mypy checks against 3.10, the oldest target it accepts, so run `make test-py PYTHON=/Library/Developer/CommandLineTools/usr/bin/python3` for the floor. CI's `python` job runs `make test-py` on that interpreter on macOS and on the newest release through `actions/setup-python`. The linters write no cache and python runs with `-B`, so nothing they leave can reach a commit. `make test-container` runs a whole install in a fresh Ubuntu 22.04 container.
 
 ## Running steps
 

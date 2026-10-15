@@ -101,8 +101,10 @@ jobs:
         run: nix develop --command make lint
 
       # The installer's own tests. They run each step against stand-ins for
-      # the network and the tools it calls, in about two minutes. The install
-      # job below is the end-to-end run.
+      # the network and the tools it calls, in 2 to 4 seconds here and about
+      # two minutes on a Mac. The install job below is the end-to-end run.
+      # This runs them on the runner's /usr/bin/python3; the python job runs
+      # them at both ends of the supported range.
       - name: Installer unit tests
         run: nix develop --command make test-py
 
@@ -112,6 +114,60 @@ jobs:
       # not always have.
       - name: Secret scan (history)
         run: nix develop --command make lint-secrets-history
+
+  # The installer's tests at both ends of the Python range scripts/install.sh
+  # accepts. The floor is the 3.9.6 the Command Line Tools ship, which is what
+  # a fresh Mac runs the installer on, so that leg runs on macOS against that
+  # interpreter. The ceiling is the newest stable release. Neither needs nix,
+  # since `make test-py` wants only make and a python3.
+  python:
+    name: python (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      # Each leg answers a separate question, so one failing should not
+      # cancel the other.
+      fail-fast: false
+      matrix:
+        include:
+          - name: floor
+            os: macos-latest
+          - name: newest
+            os: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Pick the Command Line Tools python3
+        if: matrix.name == 'floor'
+        # The path scripts/CLAUDE.md names for the floor. The check fails the
+        # leg if the runner image moves to another minor version, since the
+        # leg would then be testing something other than the floor.
+        run: |
+          python=/Library/Developer/CommandLineTools/usr/bin/python3
+          "${python}" -c 'import sys; print(sys.version); sys.exit(sys.version_info[:2] != (3, 9))'
+          echo "PYTHON=${python}" >> "${GITHUB_ENV}"
+
+      - name: Set up the newest python
+        if: matrix.name == 'newest'
+        id: setup
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.x'
+          # Asks for the newest release rather than whatever the runner image
+          # cached when it was built.
+          check-latest: true
+
+      - name: Pick the newest python
+        if: matrix.name == 'newest'
+        # Named explicitly, since the Makefile prefers /usr/bin/python3.
+        run: |
+          python='${{ steps.setup.outputs.python-path }}'
+          "${python}" -c 'import sys; print(sys.version)'
+          echo "PYTHON=${python}" >> "${GITHUB_ENV}"
+
+      - name: Installer unit tests
+        run: make test-py PYTHON="${PYTHON}"
 
   install:
     runs-on: ubuntu-latest
