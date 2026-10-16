@@ -989,86 +989,107 @@ local balance_panes = wezterm.action_callback(function(window)
     end
 end)
 
-config.keys = {
-    -- Copy (overrides the stock CopyTo bindings to add the indicator)
-    { key = "c", mods = "SHIFT|CTRL", action = copy_and_flash("Clipboard") },
-    { key = "c", mods = "SUPER", action = copy_and_flash("Clipboard") },
-    -- Splits
-    { key = "v", mods = "LEADER", action = spawn_in_claude_cwd("SplitHorizontal") },
-    { key = "s", mods = "LEADER", action = spawn_in_claude_cwd("SplitVertical") },
-    -- Pane navigation
-    { key = "h", mods = "LEADER", action = act.ActivatePaneDirection("Left") },
-    { key = "j", mods = "LEADER", action = act.ActivatePaneDirection("Down") },
-    { key = "k", mods = "LEADER", action = act.ActivatePaneDirection("Up") },
-    { key = "l", mods = "LEADER", action = act.ActivatePaneDirection("Right") },
-    { key = "w", mods = "LEADER", action = act.PaneSelect({ mode = "SwapWithActive" }) },
-    { key = "=", mods = "LEADER", action = balance_panes },
-    { key = "z", mods = "LEADER", action = act.TogglePaneZoomState },
-    {
-        key = "r",
-        mods = "LEADER|SHIFT",
-        action = act.ActivateKeyTable({
-            name = "resize_pane",
-            one_shot = false,
-            timeout_milliseconds = 1000,
-        }),
-    },
-    -- Tabs
-    { key = "c", mods = "LEADER", action = spawn_in_claude_cwd("SpawnCommandInNewTab") },
-    { key = "n", mods = "LEADER", action = act.ActivateTabRelative(1) },
-    { key = "p", mods = "LEADER", action = act.ActivateTabRelative(-1) },
-    -- Reorder: move the active tab left/right rather than just switching focus.
-    { key = "n", mods = "LEADER|SHIFT", action = act.MoveTabRelative(1) },
-    { key = "p", mods = "LEADER|SHIFT", action = act.MoveTabRelative(-1) },
-    {
-        key = ",",
-        mods = "LEADER",
-        action = act.PromptInputLine({
-            description = "Rename tab",
-            action = wezterm.action_callback(function(window, _pane, line)
-                if line then
-                    window:active_tab():set_title(line)
-                end
-            end),
-        }),
-    },
-    -- Workspaces. A WezTerm workspace is a tmux session, so the picker sits on
-    -- the same shifted key tmux's choose-tree does, and the create prompt beside
-    -- LEADER c, which is the new tab. Without these the workspace is only ever
-    -- "default" and the chip left_status draws for it could never appear.
-    { key = "s", mods = "LEADER|SHIFT", action = act.ShowLauncherArgs({ flags = "FUZZY|WORKSPACES" }) },
-    {
-        key = "c",
-        mods = "LEADER|SHIFT",
-        action = act.PromptInputLine({
-            description = "New workspace",
-            action = wezterm.action_callback(function(window, pane, line)
-                if line and line ~= "" then
-                    window:perform_action(act.SwitchToWorkspace({ name = line }), pane)
-                end
-            end),
-        }),
-    },
-    -- Re-read this file. Mirrors tmux's `bind r source-file ~/.tmux.conf`.
-    { key = "r", mods = "LEADER", action = act.ReloadConfiguration },
-    -- Close pane/tab
-    { key = "x", mods = "LEADER", action = act.CloseCurrentPane({ confirm = false }) },
-    -- Copy mode (vi keys work inside)
-    { key = "[", mods = "LEADER", action = act.ActivateCopyMode },
-    -- Send literal C-a to the terminal (e.g. for remote tmux): double-tap C-a
-    { key = "a", mods = "LEADER|CTRL", action = act.SendKey({ key = "a", mods = "CTRL" }) },
-}
+-- Every binding goes through bind() or bind_table(), which record a group and
+-- a description for the cheatsheet (cheatsheet.lua) beside the entry WezTerm
+-- sees. LEADER ? opens the rows in a fuzzy picker that runs the chosen action;
+-- its last entry writes them, with WezTerm's defaults, to an HTML page.
+local sheet = require("cheatsheet").new({ leader = config.leader, macos = IS_MACOS })
+config.keys = {}
+local function bind(group, key, mods, action, desc)
+    sheet:bind(config.keys, group, key, mods, action, desc)
+end
+
+-- Copy (overrides the stock CopyTo bindings to add the indicator)
+bind("Copy", "c", "SHIFT|CTRL", copy_and_flash("Clipboard"), "Copy the selection")
+bind("Copy", "c", "SUPER", copy_and_flash("Clipboard"), "Copy the selection")
+-- Copy mode (vi keys work inside)
+bind("Copy", "[", "LEADER", act.ActivateCopyMode, "Enter copy mode")
+-- Splits
+bind("Panes", "v", "LEADER", spawn_in_claude_cwd("SplitHorizontal"), "Split right")
+bind("Panes", "s", "LEADER", spawn_in_claude_cwd("SplitVertical"), "Split down")
+-- Pane navigation
+bind("Panes", "h", "LEADER", act.ActivatePaneDirection("Left"), "Go to the pane on the left")
+bind("Panes", "j", "LEADER", act.ActivatePaneDirection("Down"), "Go to the pane below")
+bind("Panes", "k", "LEADER", act.ActivatePaneDirection("Up"), "Go to the pane above")
+bind("Panes", "l", "LEADER", act.ActivatePaneDirection("Right"), "Go to the pane on the right")
+bind("Panes", "w", "LEADER", act.PaneSelect({ mode = "SwapWithActive" }), "Swap with a picked pane")
+bind("Panes", "=", "LEADER", balance_panes, "Even out pane sizes")
+bind("Panes", "z", "LEADER", act.TogglePaneZoomState, "Zoom or unzoom the pane")
+bind(
+    "Panes",
+    "r",
+    "LEADER|SHIFT",
+    act.ActivateKeyTable({
+        name = "resize_pane",
+        one_shot = false,
+        timeout_milliseconds = 1000,
+    }),
+    "Enter resize mode"
+)
+-- Close pane/tab
+bind("Panes", "x", "LEADER", act.CloseCurrentPane({ confirm = false }), "Close the pane")
+-- Tabs
+bind("Tabs", "c", "LEADER", spawn_in_claude_cwd("SpawnCommandInNewTab"), "New tab")
+bind("Tabs", "n", "LEADER", act.ActivateTabRelative(1), "Next tab")
+bind("Tabs", "p", "LEADER", act.ActivateTabRelative(-1), "Previous tab")
+-- Reorder: move the active tab left/right rather than just switching focus.
+bind("Tabs", "n", "LEADER|SHIFT", act.MoveTabRelative(1), "Move the tab right")
+bind("Tabs", "p", "LEADER|SHIFT", act.MoveTabRelative(-1), "Move the tab left")
+bind(
+    "Tabs",
+    ",",
+    "LEADER",
+    act.PromptInputLine({
+        description = "Rename tab",
+        action = wezterm.action_callback(function(window, _pane, line)
+            if line then
+                window:active_tab():set_title(line)
+            end
+        end),
+    }),
+    "Rename the tab"
+)
 
 -- Jump straight to a tab: LEADER + 1..8 (ActivateTab is 0-indexed); LEADER + 9
 -- always lands on the last tab (tmux behaviour), regardless of tab count.
+-- One cheatsheet row stands for all eight.
+local tab_binds = {}
 for i = 1, 8 do
-    table.insert(config.keys, {
-        key = tostring(i),
-        mods = "LEADER",
-        action = act.ActivateTab(i - 1),
-    })
+    table.insert(config.keys, { key = tostring(i), mods = "LEADER", action = act.ActivateTab(i - 1) })
+    table.insert(tab_binds, { key = tostring(i), mods = "LEADER" })
 end
-table.insert(config.keys, { key = "9", mods = "LEADER", action = act.ActivateTab(-1) })
+sheet:add({
+    group = "Tabs",
+    desc = "Go to tab 1 to 8",
+    binds = tab_binds,
+    keys = { { sheet:stroke(config.leader.key, config.leader.mods), "1–8" } },
+})
+bind("Tabs", "9", "LEADER", act.ActivateTab(-1), "Go to the last tab")
+
+-- Workspaces. A WezTerm workspace is a tmux session, so the picker sits on
+-- the same shifted key tmux's choose-tree does, and the create prompt beside
+-- LEADER c, which is the new tab. Without these the workspace is only ever
+-- "default" and the chip left_status draws for it could never appear.
+bind("Workspaces", "s", "LEADER|SHIFT", act.ShowLauncherArgs({ flags = "FUZZY|WORKSPACES" }), "Pick a workspace")
+bind(
+    "Workspaces",
+    "c",
+    "LEADER|SHIFT",
+    act.PromptInputLine({
+        description = "New workspace",
+        action = wezterm.action_callback(function(window, pane, line)
+            if line and line ~= "" then
+                window:perform_action(act.SwitchToWorkspace({ name = line }), pane)
+            end
+        end),
+    }),
+    "New workspace"
+)
+-- Re-read this file. Mirrors tmux's `bind r source-file ~/.tmux.conf`.
+bind("Config", "r", "LEADER", act.ReloadConfiguration, "Reload the config")
+bind("Config", "?", "LEADER|SHIFT", sheet:picker(), "Show and search these bindings")
+-- Send literal C-a to the terminal (e.g. for remote tmux): double-tap C-a
+bind("Input", "a", "LEADER|CTRL", act.SendKey({ key = "a", mods = "CTRL" }), "Send C-a to the program")
 
 -- Claude Code inserts the wrong character for shifted punctuation under the
 -- kitty keyboard protocol. WezTerm reports shift+/ correctly as
@@ -1083,9 +1104,17 @@ table.insert(config.keys, { key = "9", mods = "LEADER", action = act.ActivateTab
 -- `@` there, not `"`), so it needs its own list once tested.
 local GB_SHIFTED_PUNCTUATION = [[! " £ $ % ^ & * ( ) _ + { } : @ ~ | < > ? ¬]]
 if not IS_MACOS then
+    local punctuation_binds = {}
     for ch in GB_SHIFTED_PUNCTUATION:gmatch("%S+") do
         table.insert(config.keys, { key = ch, mods = "SHIFT", action = act.SendString(ch) })
+        table.insert(punctuation_binds, { key = ch, mods = "SHIFT" })
     end
+    sheet:add({
+        group = "Input",
+        desc = "Send shifted punctuation as typed",
+        binds = punctuation_binds,
+        keys = { { "S-punctuation" } },
+    })
 end
 
 -- Resize, the one leader gesture tmux has (prefix then a repeating H/J/K/L) that
@@ -1094,25 +1123,31 @@ end
 -- matches config.leader's and resets on each keypress, and Escape, Enter or q
 -- leave early. left_status paints a chip while the table is active, since an
 -- unfocused mode with no indicator is a stuck keyboard.
-local key_tables = {
-    resize_pane = {
-        { key = "h", action = act.AdjustPaneSize({ "Left", 3 }) },
-        { key = "j", action = act.AdjustPaneSize({ "Down", 3 }) },
-        { key = "k", action = act.AdjustPaneSize({ "Up", 3 }) },
-        { key = "l", action = act.AdjustPaneSize({ "Right", 3 }) },
-        { key = "LeftArrow", action = act.AdjustPaneSize({ "Left", 3 }) },
-        { key = "DownArrow", action = act.AdjustPaneSize({ "Down", 3 }) },
-        { key = "UpArrow", action = act.AdjustPaneSize({ "Up", 3 }) },
-        { key = "RightArrow", action = act.AdjustPaneSize({ "Right", 3 }) },
-        { key = "Escape", action = act.PopKeyTable },
-        { key = "Enter", action = act.PopKeyTable },
-        { key = "q", action = act.PopKeyTable },
-    },
-}
+local key_tables = { resize_pane = {} }
+local resize_group = "Resize mode, after " .. table.concat(sheet:chord("r", "LEADER|SHIFT"), " ")
+local function bind_resize(keys, action, desc)
+    local binds = {}
+    for _, key in ipairs(keys) do
+        table.insert(key_tables.resize_pane, { key = key, action = action })
+        table.insert(binds, { key = key })
+    end
+    sheet:add({ group = resize_group, desc = desc, binds = binds, key_table = "resize_pane" })
+end
+bind_resize({ "h", "LeftArrow" }, act.AdjustPaneSize({ "Left", 3 }), "Move the border left")
+bind_resize({ "j", "DownArrow" }, act.AdjustPaneSize({ "Down", 3 }), "Move the border down")
+bind_resize({ "k", "UpArrow" }, act.AdjustPaneSize({ "Up", 3 }), "Move the border up")
+bind_resize({ "l", "RightArrow" }, act.AdjustPaneSize({ "Right", 3 }), "Move the border right")
+bind_resize({ "Escape", "Enter", "q" }, act.PopKeyTable, "Leave resize mode")
 
 -- Copy mode's `y` (LEADER [ above). Assigning key_tables.copy_mode replaces the
 -- whole table, so start from the defaults and patch just the yank entry.
 -- wezterm.gui is absent in the mux server, which also loads this file.
+sheet:add({
+    group = "Copy mode, after " .. table.concat(sheet:chord("[", "LEADER"), " "),
+    desc = "Copy the selection, converting box tables, and leave",
+    binds = { { key = "y", mods = "NONE" } },
+    key_table = "copy_mode",
+})
 if wezterm.gui then
     local copy_mode = wezterm.gui.default_key_tables().copy_mode
     for _, entry in ipairs(copy_mode) do
@@ -1131,6 +1166,7 @@ if wezterm.gui then
     key_tables.copy_mode = copy_mode
 end
 config.key_tables = key_tables
+sheet:check(config)
 
 -- Selecting with the mouse copies by default (ClipboardAndPrimarySelection);
 -- streak 1/2/3 are drag-release, double-click word and triple-click line.
