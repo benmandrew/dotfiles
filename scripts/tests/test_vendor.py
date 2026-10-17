@@ -103,18 +103,6 @@ class VendorTest(StepCase):
         self.assertIn("ERROR: claude does not run after installing", said)
         self.assertIn("ERROR: Reinstall Claude Code with https://claude.ai/install.sh\n", said)
 
-    def test_rtk(self) -> None:
-        self.serve(vendor.RTK_URL, installs("rtk"))
-        self.assertTrue(self.run_step(STEPS["install_rtk"]))
-        self.assertEqual(self.said(), "[install] Installing rtk\n")
-
-    def test_rtk_that_does_not_run(self) -> None:
-        self.serve(vendor.RTK_URL, "#!/bin/sh\n")
-        self.assertFalse(self.run_step(STEPS["install_rtk"]))
-        self.assertIn(
-            f"ERROR: {self.home}/.local/bin/rtk does not run after installing", self.said()
-        )
-
     def test_tailscale_on_linux(self) -> None:
         self.serve(vendor.TAILSCALE_URL, installs("tailscale", str(self.bin)))
         self.assertTrue(self.run_step(STEPS["install_tailscale"]))

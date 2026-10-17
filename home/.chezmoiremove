@@ -20,3 +20,8 @@
 # ai-commit-msg is gone: an open-interpreter script that asked a local Qwen
 # endpoint for a commit message, superseded by the commit-message agent.
 .local/bin/ai-commit-msg
+
+# rtk is gone: its PreToolUse hook rewrote Bash commands through a
+# token-filtering proxy.
+.claude/RTK.md
+.claude-work/RTK.md

@@ -1,9 +1,5 @@
 Use Plain English/Plain Language (PL). When appropriate, use ASD-STE100.
 
-# rtk
-
-A PreToolUse hook transparently rewrites Bash commands through `rtk`, a token-filtering proxy (e.g. `git status` → `rtk git status`) — no action needed. If output looks truncated or missing detail you need, re-run the raw command with `rtk proxy <cmd>`. Analytics: `rtk gain`.
-
 # zotero-cli
 
 `zotero-cli` is available for working with my Zotero library — searching, reading, and ingesting references (DOI / arXiv / file / BibTeX). Run `zotero-cli --help` to discover commands; `--json` on any command emits machine-readable output.

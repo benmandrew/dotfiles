@@ -24,10 +24,3 @@ about what to preserve:
 ```
 
 Self-triggered compaction gives control over the summary; auto-compaction does not.
-
-## rtk meta commands
-
-See `~/.claude/RTK.md` for the command list and the measured savings breakdown. The short version:
-`rtk gain` reports 79.6%, but a single outlier `curl` carries 92.3M of the 107.7M saved. Everyday
-filtering runs 12–17% on reads and greps, so treat rtk as a search-heavy-workload optimisation
-rather than a blanket win.

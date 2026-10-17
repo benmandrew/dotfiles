@@ -1,5 +1,5 @@
 """Tools whose vendor ships an install script: uv, Starship, direnv, Claude
-Code, rtk and Tailscale.
+Code and Tailscale.
 
 Each script is downloaded and run from disk (see tools.run_downloaded).
 """
@@ -16,7 +16,6 @@ UV_URL = "https://astral.sh/uv/install.sh"
 STARSHIP_URL = "https://starship.rs/install.sh"
 DIRENV_URL = "https://direnv.net/install.sh"
 CLAUDE_URL = "https://claude.ai/install.sh"
-RTK_URL = "https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh"
 TAILSCALE_URL = "https://tailscale.com/install.sh"
 
 # Where Starship's installer put the binary before this step sent it to
@@ -124,16 +123,6 @@ def install_claude_code(context: StepContext) -> None:
         raise StepFailed("Reinstall Claude Code with https://claude.ai/install.sh") from None
 
 
-def install_rtk(context: StepContext) -> None:
-    if not tools.announce(context, "rtk", context.which("rtk") is not None):
-        return
-    tools.run_downloaded(context, RTK_URL, ["sh"])
-    # The installer's default; RTK_INSTALL_DIR would move it.
-    target = context.home / ".local" / "bin" / "rtk"
-    tools.note_shadowed(context, "rtk", target)
-    tools.require_runs(context, target)
-
-
 def install_tailscale(context: StepContext) -> None:
     if context.host.system == "Darwin":
         present = brew.cask_installed(context, "tailscale")
@@ -152,6 +141,5 @@ STEPS = (
     Step("install_starship", install_starship),
     Step("install_direnv", install_direnv),
     Step("install_claude_code", install_claude_code),
-    Step("install_rtk", install_rtk),
     Step("install_tailscale", install_tailscale),
 )

@@ -260,7 +260,6 @@ if [[ "${os_name}" == "Linux" ]] && [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]];
 fi
 
 check_cmd claude
-check_cmd rtk
 
 check_cmd node
 check_cmd npm
