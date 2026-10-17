@@ -75,7 +75,10 @@ fi
 # Recursive merge, managed keys winning. Objects merge key by key, so a plugin
 # enabled through the UI and absent from enabledPlugins here is kept; arrays
 # are replaced whole rather than concatenated, which is what permissions.deny
-# wants. A literal `null` reads as an empty object. Anything else that is not a
+# wants. hooks is replaced whole as well: a key-by-key merge kept every hook
+# event the template had dropped, so removing rtk's PreToolUse entry here left
+# it running on every machine that had applied it. A literal `null` reads as an
+# empty object. Anything else that is not a
 # single JSON object (hand-mangled, half-written) is left alone with a warning,
 # rather than erroring out and leaving chezmoi unable to apply. The merge goes
 # to a file first, so a jq that fails halfway prints nothing of its own.
@@ -84,6 +87,7 @@ if jq -n --slurpfile cur "$tmpdir/current" --slurpfile man "$tmpdir/managed" '
     | ($cur[0] // {}) as $c
     | if ($c | type) != "object" then error("not a JSON object") else . end
     | $c * $man[0]
+    | if $man[0] | has("hooks") then .hooks = $man[0].hooks else . end
 ' >"$tmpdir/merged" 2>/dev/null; then
     cat "$tmpdir/merged"
 else
