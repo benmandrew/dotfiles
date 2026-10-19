@@ -290,6 +290,11 @@ if [[ "${headless_linux}" == false ]]; then
     else
         check_dir "nerd-font" "${HOME}/.local/share/fonts/CodeNewRomanNerdFont"
     fi
+    if [[ "${os_name}" == "Darwin" ]]; then
+        check_file "iosevka-term-slab" "${HOME}/Library/Fonts/IosevkaTermSlab/.version"
+    else
+        check_file "iosevka-term-slab" "${HOME}/.local/share/fonts/IosevkaTermSlab/.version"
+    fi
     # Opted into per machine, so absence only warns.
     if [[ "${os_name}" == "Darwin" ]]; then
         check_optional "libertinus" brew list --cask font-libertinus

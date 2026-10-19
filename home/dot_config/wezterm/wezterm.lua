@@ -2,11 +2,17 @@ local wezterm = require("wezterm")
 local act = wezterm.action
 local config = wezterm.config_builder()
 
--- Font: JetBrains Mono for text, with a fully-patched Nerd Font as fallback so
--- icon glyphs outside WezTerm's built-in symbol coverage still resolve.
--- CodeNewRoman is installed by our install scripts on every non-headless machine.
-config.font = wezterm.font_with_fallback({ "JetBrains Mono", "CodeNewRoman Nerd Font Mono" })
-config.font_size = 13.0
+-- Font: Iosevka Term Slab for text, with a fully-patched Nerd Font as fallback so
+-- icon glyphs outside WezTerm's built-in symbol coverage still resolve. The
+-- install scripts put both on every non-headless machine. Iosevka's strokes are
+-- thin, so text takes SemiBold, and Light hinting snaps only vertically: Normal
+-- rounded its stems to one hard-edged pixel.
+config.font = wezterm.font_with_fallback({
+    { family = "Iosevka Term Slab", weight = "DemiBold" },
+    "CodeNewRoman Nerd Font Mono",
+})
+config.font_size = 14.0
+config.freetype_load_target = "Light"
 
 -- Colors
 config.color_scheme = "Hacktober"

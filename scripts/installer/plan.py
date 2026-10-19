@@ -142,6 +142,7 @@ LINUX = Plan(
             "install_wezterm",
             "set_default_terminal_wezterm",
             "install_nerd_font",
+            "install_terminal_font",
         ),
         OptionalStep(
             "obsidian",
@@ -264,6 +265,7 @@ MACOS = Plan(
             "install_tmux_plugins",
             "install_wezterm",
             "install_nerd_font",
+            "install_terminal_font",
         ),
         OptionalStep(
             "obsidian",
