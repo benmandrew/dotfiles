@@ -2,13 +2,13 @@ local wezterm = require("wezterm")
 local act = wezterm.action
 local config = wezterm.config_builder()
 
--- Font: Iosevka Term Slab for text, with a fully-patched Nerd Font as fallback so
+-- Font: Iosevka Term for text, with a fully-patched Nerd Font as fallback so
 -- icon glyphs outside WezTerm's built-in symbol coverage still resolve. The
 -- install scripts put both on every non-headless machine. Iosevka's strokes are
 -- thin, so text takes SemiBold, and Light hinting snaps only vertically: Normal
 -- rounded its stems to one hard-edged pixel.
 config.font = wezterm.font_with_fallback({
-    { family = "Iosevka Term Slab", weight = "DemiBold" },
+    { family = "Iosevka Term", weight = "DemiBold" },
     "CodeNewRoman Nerd Font Mono",
 })
 config.font_size = 14.0

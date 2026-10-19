@@ -6,14 +6,14 @@ from installer.steps import STEPS
 from .support import StepCase, sha256
 
 STEP = STEPS["install_terminal_font"]
-NAME = "Iosevka Term Slab"
+NAME = "Iosevka Term"
 TAG = pins.pin("IOSEVKA_VERSION")
 BASE = "https://github.com/be5invis/Iosevka/releases/download"
 LATEST = "https://api.github.com/repos/be5invis/Iosevka/releases/latest"
 FACES = (
-    "IosevkaTermSlab-SemiBold.ttf IosevkaTermSlab-SemiBoldItalic.ttf"
-    " IosevkaTermSlab-Heavy.ttf IosevkaTermSlab-HeavyItalic.ttf"
-    " IosevkaTermSlab-Light.ttf IosevkaTermSlab-LightItalic.ttf"
+    "IosevkaTerm-SemiBold.ttf IosevkaTerm-SemiBoldItalic.ttf"
+    " IosevkaTerm-Heavy.ttf IosevkaTerm-HeavyItalic.ttf"
+    " IosevkaTerm-Light.ttf IosevkaTerm-LightItalic.ttf"
 )
 
 # Stands in for unzip: `unzip -joq <archive> <pattern>... -d <directory>`. It
@@ -34,10 +34,10 @@ class TerminalFontTest(StepCase):
         super().setUp()
         self.env["DISPLAY"] = ":0"
         self.fake("unzip", UNZIP)
-        self.fonts = self.home / ".local/share/fonts/IosevkaTermSlab"
+        self.fonts = self.home / ".local/share/fonts/IosevkaTerm"
 
     def serve_release(self, tag: str = TAG) -> None:
-        asset = f"PkgTTF-Unhinted-IosevkaTermSlab-{tag.removeprefix('v')}.zip"
+        asset = f"PkgTTF-Unhinted-IosevkaTerm-{tag.removeprefix('v')}.zip"
         self.serve(f"{BASE}/{tag}/{asset}", f"iosevka {tag}")
         digest = sha256(f"iosevka {tag}".encode())
         self.serve(f"{BASE}/{tag}/SHA-256.txt", f"{'0' * 64}  Other.zip\n{digest}  {asset}\n")
@@ -53,9 +53,7 @@ class TerminalFontTest(StepCase):
     def test_install_then_skip(self) -> None:
         self.serve_release()
         self.assertTrue(self.run_step(STEP))
-        self.assertEqual(
-            (self.fonts / "IosevkaTermSlab-SemiBold.ttf").read_text(), f"iosevka {TAG}"
-        )
+        self.assertEqual((self.fonts / "IosevkaTerm-SemiBold.ttf").read_text(), f"iosevka {TAG}")
         self.assertEqual((self.fonts / ".version").read_text(), f"{TAG}\n")
         self.assertEqual(self.called(), [f"unzip {FACES}"])
 
@@ -69,7 +67,7 @@ class TerminalFontTest(StepCase):
 
     def test_a_bad_checksum_fails(self) -> None:
         self.serve_release()
-        asset = f"PkgTTF-Unhinted-IosevkaTermSlab-{TAG.removeprefix('v')}.zip"
+        asset = f"PkgTTF-Unhinted-IosevkaTerm-{TAG.removeprefix('v')}.zip"
         self.serve(f"{BASE}/{TAG}/{asset}", "tampered")
         self.assertFalse(self.run_step(STEP))
         self.assertFalse((self.fonts / ".version").exists())
@@ -98,6 +96,18 @@ class TerminalFontTest(StepCase):
     def test_release_zip_on_macos(self) -> None:
         self.serve_release()
         self.assertTrue(self.run_step(STEP, system="Darwin", machine="arm64"))
-        fonts = self.home / "Library/Fonts/IosevkaTermSlab"
+        fonts = self.home / "Library/Fonts/IosevkaTerm"
         self.assertEqual((fonts / ".version").read_text(), f"{TAG}\n")
         self.assertEqual(self.called(), [f"unzip {FACES}"])
+
+    def test_removes_the_slab_variant(self) -> None:
+        retired = self.home / "Library/Fonts/IosevkaTermSlab"
+        retired.mkdir(parents=True)
+        (retired / "IosevkaTermSlab-SemiBold.ttf").write_text("old")
+        self.serve_release()
+        self.assertTrue(self.run_step(STEP, system="Darwin", machine="arm64"))
+        self.assertFalse(retired.exists())
+        self.assertEqual(
+            self.said(),
+            f"[install] Removing the retired Iosevka Term Slab\n[install] Installing {NAME}\n",
+        )

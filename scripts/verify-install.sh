@@ -291,9 +291,9 @@ if [[ "${headless_linux}" == false ]]; then
         check_dir "nerd-font" "${HOME}/.local/share/fonts/CodeNewRomanNerdFont"
     fi
     if [[ "${os_name}" == "Darwin" ]]; then
-        check_file "iosevka-term-slab" "${HOME}/Library/Fonts/IosevkaTermSlab/.version"
+        check_file "iosevka-term" "${HOME}/Library/Fonts/IosevkaTerm/.version"
     else
-        check_file "iosevka-term-slab" "${HOME}/.local/share/fonts/IosevkaTermSlab/.version"
+        check_file "iosevka-term" "${HOME}/.local/share/fonts/IosevkaTerm/.version"
     fi
     # Opted into per machine, so absence only warns.
     if [[ "${os_name}" == "Darwin" ]]; then
