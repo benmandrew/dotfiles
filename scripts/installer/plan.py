@@ -151,6 +151,13 @@ LINUX = Plan(
             _step("install_obsidian_stack"),
         ),
         OptionalStep(
+            "site-fonts",
+            "Site fonts: Libertinus Serif and Iosevka Slab Extended, the typefaces of"
+            " benmandrew.com, for Obsidian's CSS snippet. The Iosevka archive is a 123 MB"
+            " download.",
+            _step("install_site_fonts"),
+        ),
+        OptionalStep(
             "zathura",
             "zathura: keyboard-driven PDF viewer, with SyncTeX inverse search into VS Code."
             " A GUI app — noise on a server.",
@@ -264,6 +271,13 @@ MACOS = Plan(
             " schedules. Ships the 'obsidian' CLI, but needs the GUI app running — a"
             " dev-machine tool, not a server one.",
             _step("install_obsidian_stack"),
+        ),
+        OptionalStep(
+            "site-fonts",
+            "Site fonts: Libertinus Serif and Iosevka Slab Extended, the typefaces of"
+            " benmandrew.com, for Obsidian's CSS snippet. The Iosevka archive is a 123 MB"
+            " download.",
+            _step("install_site_fonts"),
         ),
         OptionalStep(
             "zathura",

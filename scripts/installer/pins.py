@@ -40,6 +40,8 @@ UPSTREAM = {
     "GITLEAKS_VERSION": "gitleaks/gitleaks",
     "GLOW_VERSION": "charmbracelet/glow",
     "HYPERFINE_VERSION": "sharkdp/hyperfine",
+    "IOSEVKA_VERSION": "be5invis/Iosevka",
+    "LIBERTINUS_VERSION": "alerque/libertinus",
     "LUA_LS_VERSION": "LuaLS/lua-language-server",
     "MOOR_VERSION": "walles/moor",
     "NEOVIM_VERSION": "neovim/neovim",
