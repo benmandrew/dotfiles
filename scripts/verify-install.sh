@@ -298,7 +298,7 @@ if [[ "${headless_linux}" == false ]]; then
     # Opted into per machine, so absence only warns.
     if [[ "${os_name}" == "Darwin" ]]; then
         check_optional "libertinus" brew list --cask font-libertinus
-        check_optional "iosevka-slab" brew list --cask font-iosevka-slab
+        check_optional "iosevka-slab" test -f "${HOME}/Library/Fonts/IosevkaSlab/.version"
     else
         check_optional "libertinus" test -f "${HOME}/.local/share/fonts/Libertinus/.version"
         check_optional "iosevka-slab" test -f "${HOME}/.local/share/fonts/IosevkaSlab/.version"

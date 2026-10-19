@@ -117,15 +117,41 @@ class SiteFontsTest(StepCase):
         self.assertFalse(self.run_step(STEP))
         self.assertIn("ERROR: Missing required command: unzip\n", self.said())
 
-    def test_casks_on_macos(self) -> None:
+    def test_macos_takes_libertinus_from_a_cask_and_iosevka_from_the_zip(self) -> None:
         self.recording("brew", failing="list")
+        self.serve_iosevka()
+        self.assertTrue(self.run_step(STEP, system="Darwin", machine="arm64"))
+        fonts = self.home / "Library/Fonts/IosevkaSlab"
+        self.assertEqual((fonts / "IosevkaSlab-Extended.ttf").read_text(), f"iosevka {IOSEVKA}")
+        self.assertEqual((fonts / ".version").read_text(), f"{IOSEVKA}\n")
+        self.assertEqual(
+            self.called(),
+            [
+                "brew list --cask font-iosevka-slab",
+                "brew list --cask font-libertinus",
+                "brew install --cask font-libertinus",
+                "unzip IosevkaSlab-Extended.ttf IosevkaSlab-ExtendedItalic.ttf"
+                " IosevkaSlab-ExtendedBold.ttf IosevkaSlab-ExtendedBoldItalic.ttf",
+            ],
+        )
+
+    def test_macos_removes_the_iosevka_cask(self) -> None:
+        self.recording("brew")
+        fonts = self.home / "Library/Fonts/IosevkaSlab"
+        fonts.mkdir(parents=True)
+        (fonts / ".version").write_text(f"{IOSEVKA}\n")
         self.assertTrue(self.run_step(STEP, system="Darwin", machine="arm64"))
         self.assertEqual(
             self.called(),
             [
-                "brew list --cask font-libertinus",
-                "brew install --cask font-libertinus",
                 "brew list --cask font-iosevka-slab",
-                "brew install --cask font-iosevka-slab",
+                "brew uninstall --cask font-iosevka-slab",
+                "brew list --cask font-libertinus",
             ],
+        )
+        self.assertEqual(
+            self.said(),
+            "[install] Removing the retired font-iosevka-slab cask\n"
+            "[install] Libertinus Serif already installed; skipping\n"
+            "[install] Iosevka Slab already installed; skipping\n",
         )
