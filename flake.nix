@@ -68,6 +68,13 @@
             jq
             git
           ];
+          # Nix's Python setup hook exports PYTHONNOUSERSITE=1 and a PYTHONPATH
+          # of 3.13 site-packages, which hides every `pip install --user`
+          # package from the system python3 its ~/.local/bin scripts run on.
+          # The mypy above is a wrapped binary and needs neither.
+          shellHook = ''
+            unset PYTHONNOUSERSITE PYTHONPATH
+          '';
         };
       }
     );
