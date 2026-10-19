@@ -55,7 +55,9 @@ test-py:
 # The installer end to end, on a machine that has never been provisioned: an
 # Ubuntu 22.04 container with sudo and nothing else. It takes as long as a cold
 # install does, and it needs a running Docker daemon, so it is not part of
-# `test`. PLAN.md says what to compare the result with.
+# `test`. Compare its failed steps and verify output with a run of the commit
+# before. Three steps always fail there: install_nix and install_nix_direnv for
+# want of systemd, and install_rtk on arm64, whose binary needs glibc 2.39.
 test-container:
 	@printf '$(BOLD_BLUE)[installing in a fresh container]$(RESET)\n'
 	@docker build -q -t dotfiles-install-test scripts/tests

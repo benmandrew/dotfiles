@@ -13,7 +13,7 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 
 # mypy has dropped Python 3.9 as a target, so it checks against 3.10. The 3.9
 # floor is held by ruff above, which refuses newer syntax, and by running the
-# tests on the Command Line Tools interpreter (see PLAN.md).
+# tests on the Command Line Tools interpreter (see scripts/CLAUDE.md).
 [tool.mypy]
 python_version = "3.10"
 strict = true
