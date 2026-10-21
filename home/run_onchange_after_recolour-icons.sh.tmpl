@@ -1,0 +1,33 @@
+#!/bin/bash
+
+set -euo pipefail
+{{- if eq .chezmoi.os "linux" }}
+
+# Redraw the launcher icons listed under `icons` in .chezmoidata.yaml. The
+# rendered list below changes with the data, and the hash with the script, so
+# either change re-runs this. An app update that ships a new icon does neither;
+# run recolour-icons by hand after one.
+# recolour-icons-hash: {{ include "dot_local/bin/executable_recolour-icons" | sha256sum }}
+
+if ! command -v convert >/dev/null 2>&1 && ! command -v magick >/dev/null 2>&1; then
+    echo "${0##*/}: ImageMagick is not installed; launcher icons left as they are" >&2
+    exit 0
+fi
+
+apps=(
+{{- range $app, $style := .icons.apps }}
+    '{{ $app }}={{ $style }}'
+{{- end }}
+)
+exec_args=(
+{{- range $app, $args := .icons.exec_args }}
+    --exec-args '{{ $app }}={{ $args }}'
+{{- end }}
+)
+
+"${HOME}/.local/bin/recolour-icons" \
+    --stops '{{ join "," .icons.stops }}' \
+    --tile-fill '{{ .icons.tile_fill }}' \
+    --tile-edge '{{ .icons.tile_edge }}' \
+    "${exec_args[@]}" "${apps[@]}"
+{{- end }}

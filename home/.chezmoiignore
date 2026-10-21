@@ -5,4 +5,5 @@ Library/Application Support/Code/User/settings.json
 .config/Code/User/settings.json
 .config/systemd
 .local/bin/code
+.local/bin/recolour-icons
 {{ end }}

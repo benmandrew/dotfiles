@@ -17,7 +17,9 @@ DEPLOYED_BASH   := $(wildcard home/dot_claude/*.sh) $(wildcard home/run_*.sh)
 # an SC2054 from the day it was written, in the one file whose job is to stop
 # exactly that reaching a commit.
 REPO_BASH       := .githooks/pre-commit
-DEPLOYED_SH     := $(wildcard home/dot_local/bin/executable_*) \
+# Tools in home/dot_local/bin are shell unless their shebang names python3.
+DEPLOYED_PY     := $(shell for f in home/dot_local/bin/executable_*; do head -n 1 "$$f" | grep -q python && echo "$$f"; done)
+DEPLOYED_SH     := $(filter-out $(DEPLOYED_PY),$(wildcard home/dot_local/bin/executable_*)) \
                    $(wildcard home/dot_config/tmux/*.sh)
 
 BASH_SCRIPTS := $(INSTALL_SCRIPTS) $(DEPLOYED_BASH) $(REPO_BASH)
@@ -89,14 +91,14 @@ fmt:
 	@stylua .
 	@shfmt -ln bash -i 4 -ci -w $(BASH_SCRIPTS)
 	@shfmt -ln posix -i 4 -ci -w $(SH_SCRIPTS)
-	@ruff format -q --no-cache $(PY_SOURCES)
+	@ruff format -q --no-cache $(PY_SOURCES) $(DEPLOYED_PY)
 
 fmt-ci:
 	@printf '$(BOLD_BLUE)[checking format]$(RESET)\n'
 	@stylua --check .
 	@shfmt -ln bash -i 4 -ci -d $(BASH_SCRIPTS)
 	@shfmt -ln posix -i 4 -ci -d $(SH_SCRIPTS)
-	@ruff format -q --no-cache --check $(PY_SOURCES)
+	@ruff format -q --no-cache --check $(PY_SOURCES) $(DEPLOYED_PY)
 
 lint: lint-sh lint-py lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-templates lint-secrets
 
@@ -159,8 +161,8 @@ lint-sh:
 
 lint-py:
 	@printf '$(BOLD_BLUE)[linting python]$(RESET)\n'
-	@ruff check -q --no-cache $(PY_SOURCES)
-	@mypy --cache-dir=/dev/null $(PY_SOURCES)
+	@ruff check -q --no-cache $(PY_SOURCES) $(DEPLOYED_PY)
+	@mypy --cache-dir=/dev/null $(PY_SOURCES) $(DEPLOYED_PY)
 
 # Renders every template and lints each rendering with the real linter for the
 # language it produces. This absorbed the old lint-ssh target, which rendered

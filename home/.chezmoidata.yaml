@@ -19,3 +19,35 @@ atuin:
     av1: av1
     av2: av2
     av3: av3
+
+icons:
+  ## Launcher icons that run_onchange_after_recolour-icons.sh.tmpl redraws in
+  ## the palette of benmandrew.com, on Linux. Each key is a .desktop filename,
+  ## and an app absent from a machine is skipped. Firefox and Chrome each ship
+  ## two files, the snap or apt one and a legacy alias, so both are listed.
+  ##
+  ## `tone` maps the icon's luminance onto the stops, darkest first. `tile`
+  ## does the same with more contrast and sets it on a rounded tile, for an
+  ## icon with too little shading to survive the mapping.
+  stops: ["#141414", "#d08949", "#ebc587"]
+  tile_fill: "#2c2925"
+  tile_edge: "#d08949"
+  apps:
+    firefox_firefox.desktop: tone
+    firefox.desktop: tone
+    nemo.desktop: tone
+    md.obsidian.Obsidian.desktop: tone
+    org.wezfurlong.wezterm.desktop: tone
+    zotero.desktop: tone
+    org.gnome.eog.desktop: tone
+    org.pwmt.zathura.desktop: tone
+    libreoffice-writer.desktop: tone
+    org.gnome.Calculator.desktop: tone
+    gnome-control-center.desktop: tone
+    com.microsoft.VSCode.desktop: tone
+    google-chrome.desktop: tone
+    com.google.Chrome.desktop: tone
+  ## Arguments added after the program on each Exec= line of an app's copy.
+  ## The copy replaces any hand-made one, so a flag that one carried goes here.
+  exec_args:
+    com.microsoft.VSCode.desktop: --disable-gpu-rasterization

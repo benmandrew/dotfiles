@@ -1,0 +1,360 @@
+#!/usr/bin/env python3
+"""Recolour launcher icons into a palette and point the desktop at them.
+
+GNOME's dock draws each app from the Icon= key of its .desktop file, and a file
+of the same name in ~/.local/share/applications overrides the system one. For
+each app named on the command line this finds the system .desktop file, finds
+the icon it names, maps that icon's luminance onto a gradient through the
+palette stops, and writes a copy of the .desktop file whose Icon= keys point at
+the result.
+
+Luminance mapping keeps an icon's shape and shading and swaps its hues, so every
+icon comes out in the same few colours and still reads as itself. An icon with
+almost no shading, such as Yaru's file manager folder, comes out as one flat
+tone; the `tile` style lifts its contrast and sets it on a rounded tile, as
+Obsidian and WezTerm already are.
+
+Every copy written here carries X-Recolour-Icons=true. A copy without it was
+made by hand and is left alone, and a marked copy whose app is no longer named
+is deleted along with its icon, so dropping an app from the list restores its
+own icon.
+
+A copy freezes the rest of the .desktop file too, apart from %k in Exec=, which
+is rewritten to the original's path. An Exec= line that a package update
+changes stays old until this runs again.
+
+A launch flag that a hand-made copy used to add, such as VS Code's
+--disable-gpu-rasterization, goes in with --exec-args, since this owns the copy.
+
+Usage: recolour-icons --stops C1,C2[,...] [--tile-fill C] [--tile-edge C]
+                      [--exec-args APP.desktop=ARGS ...] APP.desktop[=tone|=tile] ...
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+MARKER = "X-Recolour-Icons=true"
+SIZE = 256
+
+HOME = Path.home()
+DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local/share")
+APPS = DATA_HOME / "applications"
+ICONS = DATA_HOME / "icons/recoloured"
+
+
+def data_dirs() -> list[Path]:
+    # A shell outside the desktop session may lack the snap and Flatpak
+    # entries in XDG_DATA_DIRS, so add them whatever the variable says.
+    dirs = os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
+    found = [Path(d) for d in dirs.split(":") if d]
+    found += [
+        Path("/var/lib/snapd/desktop"),
+        Path("/var/lib/flatpak/exports/share"),
+        DATA_HOME / "flatpak/exports/share",
+    ]
+    seen: list[Path] = []
+    for d in found:
+        if d not in seen:
+            seen.append(d)
+    return seen
+
+
+def find_desktop(name: str) -> Path | None:
+    for d in data_dirs():
+        candidate = d / "applications" / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def icon_bases() -> list[Path]:
+    return [DATA_HOME / "icons", HOME / ".icons"] + [d / "icons" for d in data_dirs()]
+
+
+def theme_chain() -> list[str]:
+    """The current icon theme, then what it inherits, ending at hicolor."""
+    try:
+        out = (
+            subprocess.run(
+                ["gsettings", "get", "org.gnome.desktop.interface", "icon-theme"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            .stdout.strip()
+            .strip("'")
+        )
+    except (OSError, subprocess.CalledProcessError):
+        out = ""
+    chain: list[str] = []
+    pending = [out] if out else []
+    while pending:
+        theme = pending.pop(0)
+        if theme in chain:
+            continue
+        chain.append(theme)
+        for base in icon_bases():
+            index = base / theme / "index.theme"
+            if index.is_file():
+                match = re.search(r"^Inherits=(.*)$", index.read_text(errors="replace"), re.M)
+                if match:
+                    pending += [t.strip() for t in match.group(1).split(",") if t.strip()]
+                break
+    if "hicolor" not in chain:
+        chain.append("hicolor")
+    return chain
+
+
+def _size(rel: Path) -> int:
+    # Theme subdirectories are named 256x256, 256x256@2x or scalable.
+    top = rel.parts[0]
+    if top == "scalable":
+        return 10_000
+    match = re.match(r"(\d+)x\d+(?:@(\d+)x)?", top)
+    if not match:
+        return 0
+    return int(match.group(1)) * int(match.group(2) or 1)
+
+
+def find_icon(name: str) -> Path | None:
+    if name.startswith("/"):
+        return Path(name) if Path(name).is_file() else None
+    for theme in theme_chain():
+        best: tuple[int, Path] | None = None
+        for base in icon_bases():
+            root = base / theme
+            if not root.is_dir():
+                continue
+            for ext in ("png", "svg"):
+                for path in root.glob(f"*/*/{name}.{ext}"):
+                    size = _size(path.relative_to(root))
+                    if best is None or size > best[0]:
+                        best = (size, path)
+        if best:
+            return best[1]
+    for ext in ("png", "svg"):
+        path = Path("/usr/share/pixmaps") / f"{name}.{ext}"
+        if path.is_file():
+            return path
+    return None
+
+
+def magick(*args: str) -> str:
+    for tool in ("magick", "convert"):
+        if shutil.which(tool):
+            return subprocess.run([tool, *args], check=True, capture_output=True, text=True).stdout
+    sys.exit("recolour-icons: ImageMagick is not installed")
+
+
+def all_dark(source: Path) -> bool:
+    # A glyph drawn in one dark colour, such as Zathura's black #, has no
+    # luminance range for -auto-level to stretch and stays at the darkest stop.
+    peak = magick(
+        str(source),
+        "-background",
+        "black",
+        "-alpha",
+        "remove",
+        "-colorspace",
+        "gray",
+        "-format",
+        "%[fx:maxima]",
+        "info:",
+    )
+    return float(peak) < 0.1
+
+
+def rasterise(source: Path, tmp: Path) -> Path:
+    if source.suffix != ".svg":
+        return source
+    out = tmp / f"{source.stem}.png"
+    if shutil.which("rsvg-convert"):
+        subprocess.run(
+            ["rsvg-convert", "-w", str(SIZE), "-h", str(SIZE), "-o", str(out), str(source)],
+            check=True,
+        )
+    else:
+        # ImageMagick 6's own SVG renderer drops gradients and filters.
+        magick("-background", "none", "-density", "384", str(source), str(out))
+    return out
+
+
+def gradient(stops: list[str], tmp: Path) -> Path:
+    out = tmp / "gradient.png"
+    pixels: list[str] = []
+    for stop in stops:
+        pixels += ["-size", "1x1", f"xc:{stop}"]
+    magick(*pixels, "+append", "-filter", "triangle", "-resize", "256x1!", str(out))
+    return out
+
+
+def tone(source: Path, ramp: Path, out: Path, fit: int, contrast: list[str]) -> None:
+    # Flatten onto black for the luminance, then put the original alpha back.
+    # A dark glyph is inverted first, so it takes the lightest stop instead.
+    if all_dark(source):
+        contrast = ["-negate", *contrast]
+    magick(
+        str(source),
+        "-resize",
+        f"{fit}x{fit}",
+        "-background",
+        "none",
+        "-gravity",
+        "center",
+        "-extent",
+        f"{SIZE}x{SIZE}",
+        "(",
+        "+clone",
+        "-alpha",
+        "extract",
+        ")",
+        "(",
+        "-clone",
+        "0",
+        "-background",
+        "black",
+        "-alpha",
+        "remove",
+        "-colorspace",
+        "gray",
+        *contrast,
+        "-auto-level",
+        str(ramp),
+        "-clut",
+        ")",
+        "-delete",
+        "0",
+        "+swap",
+        "-alpha",
+        "off",
+        "-compose",
+        "CopyOpacity",
+        "-composite",
+        str(out),
+    )
+
+
+def tile(source: Path, ramp: Path, out: Path, fill: str, edge: str, tmp: Path) -> None:
+    glyph = tmp / "glyph.png"
+    tone(source, ramp, glyph, 170, ["-sigmoidal-contrast", "8x50%"])
+    magick(
+        "-size",
+        f"{SIZE}x{SIZE}",
+        "xc:none",
+        "-fill",
+        fill,
+        "-stroke",
+        edge,
+        "-strokewidth",
+        "6",
+        "-draw",
+        "roundrectangle 16,16 240,240 48,48",
+        str(glyph),
+        "-gravity",
+        "center",
+        "-composite",
+        str(out),
+    )
+
+
+def marked(path: Path) -> bool:
+    try:
+        return MARKER in path.read_text(errors="replace").splitlines()
+    except OSError:
+        return False
+
+
+def write_desktop(source: Path, target: Path, icon: Path, extra: str) -> None:
+    lines = []
+    for line in source.read_text(errors="replace").splitlines():
+        if line.startswith("Icon="):
+            line = f"Icon={icon}"
+        elif line.startswith("Exec="):
+            # %k is the .desktop file's own path. Zotero's launcher derives
+            # its install directory from it, which the copy would move.
+            line = line.replace("%k", str(source))
+            if extra:
+                program, _, rest = line.partition(" ")
+                line = f"{program} {extra} {rest}".rstrip()
+        lines.append(line)
+        if line.strip() == "[Desktop Entry]":
+            lines.append(MARKER)
+    target.write_text("\n".join(lines) + "\n")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--stops", required=True, help="comma-separated colours, darkest first")
+    parser.add_argument("--tile-fill", default="#2c2925")
+    parser.add_argument("--tile-edge", default="#d08949")
+    parser.add_argument(
+        "--exec-args",
+        action="append",
+        default=[],
+        metavar="APP.desktop=ARGS",
+        help="arguments to add after the program on each of APP's Exec= lines",
+    )
+    parser.add_argument("apps", nargs="*", metavar="APP.desktop[=STYLE]")
+    args = parser.parse_args()
+
+    extra: dict[str, str] = {}
+    for spec in args.exec_args:
+        name, _, value = spec.partition("=")
+        extra[name] = value
+
+    wanted: dict[str, str] = {}
+    for spec in args.apps:
+        name, _, style = spec.partition("=")
+        if style not in ("", "tone", "tile"):
+            parser.error(f"{spec}: style must be tone or tile")
+        wanted[name] = style or "tone"
+
+    APPS.mkdir(parents=True, exist_ok=True)
+    ICONS.mkdir(parents=True, exist_ok=True)
+
+    for stale in APPS.glob("*.desktop"):
+        if stale.name not in wanted and marked(stale):
+            stale.unlink()
+            (ICONS / f"{stale.stem}.png").unlink(missing_ok=True)
+            print(f"recolour-icons: removed {stale.name}")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        ramp = gradient(args.stops.split(","), tmp)
+        for name, style in wanted.items():
+            target = APPS / name
+            if target.exists() and not marked(target):
+                print(f"recolour-icons: {target} was not made here; leaving it", file=sys.stderr)
+                continue
+            source = find_desktop(name)
+            if source is None:
+                continue  # not installed on this machine
+            match = re.search(r"^Icon=(.*)$", source.read_text(errors="replace"), re.M)
+            icon = find_icon(match.group(1).strip()) if match else None
+            if icon is None:
+                print(f"recolour-icons: {name}: icon not found", file=sys.stderr)
+                continue
+            out = ICONS / f"{Path(name).stem}.png"
+            raster = rasterise(icon, tmp)
+            if style == "tile":
+                tile(raster, ramp, out, args.tile_fill, args.tile_edge, tmp)
+            else:
+                tone(raster, ramp, out, SIZE, [])
+            write_desktop(source, target, out, extra.get(name, ""))
+            print(f"recolour-icons: {name} <- {icon}")
+
+    if shutil.which("update-desktop-database"):
+        subprocess.run(["update-desktop-database", str(APPS)], check=False)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
