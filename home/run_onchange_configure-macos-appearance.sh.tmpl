@@ -1,0 +1,25 @@
+#!/bin/bash
+
+set -euo pipefail
+{{- if eq .chezmoi.os "darwin" }}
+
+# The macOS counterpart of recolour-icons: System Settings' Tinted icon style
+# draws every icon in one hue, where the Linux script maps onto the palette
+# stops. The tint is a named swatch. The default swatch follows the accent
+# colour and writes no key, so name one to pin it.
+theme='TintedDark'
+tint='Orange'
+
+current_theme="$(defaults read -g AppleIconAppearanceTheme 2>/dev/null || true)"
+current_tint="$(defaults read -g AppleIconAppearanceTintColor 2>/dev/null || true)"
+if [ "${current_theme}" = "${theme}" ] && [ "${current_tint}" = "${tint}" ]; then
+    exit 0
+fi
+
+defaults write -g AppleIconAppearanceTheme -string "${theme}"
+defaults write -g AppleIconAppearanceTintColor -string "${tint}"
+
+# The Dock reads both keys at launch; a restart redraws its icons. Finder and
+# other apps pick the change up when they next launch.
+killall Dock 2>/dev/null || true
+{{- end }}
