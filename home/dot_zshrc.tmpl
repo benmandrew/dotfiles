@@ -658,6 +658,10 @@ if [[ -f "$_zsh_autosuggestions" ]]; then
   # Do not suggest against a paste or a very long line — the widget rescans the
   # history on every keystroke and this is the case where that gets noticeable.
   ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=80
+  # Bind widgets once, on the first prompt. By default every precmd re-wraps
+  # them, which cost 14 ms a prompt; nothing defines widgets after this but
+  # starship's zle-keymap-select, which the plugin ignores anyway.
+  ZSH_AUTOSUGGEST_MANUAL_REBIND=1
   source "$_zsh_autosuggestions"
 fi
 unset _zsh_autosuggestions
@@ -691,6 +695,9 @@ ssh() {
 # PROMPT='$(git_dirty)%{$fg[green]%}[$(git branch --show-current 2>/dev/null)]%{$reset_color%}%{$fg[cyan]%}[%~]%{$reset_color%}%{$fg_bold[gray]%}\$%{$reset_color%} '
 
 _cache_eval starship init zsh
+# starship.toml sets no right_format, so RPROMPT only forks starship to print
+# nothing, at 3 ms a prompt.
+RPROMPT=''
 
 if [[ -o interactive ]] && [[ -z "$TMUX" ]] && [[ -n "$SSH_CONNECTION" ]]; then
   # Allow scripts to disable tmux on remote machines

@@ -72,6 +72,9 @@ style = "purple"
 format = '[\[$branch(:$remote_branch)\]]($style)'
 
 [git_status]
+# gitoxide's untracked-file walk took 57 ms in a 19k-file repo, against 27 ms
+# through the git binary.
+use_git_executable = true
 style = "red"
 format = '([\[$all_status\]]($style))'
 conflicted = ''
