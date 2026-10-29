@@ -168,8 +168,7 @@ local function claude_cwd(pane)
     return session and session.cwd or nil
 end
 
--- Tab title: the claude agent running in the tab, else the remote hostname when
--- SSH'd elsewhere, else the focused directory's name, unless manually renamed.
+-- Tab titles are cut to this, host prefix included; see format-tab-title.
 local TAB_TITLE_MAX_WIDTH = 24
 -- Room around the truncated title for the index (" 12 "), the remote icon and
 -- its space, the status bar and the trailing column.
@@ -360,49 +359,58 @@ end
 local ssh_host_cached = per_tab_cached(ssh_host)
 local claude_tab_cached = per_tab_cached(claude_tab)
 
--- The icon for a remote tab, or nil for a local one. A mux pane belongs to its
--- host's domain. Plain ssh is found as the title fallbacks find its host: the
--- OSC 7 host, or ssh in the foreground when remote tmux swallows OSC 7.
-local function remote_icon(tab)
-    if tab.active_pane.domain_name ~= "local" then
-        return ICON_TAB_MUX
-    end
-    local cwd = tab.active_pane.current_working_dir
-    local host = cwd and short_host(cwd.host)
-    if (host and host ~= "" and host ~= LOCAL_HOSTNAME) or ssh_host_cached(tab) then
-        return ICON_TAB_SSH
-    end
-    return nil
+local HOST_NAMES = require("host_names")
+
+local function dir_name(cwd)
+    local path = cwd and cwd.file_path
+    return path and (path:gsub("/$", ""):match("([^/]+)$") or path)
 end
 
+-- Where a tab's shell runs, as three values: "mux", "ssh" or nil for local;
+-- the host's short name from host_names.lua, so one machine reads the same
+-- however it was reached; and the name of the focused directory, the title
+-- when nothing more specific names the tab. Plain ssh is found from the OSC 7
+-- host, or from ssh in the foreground when remote tmux swallows OSC 7; tmux
+-- then reports no directory, but its set-titles title is the name of its
+-- active window, worked out by the same rules.
+local function tab_place(tab)
+    local pane = tab.active_pane
+    local cwd = pane.current_working_dir
+    if pane.domain_name ~= "local" then
+        return "mux", pane.domain_name, dir_name(cwd)
+    end
+    local host = cwd and short_host(cwd.host)
+    if host and host ~= "" and host ~= LOCAL_HOSTNAME then
+        return "ssh", HOST_NAMES[host] or host, dir_name(cwd)
+    end
+    local remote = ssh_host_cached(tab)
+    if remote and remote ~= "" then
+        local title = pane.title ~= "ssh" and pane.title ~= "" and pane.title or nil
+        return "ssh", HOST_NAMES[remote] or remote, title
+    end
+    return nil, nil, dir_name(cwd)
+end
+
+-- The title is `host:name` on a remote tab and `name` on a local one, and tmux
+-- names its windows by the same rules, less the host. The name is a title set
+-- by hand, else the claude agent, else the directory. The agent beats the
+-- directory because several agents often share one project directory, and
+-- their directories would all render identically.
 wezterm.on("format-tab-title", function(tab)
     local state = claude_tab_cached(tab)
-    local title = tab.tab_title
-    if not (title and #title > 0) then
-        -- A claude session anywhere in the pane's process subtree names the tab
-        -- after the agent. Checked before the host and cwd fallbacks because it
-        -- is the more specific answer: several agents often share one project
-        -- directory, and their cwds would all render identically.
-        title = state and state.title
+    local kind, host, dir = tab_place(tab)
+    local name = tab.tab_title
+    if not (name and #name > 0) then
+        name = state and state.title
     end
-    if not (title and #title > 0) then
-        local cwd = tab.active_pane.current_working_dir
-        local host = cwd and short_host(cwd.host)
-        if host and host ~= "" and host ~= LOCAL_HOSTNAME then
-            -- OSC 7 reports a foreign host: we're SSH'd into another machine
-            -- that emits it (our dotfiles do).
-            title = host
-        else
-            local remote = ssh_host_cached(tab)
-            if remote and remote ~= "" then
-                -- Foreground process is ssh: use its destination host.
-                title = remote
-            elseif cwd and cwd.file_path then
-                title = cwd.file_path:gsub("/$", ""):match("([^/]+)$") or cwd.file_path
-            else
-                title = tab.active_pane.title
-            end
-        end
+    if not (name and #name > 0) then
+        name = dir
+    end
+    local title
+    if host then
+        title = name and (host .. ":" .. name) or host
+    else
+        title = name or tab.active_pane.title
     end
     -- Returned as format elements rather than a string so the index and the
     -- status bar can be coloured apart from the title. Only foregrounds are set,
@@ -414,9 +422,8 @@ wezterm.on("format-tab-title", function(tab)
         { Foreground = { Color = dim } },
         { Text = string.format(" %d ", tab.tab_index + 1) },
     }
-    local icon = remote_icon(tab)
-    if icon then
-        table.insert(elements, { Text = icon .. " " })
+    if kind then
+        table.insert(elements, { Text = (kind == "mux" and ICON_TAB_MUX or ICON_TAB_SSH) .. " " })
     end
 
     -- The active tab's state is on screen in the pane below it, so its bar stays
