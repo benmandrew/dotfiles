@@ -171,9 +171,9 @@ end
 -- Tab title: the claude agent running in the tab, else the remote hostname when
 -- SSH'd elsewhere, else the focused directory's name, unless manually renamed.
 local TAB_TITLE_MAX_WIDTH = 24
--- Room around the truncated title for the index (" 12 "), the status bar and the
--- trailing column.
-config.tab_max_width = TAB_TITLE_MAX_WIDTH + 6
+-- Room around the truncated title for the index (" 12 "), the remote icon and
+-- its space, the status bar and the trailing column.
+config.tab_max_width = TAB_TITLE_MAX_WIDTH + 8
 
 -- The tab index is a navigation aid rather than content, so it is painted at
 -- low contrast against whichever chip it sits on. Only the foreground is set,
@@ -185,6 +185,11 @@ local TAB_INDEX_FG_INACTIVE = hacktober.hover
 -- Claude session status, as a bar down the left edge of the chip. U+258E LEFT
 -- ONE QUARTER BLOCK, by codepoint so an editor can't mangle the literal glyph.
 local ICON_TAB_STATUS = utf8.char(0x258E)
+-- Remote tabs carry an icon after the index, local ones none: VS Code's remote
+-- mark for a mux domain, whose shell outlasts the connection, and a network for
+-- plain ssh, whose shell dies with it.
+local ICON_TAB_MUX = utf8.char(0xEB3A) -- nf-cod-remote
+local ICON_TAB_SSH = utf8.char(0xF0317) -- nf-md-lan
 -- Amber for working, blue for wanting you. Both are chosen to read against the
 -- inactive chip, which is the only place they are ever drawn: the active tab is
 -- the one you are looking at, so its own state is on screen already and its bar
@@ -355,6 +360,21 @@ end
 local ssh_host_cached = per_tab_cached(ssh_host)
 local claude_tab_cached = per_tab_cached(claude_tab)
 
+-- The icon for a remote tab, or nil for a local one. A mux pane belongs to its
+-- host's domain. Plain ssh is found as the title fallbacks find its host: the
+-- OSC 7 host, or ssh in the foreground when remote tmux swallows OSC 7.
+local function remote_icon(tab)
+    if tab.active_pane.domain_name ~= "local" then
+        return ICON_TAB_MUX
+    end
+    local cwd = tab.active_pane.current_working_dir
+    local host = cwd and short_host(cwd.host)
+    if (host and host ~= "" and host ~= LOCAL_HOSTNAME) or ssh_host_cached(tab) then
+        return ICON_TAB_SSH
+    end
+    return nil
+end
+
 wezterm.on("format-tab-title", function(tab)
     local state = claude_tab_cached(tab)
     local title = tab.tab_title
@@ -394,6 +414,10 @@ wezterm.on("format-tab-title", function(tab)
         { Foreground = { Color = dim } },
         { Text = string.format(" %d ", tab.tab_index + 1) },
     }
+    local icon = remote_icon(tab)
+    if icon then
+        table.insert(elements, { Text = icon .. " " })
+    end
 
     -- The active tab's state is on screen in the pane below it, so its bar stays
     -- dim and the colours are spent on the tabs you cannot see.
