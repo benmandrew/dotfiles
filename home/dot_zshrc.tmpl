@@ -678,7 +678,22 @@ opam() {
 # terminal, so raw mode, mouse reporting, the hidden cursor and the alt charset
 # stay set locally — which reads as a hung tab. Undo it on every ssh exit; a
 # clean exit sees no difference. `stty sane` alone leaves the DEC private modes.
+#
+# A bare `ssh <user>@<host>` to a host in wezterm.mux_domains
+# (home/.chezmoidata.yaml), typed in a local WezTerm pane, asks WezTerm to
+# attach that host's multiplexing domain instead. Local tmux would swallow the
+# escape sequence, and on a remote host SSH_CONNECTION is set, so both run ssh.
+typeset -gA _wezterm_mux_domains=(
+{{- range .wezterm.mux_domains }}
+  {{ if .user }}{{ printf "%s@%s" .user .host | quote }}{{ else }}{{ .host | quote }}{{ end }} {{ .name | quote }}
+{{- end }}
+)
 ssh() {
+  if (( $# == 1 )) && [[ -n $WEZTERM_PANE && -z $TMUX && -z $SSH_CONNECTION ]] &&
+     (( ${+_wezterm_mux_domains[$1]} )); then
+    printf '\e]1337;SetUserVar=wezterm_attach=%s\a' "$(print -rn -- "${_wezterm_mux_domains[$1]}" | base64)"
+    return
+  fi
   command ssh "$@"
   local ret=$?
   if [[ -t 1 ]]; then
@@ -699,7 +714,10 @@ _cache_eval starship init zsh
 # nothing, at 3 ms a prompt.
 RPROMPT=''
 
-if [[ -o interactive ]] && [[ -z "$TMUX" ]] && [[ -n "$SSH_CONNECTION" ]]; then
+# WEZTERM_PANE marks a pane wezterm-mux-server spawned, which inherits
+# SSH_CONNECTION from the session that started the server; tmux there would
+# nest inside a pane that already outlasts the connection.
+if [[ -o interactive ]] && [[ -z "$TMUX" ]] && [[ -n "$SSH_CONNECTION" ]] && [[ -z "$WEZTERM_PANE" ]]; then
   # Allow scripts to disable tmux on remote machines
   if [[ -z "$SSH_TMUX_DISABLE" ]]; then
     case "$SSH_ORIGINAL_COMMAND" in

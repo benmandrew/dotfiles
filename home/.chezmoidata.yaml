@@ -20,6 +20,18 @@ atuin:
     av2: av2
     av3: av3
 
+wezterm:
+  ## Hosts WezTerm attaches as SSH multiplexing domains, rendered into
+  ## dot_config/wezterm/mux_domains.lua.tmpl. Typing `ssh <user>@<host>` in a
+  ## local WezTerm pane attaches the domain instead (the ssh function in
+  ## dot_zshrc.tmpl), so remote panes live in wezterm-mux-server there and
+  ## outlast the connection. Each host needs a WezTerm whose mux protocol
+  ## matches this machine's, since a mismatch refuses the connection.
+  mux_domains:
+    - name: manc
+      host: ben-manchester
+      user: y19056ba
+
 icons:
   ## Launcher icons that run_onchange_after_recolour-icons.sh.tmpl redraws in
   ## the palette of benmandrew.com, on Linux. Each key is a .desktop filename,

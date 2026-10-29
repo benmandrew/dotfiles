@@ -800,6 +800,62 @@ wezterm.on("copied-if-selection", function(window, pane)
     end
 end)
 
+-- Remote panes for the hosts in mux_domains.lua live in wezterm-mux-server on
+-- the host, so they outlast the connection and draw as native panes, with no
+-- tmux inside. The ssh function in .zshrc sets this user var in place of
+-- running ssh to one of them. Like `tmux new-session -A`, it reuses a tab of
+-- this window already on the domain, else opens one. Opening attaches a
+-- detached domain into this window, bringing the host's existing tabs with it,
+-- so the new tab is closed again when one came in. The AttachDomain action
+-- leaves imported tabs at the server's size, 80x24 for a new server, until
+-- something resizes the window; spawn_tab sizes them all to it. The remote tab
+-- then takes the place of the tab ssh was typed in, as ssh itself would.
+config.ssh_domains = require("mux_domains")
+
+-- MoveTab and CloseCurrentPane act on the window's active tab and pane,
+-- whatever pane perform_action is given, so each tab is activated first.
+local function close_tab(window, tab)
+    tab:activate()
+    window:perform_action(act.CloseCurrentPane({ confirm = false }), tab:active_pane())
+end
+
+wezterm.on("user-var-changed", function(window, pane, name, value)
+    if name ~= "wezterm_attach" or not wezterm.mux.get_domain(value) then
+        return
+    end
+    local mux_window = window:mux_window()
+    local function domain_tab(except)
+        for _, tab in ipairs(mux_window:tabs()) do
+            if tab:tab_id() ~= except and tab:active_pane():get_domain_name() == value then
+                return tab
+            end
+        end
+    end
+    local target = domain_tab()
+    if not target then
+        local spawned = mux_window:spawn_tab({ domain = { DomainName = value } })
+        target = domain_tab(spawned:tab_id())
+        if target then
+            close_tab(window, spawned)
+        else
+            target = spawned
+        end
+    end
+    local caller = pane:tab()
+    local caller_index
+    for i, tab in ipairs(mux_window:tabs()) do
+        if tab:tab_id() == caller:tab_id() then
+            caller_index = i - 1
+        end
+    end
+    target:activate()
+    window:perform_action(act.MoveTab(caller_index), pane)
+    if #caller:panes() == 1 then
+        close_tab(window, caller)
+        target:activate()
+    end
+end)
+
 -- Behaviour
 -- The right status only repaints when the tab bar is recomputed on this tick,
 -- so the stock 1000ms makes the "copied" flash appear
@@ -1090,6 +1146,20 @@ bind(
         end),
     }),
     "New workspace"
+)
+-- Remote domains. Detach mirrors tmux's prefix d: the panes stay running in
+-- the host's mux server, and attaching again brings them back.
+bind("Remote", "a", "LEADER|SHIFT", act.ShowLauncherArgs({ flags = "FUZZY|DOMAINS" }), "Attach a remote domain")
+bind(
+    "Remote",
+    "d",
+    "LEADER",
+    wezterm.action_callback(function(window, pane)
+        if pane:get_domain_name() ~= "local" then
+            window:perform_action(act.DetachDomain("CurrentPaneDomain"), pane)
+        end
+    end),
+    "Detach this pane's remote domain"
 )
 -- Re-read this file. Mirrors tmux's `bind r source-file ~/.tmux.conf`.
 bind("Config", "r", "LEADER", act.ReloadConfiguration, "Reload the config")
