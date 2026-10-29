@@ -23,6 +23,7 @@ local hacktober = {
     surface = "#191918",
     hover = "#464444",
     text = "#c9c9c9",
+    white = "#ffffff",
     orange = "#c75a22",
 }
 config.colors = {
@@ -248,11 +249,11 @@ local function active_mux_pane(tab)
     return nil
 end
 
--- If the tab's active foreground process is `ssh`, return the destination
--- host (short form, user@ and domain stripped); otherwise nil. Covers remote
--- machines whose OSC 7 never reaches WezTerm — e.g. anything behind the
--- remote tmux our dotfiles auto-start, which swallows the sequence.
-local function ssh_host(tab)
+-- If the tab's active foreground process is `ssh`, return its destination as
+-- typed ("user@host"); otherwise nil. Covers remote machines whose OSC 7 never
+-- reaches WezTerm — e.g. anything behind the remote tmux our dotfiles
+-- auto-start, which swallows the sequence.
+local function ssh_destination(tab)
     local pane = active_mux_pane(tab)
     if not pane then
         return nil
@@ -278,7 +279,7 @@ local function ssh_host(tab)
             end
         else
             -- First positional argument is the destination.
-            return short_host(a:gsub(".*@", ""))
+            return a
         end
     end
     return nil
@@ -356,7 +357,7 @@ local function per_tab_cached(lookup)
     end
 end
 
-local ssh_host_cached = per_tab_cached(ssh_host)
+local ssh_destination_cached = per_tab_cached(ssh_destination)
 local claude_tab_cached = per_tab_cached(claude_tab)
 
 local HOST_NAMES = require("host_names")
@@ -366,30 +367,48 @@ local function dir_name(cwd)
     return path and (path:gsub("/$", ""):match("([^/]+)$") or path)
 end
 
--- Where a tab's shell runs, as three values: "mux", "ssh" or nil for local;
+-- The ssh destination behind each mux domain's short name, for reaching a host
+-- the tab knows only by that name.
+local MUX_DESTINATIONS = {}
+for _, domain in ipairs(require("mux_domains")) do
+    local user = domain.username and (domain.username .. "@") or ""
+    MUX_DESTINATIONS[domain.name] = user .. domain.remote_address
+end
+
+-- Where a tab's shell runs, as four values: "mux", "ssh" or nil for local;
 -- the host's short name from host_names.lua, so one machine reads the same
--- however it was reached; and the name of the focused directory, the title
--- when nothing more specific names the tab. Plain ssh is found from the OSC 7
--- host, or from ssh in the foreground when remote tmux swallows OSC 7; tmux
--- then reports no directory, but its set-titles title is the name of its
--- active window, worked out by the same rules.
+-- however it was reached; the name of the focused directory, the title when
+-- nothing more specific names the tab; and an ssh destination for the host.
+-- Plain ssh is found from the OSC 7 host, or from ssh in the foreground when
+-- remote tmux swallows OSC 7; tmux then reports no directory, but its
+-- set-titles title is the name of its active window, worked out by the same
+-- rules.
 local function tab_place(tab)
     local pane = tab.active_pane
     local cwd = pane.current_working_dir
     if pane.domain_name ~= "local" then
-        return "mux", pane.domain_name, dir_name(cwd)
+        local name = pane.domain_name
+        return "mux", name, dir_name(cwd), MUX_DESTINATIONS[name] or name
     end
     local host = cwd and short_host(cwd.host)
     if host and host ~= "" and host ~= LOCAL_HOSTNAME then
-        return "ssh", HOST_NAMES[host] or host, dir_name(cwd)
+        local name = HOST_NAMES[host] or host
+        return "ssh", name, dir_name(cwd), MUX_DESTINATIONS[name] or host
     end
-    local remote = ssh_host_cached(tab)
-    if remote and remote ~= "" then
+    local destination = ssh_destination_cached(tab)
+    if destination and destination ~= "" then
+        host = short_host((destination:gsub(".*@", "")))
         local title = pane.title ~= "ssh" and pane.title ~= "" and pane.title or nil
-        return "ssh", HOST_NAMES[remote] or remote, title
+        return "ssh", HOST_NAMES[host] or host, title, destination
     end
-    return nil, nil, dir_name(cwd)
+    return nil, nil, dir_name(cwd), nil
 end
+
+-- The host of each window's active tab, by window id, as { name, destination },
+-- or false for a local tab; the right status shows that host's metrics. Kept
+-- here because format-tab-title already works it out at 10Hz, and update-status
+-- is handed a window whose panes lack the fields tab_place reads.
+local active_place = {}
 
 -- The title is `host:name` on a remote tab and `name` on a local one, and tmux
 -- names its windows by the same rules, less the host. The name is a title set
@@ -398,7 +417,10 @@ end
 -- their directories would all render identically.
 wezterm.on("format-tab-title", function(tab)
     local state = claude_tab_cached(tab)
-    local kind, host, dir = tab_place(tab)
+    local kind, host, dir, destination = tab_place(tab)
+    if tab.is_active then
+        active_place[tab.window_id] = host and { name = host, destination = destination } or false
+    end
     local name = tab.tab_title
     if not (name and #name > 0) then
         name = state and state.title
@@ -513,18 +535,15 @@ if IS_MACOS then
     MACOS_BOOTTIME = tonumber((capture({ "sysctl", "-n", "kern.boottime" }) or ""):match("sec%s*=%s*(%d+)"))
 end
 
--- Linux CPU: diff two /proc/stat snapshots taken across calls. Since the refresh
--- cadence is METRICS_REFRESH_SECONDS, the delta spans that window without the
--- blocking `sleep 0.2` the tmux status scripts used to need. No baseline on the
--- first call -> nil.
-local prev_cpu_linux = nil
-local function cpu_linux()
-    local f = io.open("/proc/stat", "r")
-    if not f then
-        return nil
-    end
-    local line = f:read("*l")
-    f:close()
+-- Linux metrics, parsed from text so that a remote host's /proc read over ssh
+-- goes through the same code as the local files.
+--
+-- CPU diffs two /proc/stat snapshots taken across calls, `prev` being the last
+-- one's totals for the same machine. Since the refresh cadence is
+-- METRICS_REFRESH_SECONDS, the delta spans that window without the blocking
+-- `sleep 0.2` the tmux status scripts used to need. No baseline on the first
+-- call -> nil.
+local function cpu_from_stat(line, prev)
     -- "cpu  user nice system idle iowait irq softirq steal guest guest_nice";
     -- idle is field 4. Only the first eight count, as in .config/tmux/status.sh:
     -- the kernel already folds guest time into user and nice, so summing fields
@@ -541,14 +560,57 @@ local function cpu_linux()
             idle = n
         end
     end
+    if i == 0 then
+        return nil, prev
+    end
     local pct = nil
-    if prev_cpu_linux and total > prev_cpu_linux.total then
-        local dt = total - prev_cpu_linux.total
-        local di = idle - prev_cpu_linux.idle
+    if prev and total > prev.total then
+        local dt = total - prev.total
+        local di = idle - prev.idle
         pct = math.floor((dt - di) * 100 / dt + 0.5)
     end
-    prev_cpu_linux = { total = total, idle = idle }
+    return pct, { total = total, idle = idle }
+end
+
+-- RAM: used = MemTotal - MemAvailable (kB), rendered in GiB, matching
+-- .config/tmux/status.sh.
+local function ram_from_meminfo(text)
+    local total = tonumber((text or ""):match("MemTotal:%s+(%d+)"))
+    local avail = tonumber((text or ""):match("MemAvailable:%s+(%d+)"))
+    if not (total and avail) then
+        return nil
+    end
+    return string.format("%5.1fG/%5.1fG", (total - avail) / 1048576, total / 1048576)
+end
+
+local function uptime_from_proc(text)
+    local secs = tonumber((text or ""):match("^%s*([%d.]+)"))
+    return secs and fmt_uptime(math.floor(secs)) or nil
+end
+
+local function read_file(path, what)
+    local f = io.open(path, "r")
+    if not f then
+        return nil
+    end
+    local text = f:read(what)
+    f:close()
+    return text
+end
+
+local prev_cpu_linux = nil
+local function cpu_linux()
+    local pct
+    pct, prev_cpu_linux = cpu_from_stat(read_file("/proc/stat", "*l"), prev_cpu_linux)
     return pct
+end
+
+local function ram_linux()
+    return ram_from_meminfo(read_file("/proc/meminfo", "*a"))
+end
+
+local function uptime_linux()
+    return uptime_from_proc(read_file("/proc/uptime", "*l"))
 end
 
 -- macOS CPU: sum of per-process %cpu / core count. Cheap and non-blocking,
@@ -563,32 +625,6 @@ local function cpu_macos()
         sum = sum + tonumber(n)
     end
     return math.min(100, math.floor(sum / MACOS_NCPU + 0.5))
-end
-
--- Linux RAM: used = MemTotal - MemAvailable (kB), rendered in GiB, matching
--- .config/tmux/status.sh.
-local function ram_linux()
-    local f = io.open("/proc/meminfo", "r")
-    if not f then
-        return nil
-    end
-    local total, avail
-    for line in f:lines() do
-        local k, v = line:match("^(%w+):%s+(%d+)")
-        if k == "MemTotal" then
-            total = tonumber(v)
-        elseif k == "MemAvailable" then
-            avail = tonumber(v)
-        end
-        if total and avail then
-            break
-        end
-    end
-    f:close()
-    if not (total and avail) then
-        return nil
-    end
-    return string.format("%5.1fG/%5.1fG", (total - avail) / 1048576, total / 1048576)
 end
 
 -- macOS RAM: used = (active + wired + compressed) pages * page size; total from
@@ -607,24 +643,32 @@ local function ram_macos()
     return string.format("%5.1fG/%5.1fG", used / 1073741824, total / 1073741824)
 end
 
-local function uptime_linux()
-    local f = io.open("/proc/uptime", "r")
-    if not f then
-        return nil
-    end
-    local secs = f:read("*n")
-    f:close()
-    return secs and fmt_uptime(math.floor(secs)) or nil
-end
-
 local function uptime_macos()
     return MACOS_BOOTTIME and fmt_uptime(os.time() - MACOS_BOOTTIME) or nil
 end
 
--- Cached formatted right-status text; refreshed at most every
+-- Fixed-width fields so a changing value doesn't nudge the row: the right
+-- status is right-aligned, so any width change shifts everything to its left.
+-- CPU pads to 3 digits (the 100% case), RAM to %5.1f per number (as
+-- .config/tmux/status.sh does), uptime left-justified into a field wide enough
+-- for "123d 4h".
+local function format_metrics(cpu, ram, up)
+    local cpu_s = cpu and string.format("%3d%%", cpu) or " --%"
+    return string.format(
+        " %s %s   %s %-13s   %s %-7s ",
+        ICON_CPU,
+        cpu_s,
+        ICON_RAM,
+        ram or "--",
+        ICON_UPTIME,
+        up or "--"
+    )
+end
+
+-- Cached formatted right-status text for this machine; refreshed at most every
 -- METRICS_REFRESH_SECONDS.
 local metrics_cache = { at = -1, text = nil }
-local function metrics_text()
+local function local_metrics_text()
     local now = os.time()
     local age = now - metrics_cache.at
     if metrics_cache.text and age >= 0 and age < METRICS_REFRESH_SECONDS then
@@ -636,25 +680,65 @@ local function metrics_text()
     else
         cpu, ram, up = cpu_linux(), ram_linux(), uptime_linux()
     end
-    -- Fixed-width fields so a changing value doesn't nudge the row: the right
-    -- status is right-aligned, so any width change shifts everything to its left.
-    -- CPU pads to 3 digits (the 100% case), RAM to %5.1f per number (as
-    -- .config/tmux/status.sh does), uptime left-justified into a field wide
-    -- enough for "123d 4h".
-    local cpu_s = cpu and string.format("%3d%%", cpu) or " --%"
-    local text =
-        string.format(" %s %s   %s %-13s   %s %-7s ", ICON_CPU, cpu_s, ICON_RAM, ram or "--", ICON_UPTIME, up or "--")
-    metrics_cache = { at = now, text = text }
-    return text
+    metrics_cache = { at = now, text = format_metrics(cpu, ram, up) }
+    return metrics_cache.text
 end
 
-local function metrics_status()
+-- A remote host's metrics, shown while a window's active tab is on it. One ssh
+-- run per METRICS_REFRESH_SECONDS reads the three /proc files, taking 60-140 ms
+-- through the ControlMaster socket ~/.ssh/config sets up and 520 ms without
+-- one. The run starts from call_after, so update-status paints the last
+-- reading rather than waiting on ssh, and BatchMode stops a host that wants a
+-- password from prompting. Each host keeps its own CPU baseline, so its first
+-- reading has no CPU figure, and a failed run shows every field as "--".
+local REMOTE_METRICS_COMMAND = "head -n 1 /proc/stat; grep -E '^Mem(Total|Available):' /proc/meminfo; cat /proc/uptime"
+local remote_metrics = {}
+local function remote_metrics_text(place)
+    local entry = remote_metrics[place.name]
+    if not entry then
+        entry = { at = -1 }
+        remote_metrics[place.name] = entry
+    end
+    local now = os.time()
+    local age = now - entry.at
+    if not entry.running and (age < 0 or age >= METRICS_REFRESH_SECONDS) then
+        entry.running, entry.at = true, now
+        wezterm.time.call_after(0, function()
+            local out = capture({
+                "ssh",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=5",
+                place.destination,
+                REMOTE_METRICS_COMMAND,
+            })
+            local cpu
+            cpu, entry.prev_cpu = cpu_from_stat(out and out:match("cpu [^\n]*"), entry.prev_cpu)
+            local up = uptime_from_proc(out and out:match("\n([%d.]+ [%d.]+)%s*$"))
+            entry.text = format_metrics(cpu, ram_from_meminfo(out), up)
+            entry.running = false
+        end)
+    end
+    return entry.text or format_metrics(nil, nil, nil)
+end
+
+-- The right status ends with an icon for whether its figures are this
+-- machine's or a remote host's. Both are one cell wide, so a switch between
+-- them leaves the row in place.
+local ICON_STATUS_LOCAL = utf8.char(0xF0322) -- nf-md-laptop
+local ICON_STATUS_REMOTE = utf8.char(0xF048D) -- nf-md-server_network
+local function metrics_status(place)
+    local icon = place and ICON_STATUS_REMOTE or ICON_STATUS_LOCAL
     return wezterm.format({
         -- Reset intensity so a preceding bold segment (the flash) can't bleed in.
         { Attribute = { Intensity = "Normal" } },
         { Background = { Color = hacktober.surface } },
         { Foreground = { Color = hacktober.text } },
-        { Text = metrics_text() },
+        { Text = place and remote_metrics_text(place) or local_metrics_text() },
+        { Attribute = { Intensity = "Bold" } },
+        { Foreground = { Color = hacktober.white } },
+        { Text = icon .. " " },
     })
 end
 
@@ -665,9 +749,10 @@ end
 -- the metrics around.
 local flash_on = false
 
-local function right_status()
+local function right_status(window)
+    local place = active_place[window:window_id()]
     if not flash_on then
-        return metrics_status()
+        return metrics_status(place)
     end
     return wezterm.format({
         { Background = { Color = hacktober.orange } },
@@ -677,7 +762,7 @@ local function right_status()
         { Attribute = { Intensity = "Normal" } },
         { Background = { Color = hacktober.bg } },
         { Text = "  " },
-    }) .. metrics_status()
+    }) .. metrics_status(place)
 end
 
 -- Left status: modal state, which no tab title can carry because it belongs to
@@ -781,7 +866,7 @@ end
 wezterm.on("update-status", function(window)
     clear_active_bell(window)
     window:set_left_status(left_status(window))
-    window:set_right_status(right_status())
+    window:set_right_status(right_status(window))
 end)
 
 -- Clipboard indicator. WezTerm has no clipboard event, so every binding that
@@ -799,13 +884,13 @@ local function start_flash(window)
     local this_flash = copied_generation
     flash_on = true
     pcall(function()
-        window:set_right_status(right_status())
+        window:set_right_status(right_status(window))
     end)
     wezterm.time.call_after(COPIED_FLASH_SECONDS, function()
         if copied_generation == this_flash then
             flash_on = false
             pcall(function()
-                window:set_right_status(right_status())
+                window:set_right_status(right_status(window))
             end)
         end
     end)
