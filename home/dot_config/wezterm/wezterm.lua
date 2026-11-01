@@ -382,11 +382,13 @@ end
 -- Plain ssh is found from the OSC 7 host, or from ssh in the foreground when
 -- remote tmux swallows OSC 7; tmux then reports no directory, but its
 -- set-titles title is the name of its active window, worked out by the same
--- rules.
+-- rules. The "Connecting..." tab WezTerm shows while a domain attaches is on
+-- TermWizTerminalDomain; it counts as local, so its own title shows through
+-- in place of the domain name.
 local function tab_place(tab)
     local pane = tab.active_pane
     local cwd = pane.current_working_dir
-    if pane.domain_name ~= "local" then
+    if pane.domain_name ~= "local" and pane.domain_name ~= "TermWizTerminalDomain" then
         local name = pane.domain_name
         return "mux", name, dir_name(cwd), MUX_DESTINATIONS[name] or name
     end
