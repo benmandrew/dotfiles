@@ -919,56 +919,56 @@ end)
 -- Remote panes for the hosts in mux_domains.lua live in wezterm-mux-server on
 -- the host, so they outlast the connection and draw as native panes, with no
 -- tmux inside. The ssh function in .zshrc sets this user var in place of
--- running ssh to one of them. Like `tmux new-session -A`, it reuses a tab of
--- this window already on the domain, else opens one. Opening attaches a
--- detached domain into this window, bringing the host's existing tabs with it,
--- so the new tab is closed again when one came in. The AttachDomain action
--- leaves imported tabs at the server's size, 80x24 for a new server, until
--- something resizes the window; spawn_tab sizes them all to it. The remote tab
--- then takes the place of the tab ssh was typed in, as ssh itself would.
+-- running ssh to one of them. Each host gets a workspace of its own name, so
+-- its tabs sit together and LEADER c there opens another on the host; LEADER S
+-- leads back. Like `tmux new-session -A`, it switches to that workspace when it
+-- exists, else opens it. Opening attaches a detached domain into the new
+-- window, bringing the host's existing tabs with it, so the spawned tab is
+-- killed again when one came in. The window is spawned at this tab's size,
+-- since the AttachDomain action leaves imported tabs at the server's size, 80x24
+-- for a new server, until something resizes the window. The tab ssh was typed
+-- in closes, as ssh would have taken it over, unless it is the window's last.
 config.ssh_domains = require("mux_domains")
 
--- MoveTab and CloseCurrentPane act on the window's active tab and pane,
--- whatever pane perform_action is given, so each tab is activated first.
-local function close_tab(window, tab)
-    tab:activate()
-    window:perform_action(act.CloseCurrentPane({ confirm = false }), tab:active_pane())
+-- Through the CLI, since CloseCurrentPane reaches only the active pane of a
+-- window on screen, and the window switches workspace asynchronously.
+local function kill_pane(p)
+    wezterm.background_child_process({
+        wezterm.executable_dir .. "/wezterm",
+        "cli",
+        "kill-pane",
+        "--pane-id",
+        tostring(p:pane_id()),
+    })
 end
 
 wezterm.on("user-var-changed", function(window, pane, name, value)
     if name ~= "wezterm_attach" or not wezterm.mux.get_domain(value) then
         return
     end
-    local mux_window = window:mux_window()
-    local function domain_tab(except)
-        for _, tab in ipairs(mux_window:tabs()) do
-            if tab:tab_id() ~= except and tab:active_pane():get_domain_name() == value then
-                return tab
-            end
-        end
-    end
-    local target = domain_tab()
-    if not target then
-        local spawned = mux_window:spawn_tab({ domain = { DomainName = value } })
-        target = domain_tab(spawned:tab_id())
-        if target then
-            close_tab(window, spawned)
-        else
-            target = spawned
+    local exists = false
+    for _, mux_window in ipairs(wezterm.mux.all_windows()) do
+        if mux_window:get_workspace() == value then
+            exists = true
         end
     end
     local caller = pane:tab()
-    local caller_index
-    for i, tab in ipairs(mux_window:tabs()) do
-        if tab:tab_id() == caller:tab_id() then
-            caller_index = i - 1
+    if not exists then
+        local size = caller:get_size()
+        local _, spawned_pane, mux_window = wezterm.mux.spawn_window({
+            domain = { DomainName = value },
+            workspace = value,
+            width = size.cols,
+            height = size.rows,
+        })
+        if #mux_window:tabs() > 1 then
+            kill_pane(spawned_pane)
         end
     end
-    target:activate()
-    window:perform_action(act.MoveTab(caller_index), pane)
-    if #caller:panes() == 1 then
-        close_tab(window, caller)
-        target:activate()
+    local close_caller = #caller:panes() == 1 and #window:mux_window():tabs() > 1
+    window:perform_action(act.SwitchToWorkspace({ name = value }), pane)
+    if close_caller then
+        kill_pane(pane)
     end
 end)
 
