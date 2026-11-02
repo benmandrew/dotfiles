@@ -921,19 +921,17 @@ end)
 -- Remote panes for the hosts in mux_domains.lua live in wezterm-mux-server on
 -- the host, so they outlast the connection and draw as native panes, with no
 -- tmux inside. The ssh function in .zshrc sets this user var in place of
--- running ssh to one of them. Each host gets a workspace of its own name, so
--- its tabs sit together and LEADER c there opens another on the host; LEADER S
--- leads back. Like `tmux new-session -A`, it switches to that workspace when it
--- exists, else opens it. Opening attaches a detached domain into the new
--- window, bringing the host's existing tabs with it, so the spawned tab is
--- killed again when one came in. The window is spawned at this tab's size,
--- since the AttachDomain action leaves imported tabs at the server's size, 80x24
--- for a new server, until something resizes the window. The tab ssh was typed
--- in closes, as ssh would have taken it over, unless it is the window's last.
+-- running ssh to one of them. Like `tmux new-session -A`, it goes to a tab of
+-- this window already on the host, else opens one beside the caller, which
+-- stays, as ssh may have been typed in one pane of a tab with other work.
+-- Opening attaches a detached domain into this window, bringing the host's
+-- existing tabs with it, so the new tab is killed again when one came in.
+-- spawn_tab sizes them all to the window, where AttachDomain would leave them
+-- at the server's size, 80x24 for a new server, until a resize.
 config.ssh_domains = require("mux_domains")
 
 -- Through the CLI, since CloseCurrentPane reaches only the active pane of a
--- window on screen, and the window switches workspace asynchronously.
+-- window, whatever pane perform_action is given.
 local function kill_pane(p)
     wezterm.background_child_process({
         wezterm.executable_dir .. "/wezterm",
@@ -944,34 +942,38 @@ local function kill_pane(p)
     })
 end
 
-wezterm.on("user-var-changed", function(window, pane, name, value)
+-- A tab of mux_window on the domain, other than except. While a domain
+-- attaches, the window also holds a "wezterm: Connecting..." tab, whose pane
+-- may already be gone from the mux, so the lookup is guarded. Counting that tab
+-- once killed the only remote pane, and the stale window mapping it left
+-- panicked the GUI on the next resync (wezterm-client/src/domain.rs).
+local function domain_tab(mux_window, domain, except)
+    for _, tab in ipairs(mux_window:tabs()) do
+        local ok, name = pcall(function()
+            return tab:active_pane():get_domain_name()
+        end)
+        if ok and name == domain and tab:tab_id() ~= except then
+            return tab
+        end
+    end
+end
+
+wezterm.on("user-var-changed", function(window, _pane, name, value)
     if name ~= "wezterm_attach" or not wezterm.mux.get_domain(value) then
         return
     end
-    local exists = false
-    for _, mux_window in ipairs(wezterm.mux.all_windows()) do
-        if mux_window:get_workspace() == value then
-            exists = true
-        end
-    end
-    local caller = pane:tab()
-    if not exists then
-        local size = caller:get_size()
-        local _, spawned_pane, mux_window = wezterm.mux.spawn_window({
-            domain = { DomainName = value },
-            workspace = value,
-            width = size.cols,
-            height = size.rows,
-        })
-        if #mux_window:tabs() > 1 then
+    local mux_window = window:mux_window()
+    local target = domain_tab(mux_window, value)
+    if not target then
+        local spawned, spawned_pane = mux_window:spawn_tab({ domain = { DomainName = value } })
+        target = domain_tab(mux_window, value, spawned:tab_id())
+        if target then
             kill_pane(spawned_pane)
+        else
+            target = spawned
         end
     end
-    local close_caller = #caller:panes() == 1 and #window:mux_window():tabs() > 1
-    window:perform_action(act.SwitchToWorkspace({ name = value }), pane)
-    if close_caller then
-        kill_pane(pane)
-    end
+    target:activate()
 end)
 
 -- Behaviour
