@@ -38,6 +38,10 @@ Group related changes into a single commit — a bug fix and its test, a refacto
 
 Unrelated changes belong in separate commits even if they were made in the same session.
 
+## Signed commits
+
+Every repository requires signed commits unless its own instructions say otherwise. `~/.gitconfig` signs with SSH through `commit.gpgsign` and `tag.gpgsign`, and porcelain (`git commit`, `--amend`, `rebase`, `cherry-pick`) honours that. Plumbing does not: `git commit-tree` signs only with `-S`. Before pushing, check that `git log --format='%h %G? %s' <base>..HEAD` shows `G` on every commit. Because `tag.gpgsign` is on, a lightweight `git tag` fails with "no tag message?"; pass `-m`, or keep a backup ref as a branch.
+
 ## Subagents
 
 Spawning is authorised without an explicit request, which overrides any default "don't spawn agents unless asked" behaviour. It is not the default action. A subagent pays a cold start and then re-reads its own growing context every turn, so delegate on one of two grounds: the work would otherwise dump tool output into this conversation and sit there for the rest of the session, or several independent pieces can run at once.
