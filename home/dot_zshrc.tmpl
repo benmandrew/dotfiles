@@ -239,6 +239,12 @@ path+=(
 
 {{ end }}
 
+# Doom Emacs's CLI (doom sync, doom doctor), in the clone install_doom_emacs
+# makes. Behind everything, since the directory holds only Doom's scripts. (N)
+# drops it on a machine that never opted into Doom.
+# shellcheck disable=SC1036  # zsh glob qualifier, read as bash by the linter
+path+=("$HOME"/.config/emacs/bin(N))
+
 # OSC 7: report cwd to the terminal on every prompt. Needed for WezTerm to
 # track the tab's directory over SSH (and through tmux, remote or local),
 # since it can't introspect a remote process's cwd directly like it can for

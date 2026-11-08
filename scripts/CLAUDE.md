@@ -43,6 +43,7 @@ Steps are *idempotent*: they skip a tool already present and upgrade only under 
 - Iosevka Term comes from the release zip, since Homebrew has only its Nerd Font build, under another family name. `MEMBERS` in `steps/terminal_font.py` must match the weights `wezterm.lua` uses.
 - The zathura tap needs `brew trust` under Homebrew 6, as does `Noah4ever/tap` in the `deps` Make target. `zathurarc` relies on SyncTeX, so `--with-synctex` goes on install and upgrade. `_link_pdf_plugin` runs every time, since zathura scans only `$(brew --prefix zathura)/lib/zathura`. Poppler keeps one renderer on both platforms.
 - `install_latex` on Linux installs upstream TeX Live, since apt holds it at the distro's year. It fetches `install-tl` and its SHA-512 from one resolved mirror, since `mirror.ctan.org` otherwise serves the pair from different mirrors. The old year is deleted only after the new one runs.
+- `install_doom_emacs` takes Linux's Emacs from the nix profile, since jammy's apt holds 27.1 and Doom needs 29.1. It runs `bin/doom` with `EMACS` set, since an older Emacs can come first on `PATH`. No probe calls `bin/doom`, which writes a log on every run.
 - No step registers Model Context Protocol (MCP) servers.
 
 ## `verify-install.sh`

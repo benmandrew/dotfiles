@@ -191,6 +191,12 @@ LINUX = Plan(
             " on.",
             _step("install_opam"),
         ),
+        OptionalStep(
+            "doom-emacs",
+            "Doom Emacs: terminal Emacs from the nix profile, with Doom in evil mode, as an"
+            " alternative to Neovim. The next chezmoi apply installs its packages.",
+            _step("install_doom_emacs"),
+        ),
         _step("install_neovim_if_missing"),
         # After every other step: it runs each tool to get its completion
         # script.
@@ -312,6 +318,12 @@ MACOS = Plan(
             " none, seven to ten minutes in CI — only for a machine someone writes OCaml"
             " on.",
             _step("install_opam"),
+        ),
+        OptionalStep(
+            "doom-emacs",
+            "Doom Emacs: terminal Emacs from Homebrew, with Doom in evil mode, as an"
+            " alternative to Neovim. The next chezmoi apply installs its packages.",
+            _step("install_doom_emacs"),
         ),
         _step("install_neovim_if_missing"),
         # After every other step: it runs each tool to get its completion

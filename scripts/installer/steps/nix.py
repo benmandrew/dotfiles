@@ -132,7 +132,7 @@ def install_nix(context: StepContext) -> None:
     tools.require_runs(context, "nix")
 
 
-def _profile_has(context: StepContext, package: str) -> bool:
+def profile_has(context: StepContext, package: str) -> bool:
     """Whether the user's nix profile holds a nixpkgs package of that name."""
     listing = context.capture(["nix", "profile", "list"], quiet=True) or ""
     entry = re.compile(rf"Flake attribute:\s+legacyPackages\.[^.]+\.{re.escape(package)}")
@@ -146,7 +146,7 @@ def _install_modern_bash(context: StepContext) -> None:
         return
     tools.require_command(context, "nix")
     bash = context.home / ".nix-profile" / "bin" / "bash"
-    if _profile_has(context, "bash"):
+    if profile_has(context, "bash"):
         if not context.upgrade:
             context.log("Modern bash already installed; skipping")
             return
@@ -237,7 +237,7 @@ def install_nix_direnv(context: StepContext) -> None:
             _fetch_direnvrc(context, tag, target)
     _wire(context)
     # Last, once nothing in direnvrc loads the profile's copy.
-    if _profile_has(context, "nix-direnv"):
+    if profile_has(context, "nix-direnv"):
         context.log("Removing nix-direnv from the nix profile")
         context.run(["nix", "profile", "remove", "nix-direnv"])
 

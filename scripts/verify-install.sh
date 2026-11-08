@@ -6,7 +6,8 @@ set -uo pipefail
 # missing, so on macOS every brew-installed tool reported FAIL unless brew
 # happened to be on the caller's PATH already; /usr/local/go/bin, ~/.opam and
 # ~/.elan/bin cover the three toolchains that install outside ~/.local/bin.
-export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${HOME}/.fzf/bin:${HOME}/go/bin:${HOME}/.elan/bin:${HOME}/.opam/default/bin:/usr/local/go/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/opt/nvim-linux-x86_64/bin:/opt/nvim-linux-arm64/bin:/nix/var/nix/profiles/default/bin:${PATH}"
+# ~/.nix-profile/bin holds Linux's Emacs.
+export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${HOME}/.fzf/bin:${HOME}/go/bin:${HOME}/.elan/bin:${HOME}/.opam/default/bin:/usr/local/go/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/opt/nvim-linux-x86_64/bin:/opt/nvim-linux-arm64/bin:/nix/var/nix/profiles/default/bin:${HOME}/.nix-profile/bin:${PATH}"
 
 os_name="$(uname -s)"
 
@@ -330,6 +331,11 @@ check_cmd_optional docker
 check_cmd_optional opam
 check_cmd_optional ocamllsp
 check_cmd_optional ocamlformat
+
+# Optional per machine. bin/doom is no probe, since every call writes a log
+# under ~/.config/emacs/.local.
+check_cmd_optional emacs
+check_optional "doom emacs" test -x "${HOME}/.config/emacs/bin/doom"
 
 check_dir "tpm" "${HOME}/.tmux/plugins/tpm"
 # tpm clones its plugins beside itself, so a declared plugin that is not there
