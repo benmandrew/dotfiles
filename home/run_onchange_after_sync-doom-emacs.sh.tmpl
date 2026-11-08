@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Run `doom sync` whenever the module list or the package list changes.
+#
+# Doom installs a module's packages only during a sync, so a module enabled in
+# init.el on one machine stays missing on the others until something runs it.
+# config.el needs no sync, so it is not hashed. `after_`, so the new files are
+# already in ~/.config/doom when Doom reads them.
+# init-hash: {{ include "dot_config/doom/init.el" | sha256sum }}
+# packages-hash: {{ include "dot_config/doom/packages.el" | sha256sum }}
+#
+# A machine that never opted into Doom has no clone, and skips. On a fresh
+# machine the installer clones Doom before the first apply, so this sync is the
+# one that installs the modules' packages. --force accepts Doom's prompts, since
+# apply gives them no one to answer. A failure (offline, say) warns rather than
+# failing the apply; `doom sync` by hand, or the next change, tries again.
+
+doom="${XDG_CONFIG_HOME:-${HOME}/.config}/emacs/bin/doom"
+if [[ ! -x "${doom}" ]]; then
+    exit 0
+fi
+
+if ! "${doom}" --force sync; then
+    echo "sync-doom-emacs: doom sync failed; run it by hand" >&2
+fi

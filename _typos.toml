@@ -1,3 +1,8 @@
+[files]
+# Doom's module template, copied as upstream wrote it. Its comments are word
+# play ("tfel ot thgir", "{ba,z,fi}sh") that no dictionary can tell from a typo.
+extend-exclude = ["home/dot_config/doom/init.el"]
+
 [default.extend-words]
 # catppuccin theme variable prefix
 thm = "thm"
