@@ -288,6 +288,19 @@ symbol = " "
 [typst]
 format = ' [$symbol($version)]($style)'
 
+# starship has no LaTeX module. The command runs under sh, since the default
+# STARSHIP_SHELL is zsh and would source ~/.zshenv on every prompt.
+[custom.latex]
+detect_extensions = ['tex', 'ltx', 'cls', 'sty']
+detect_files = ['.latexmkrc', 'latexmkrc']
+command = '''pdflatex --version | sed -n '1s/.*(TeX Live \([0-9]*\)).*/\1/p' '''
+shell = ['sh']
+# md-format_text, a serif T, escaped so editors cannot strip it. The font's
+# three TeX glyphs are lettering, too thin to read in one cell.
+symbol = "\U000F0284 "
+style = 'bold green'
+format = ' [$symbol($output)]($style)'
+
 [username]
 format = "[$user]($style)"
 
