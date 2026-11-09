@@ -31,6 +31,14 @@
 # worktree containing that cwd: matching on the parent alone would credit a
 # session inside a nested .claude/worktrees/* checkout to both.
 #
+# That cwd is where the session started, though, and a subagent run with
+# worktree isolation works inside its parent's process, so it has no session
+# file of its own. Claude locks each worktree it hands out, with a reason that
+# names the owning process: "claude agent <name> (pid <pid> start <time>)" for
+# a subagent, "claude session <name> (...)" for a session's own worktree. So a
+# worktree locked that way is credited to the session with that pid, and the
+# start time must match the session's procStart, since a pid can be reused.
+#
 # --paths writes the same rows as "<absolute path>\t<row>" for the `gws` picker
 # in .zshrc, which cannot reconstruct an absolute path from a shortened one. It
 # never prints the header, with or without --full: field 1 already says where
@@ -64,7 +72,7 @@ agent_colour=$(colour setaf 5)
 dim=$(colour setaf 8)
 reset=$(colour sgr0)
 
-# One "cwd<tab>name<tab>status" line per live session. The pid is the file name,
+# One "pid<tab>cwd<tab>name<tab>status<tab>procStart" line per live session. The pid is the file name,
 # which saves parsing it back out, and registrations outlive the process that
 # wrote them, so drop the ones whose process is gone.
 agents=""
@@ -92,7 +100,7 @@ if command -v jq >/dev/null 2>&1; then
     # file whole, where reading files line by line would split it.
     [ "$#" -eq 0 ] ||
         agents=$(awk 'FNR == 1 && NR > 1 { print "" } { printf "%s ", $0 } END { print "" }' "$@" |
-            jq -rR 'fromjson? | [.cwd, .name, .status] | @tsv' 2>/dev/null)
+            jq -rR 'fromjson? | [.pid, .cwd, .name, .status, .procStart] | @tsv' 2>/dev/null)
 fi
 
 list=$(git worktree list --porcelain) || exit $?
@@ -128,11 +136,20 @@ BEGIN {
         if (line[i] == "") continue
         split(line[i], field, "\t")
         # Background sessions are named after their task, which runs long.
-        who = field[2]
+        who = field[3]
         if (length(who) > 24) who = substr(who, 1, 23) "…"
-        agentcwd[++agentn] = field[1]
-        agentlabel[agentn] = "● " who " (" field[3] ")"
+        agentpid[++agentn] = field[1]
+        agentcwd[agentn] = field[2]
+        agentstart[agentn] = field[5]
+        agentlabel[agentn] = "● " who " (" field[4] ")"
+        # The session status describes the parent, not the subagent; the lock
+        # is held only while the subagent runs.
+        sublabel[agentn] = "● " who " (subagent)"
     }
+}
+
+function credit(j, label) {
+    agent[j] = (agent[j] == "" ? "" : agent[j] "  ") label
 }
 
 /^worktree / { path[++n] = substr($0, 10) }   # not $2: paths may hold spaces
@@ -140,6 +157,7 @@ BEGIN {
 /^branch /   { ref = $2; sub(/^refs\/heads\//, "", ref); name[n] = ref }
 /^detached$/ { name[n] = "(detached)" }
 /^bare$/     { name[n] = "(bare)" }
+/^locked /   { locked[n] = substr($0, 8) }
 
 END {
     if (!n) exit
@@ -149,8 +167,24 @@ END {
         for (j = 1; j <= n; j++)
             if (under(path[j], agentcwd[i]) && length(path[j]) > length(path[deepest]))
                 deepest = j
-        if (deepest)
-            agent[deepest] = (agent[deepest] == "" ? "" : agent[deepest] "  ") agentlabel[i]
+        if (deepest) {
+            credit(deepest, agentlabel[i])
+            credited[i, deepest] = 1
+        }
+    }
+
+    for (j = 1; j <= n; j++) {
+        reason = locked[j]
+        if (reason !~ /^claude (agent|session) / ||
+            !match(reason, /\(pid [0-9]+ start [^)]*\)$/)) continue
+        owner = substr(reason, RSTART + 5, RLENGTH - 6)   # "<pid> start <time>"
+        pid = substr(owner, 1, index(owner, " ") - 1)
+        start = substr(owner, index(owner, " start ") + 7)
+        for (i = 1; i <= agentn; i++) {
+            if (agentpid[i] != pid || agentstart[i] != start || credited[i, j]) continue
+            credit(j, reason ~ /^claude agent / ? sublabel[i] : agentlabel[i])
+            credited[i, j] = 1
+        }
     }
 
     for (i = 1; i <= n; i++) abs[i] = path[i]
