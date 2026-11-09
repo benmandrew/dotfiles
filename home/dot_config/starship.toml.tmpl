@@ -58,6 +58,52 @@ command_timeout = 500
 
 format = "$all$fill [{{ $osSymbol }}](bold white)$time$line_break$character"
 
+# Modules for languages and tools I don't use. Most run a version
+# probe when its files turn up; on a cold run deno and fortran passed the
+# 500 ms timeout, and swift took 1080 ms by trying two commands.
+buf.disabled = true
+bun.disabled = true
+cobol.disabled = true
+conda.disabled = true
+crystal.disabled = true
+dart.disabled = true
+deno.disabled = true
+dotnet.disabled = true
+elixir.disabled = true
+elm.disabled = true
+erlang.disabled = true
+fennel.disabled = true
+fortran.disabled = true
+gleam.disabled = true
+gradle.disabled = true
+guix_shell.disabled = true
+haxe.disabled = true
+helm.disabled = true
+julia.disabled = true
+kotlin.disabled = true
+maven.disabled = true
+meson.disabled = true
+mojo.disabled = true
+nim.disabled = true
+opa.disabled = true
+perl.disabled = true
+php.disabled = true
+pixi.disabled = true
+pulumi.disabled = true
+purescript.disabled = true
+quarto.disabled = true
+raku.disabled = true
+red.disabled = true
+rlang.disabled = true
+scala.disabled = true
+solidity.disabled = true
+spack.disabled = true
+swift.disabled = true
+terraform.disabled = true
+vagrant.disabled = true
+vlang.disabled = true
+xmake.disabled = true
+
 [directory]
 format = '[\[$path\]]($style)'
 read_only = " 󰌾"
@@ -106,13 +152,6 @@ symbol = "󰏗 "
 disabled = true
 symbol = " "
 
-[buf]
-symbol = " "
-
-[bun]
-format = ' [$symbol($version)]($style)'
-symbol = " "
-
 [c]
 format = ' [$symbol($version(-$name))]($style)'
 disabled = true
@@ -126,40 +165,9 @@ symbol = " "
 format =" [$symbol($version)]($style)"
 symbol = " "
 
-[conda]
-format = ' [$symbol$environment]($style)'
-symbol = " "
-
-[crystal]
-format = ' [$symbol($version)]($style)'
-symbol = " "
-
-[dart]
-format = ' [$symbol($version)]($style)'
-symbol = " "
-
-[deno]
-format = ' [$symbol($version)]($style)'
-symbol = " "
-
 [docker_context]
 format = ' [$symbol$context]($style)'
 symbol = " "
-
-[elixir]
-format = ' [$symbol($version \(OTP $otp_version\))]($style)'
-symbol = " "
-
-[elm]
-format = ' [$symbol($version)]($style)'
-symbol = " "
-
-[fennel]
-format = ' [$symbol($version)]($style)'
-symbol = " "
-
-[fortran]
-symbol = " "
 
 [fossil_branch]
 symbol = " "
@@ -174,21 +182,9 @@ tag_symbol = '  '
 format = ' [$symbol($version)]($style)'
 symbol = " "
 
-[gradle]
-format = ' [$symbol($version)]($style)'
-symbol = " "
-
-[guix_shell]
-format = ' [$symbol]($style)'
-symbol = " "
-
 [haskell]
 format = ' [$symbol($version)]($style)'
 symbol = " "
-
-[haxe]
-format = ' [$symbol($version)]($style)'
-symbol = " "
 
 [hg_branch]
 symbol = " "
@@ -201,14 +197,6 @@ ssh_symbol = " "
 format = ' [${symbol}(${version})]($style)'
 symbol = " "
 
-[julia]
-format = ' [$symbol($version)]($style)'
-symbol = " "
-
-[kotlin]
-format = ' [$symbol($version)]($style)'
-symbol = " "
-
 [lua]
 format = ' [$symbol($version)]($style)'
 symbol = " "
@@ -216,14 +204,6 @@ symbol = " "
 [memory_usage]
 format = ' $symbol [${ram}( \| ${swap})]($style)'
 symbol = "󰍛 "
-
-[meson]
-format = ' [$symbol$project]($style)'
-symbol = "󰔷 "
-
-[nim]
-format = ' [$symbol($version)]($style)'
-symbol = "󰆥 "
 
 [nix_shell]
 format = ' [$symbol$state]($style)'
@@ -234,36 +214,22 @@ format = ' [${symbol}(${version})]($style)'
 symbol = " "
 
 [ocaml]
-format = ' [$symbol($version)( \($switch_indicator$switch_name\))]($style)'
+# The switch name costs an `opam switch show` per prompt, 26 ms of the
+# module's 42 ms.
+format = ' [$symbol($version)]($style)'
 symbol = " "
 
 # Replaced by the literal glyph in format above.
 [os]
 disabled = true
 
-[perl]
-format = ' [$symbol($version)]($style)'
-symbol = " "
-
-[php]
-format = ' [$symbol($version)]($style)'
-symbol = " "
-
 [pijul_channel]
 symbol = " "
-
-[pixi]
-format = ' [$symbol($version)( \($environment\))]($style)'
-symbol = "󰏗 "
 
 [python]
 format = ' [${symbol}(${version})( \($virtualenv\))]($style)'
 python_binary = "python3"
 symbol = " "
-
-[rlang]
-format = ' [$symbol($version)]($style)'
-symbol = "󰟔 "
 
 [ruby]
 format =" [$symbol($version)]($style)"
@@ -274,16 +240,8 @@ symbol = " "
 format =" [$symbol($version)]($style)"
 symbol = "󱘗 "
 
-[scala]
-format = ' [${symbol}(${version})]($style)'
-symbol = " "
-
 [status]
 symbol = " "
-
-[swift]
-format = ' [$symbol($version)]($style)'
-symbol = " "
 
 [typst]
 format = ' [$symbol($version)]($style)'
@@ -303,10 +261,6 @@ format = ' [$symbol($output)]($style)'
 
 [username]
 format = "[$user]($style)"
-
-[xmake]
-format = ' [$symbol($version)]($style)'
-symbol = " "
 
 [zig]
 format = ' [$symbol($version)]($style)'
