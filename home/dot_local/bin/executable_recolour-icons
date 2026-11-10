@@ -5,8 +5,19 @@ GNOME's dock draws each app from the Icon= key of its .desktop file, and a file
 of the same name in ~/.local/share/applications overrides the system one. For
 each app named on the command line this finds the system .desktop file, finds
 the icon it names, maps that icon's luminance onto a gradient through the
-palette stops, and writes a copy of the .desktop file whose Icon= keys point at
+palette stops, and writes a copy of the .desktop file whose Icon= keys name
 the result.
+
+The result goes into the user's hicolor theme as recoloured-<app>, and Icon=
+names it rather than giving its path. A path makes GLib hand the shell a
+GFileIcon, which has no .names; GNOME Shell 42 reads .names off the Settings
+icon while building the top bar, and the exception stops the session starting.
+Every Icon= value is checked for this before its file is written.
+
+Each copy is written to a temporary file and renamed into place, so the shell
+never reads a half-written one. --remove-all deletes every marked copy and its
+icon; the systemd unit recolour-icons-remove.service runs it when GNOME Shell
+fails to start, so the next login falls back to the system icons.
 
 Luminance mapping keeps an icon's shape and shading and swaps its hues, so every
 icon comes out in the same few colours and still reads as itself. An icon with
@@ -28,6 +39,7 @@ A launch flag that a hand-made copy used to add, such as VS Code's
 
 Usage: recolour-icons --stops C1,C2[,...] [--tile-fill C] [--tile-edge C]
                       [--exec-args APP.desktop=ARGS ...] APP.desktop[=tone|=tile] ...
+       recolour-icons --remove-all
 """
 
 from __future__ import annotations
@@ -47,7 +59,11 @@ SIZE = 256
 HOME = Path.home()
 DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local/share")
 APPS = DATA_HOME / "applications"
-ICONS = DATA_HOME / "icons/recoloured"
+ICONS = DATA_HOME / f"icons/hicolor/{SIZE}x{SIZE}/apps"
+PREFIX = "recoloured-"
+ICON_KEY = re.compile(r"Icon(\[[^]]+\])?")
+# Where icons went when Icon= held a path; removed on sight.
+LEGACY = DATA_HOME / "icons/recoloured"
 
 
 def data_dirs() -> list[Path]:
@@ -272,11 +288,25 @@ def marked(path: Path) -> bool:
         return False
 
 
-def write_desktop(source: Path, target: Path, icon: Path, extra: str) -> None:
+def icon_name(desktop: str) -> str:
+    return PREFIX + Path(desktop).stem
+
+
+def check_icon(value: str) -> None:
+    # A path or a file extension makes GLib return a GFileIcon, which has no
+    # .names, and GNOME Shell 42 then fails to start. See the docstring.
+    if "/" in value or re.search(r"\.(png|svg|xpm)$", value, re.I):
+        raise ValueError(f"Icon={value} is not a theme icon name")
+
+
+def write_desktop(source: Path, target: Path, icon: str, extra: str) -> None:
+    check_icon(icon)
     lines = []
     for line in source.read_text(errors="replace").splitlines():
-        if line.startswith("Icon="):
-            line = f"Icon={icon}"
+        key, eq, _ = line.partition("=")
+        if eq and ICON_KEY.fullmatch(key.strip()):
+            # Icon[xx]= too, or a localised path would reach the shell.
+            line = f"{key}={icon}"
         elif line.startswith("Exec="):
             # %k is the .desktop file's own path. Zotero's launcher derives
             # its install directory from it, which the copy would move.
@@ -287,12 +317,25 @@ def write_desktop(source: Path, target: Path, icon: Path, extra: str) -> None:
         lines.append(line)
         if line.strip() == "[Desktop Entry]":
             lines.append(MARKER)
-    target.write_text("\n".join(lines) + "\n")
+    for line in lines:
+        key, eq, value = line.partition("=")
+        if eq and ICON_KEY.fullmatch(key.strip()):
+            check_icon(value.strip())
+    # Same directory, so the rename is atomic; a .tmp name is not a .desktop
+    # file, so GLib ignores it if this is interrupted.
+    partial = target.with_name(f".{target.name}.tmp")
+    partial.write_text("\n".join(lines) + "\n")
+    os.replace(partial, target)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--stops", required=True, help="comma-separated colours, darkest first")
+    parser.add_argument("--stops", help="comma-separated colours, darkest first")
+    parser.add_argument(
+        "--remove-all",
+        action="store_true",
+        help="delete every copy made here, and its icon, then exit",
+    )
     parser.add_argument("--tile-fill", default="#2c2925")
     parser.add_argument("--tile-edge", default="#d08949")
     parser.add_argument(
@@ -304,6 +347,12 @@ def main() -> int:
     )
     parser.add_argument("apps", nargs="*", metavar="APP.desktop[=STYLE]")
     args = parser.parse_args()
+    if args.remove_all:
+        if args.apps:
+            parser.error("--remove-all takes no apps")
+        args.apps = []
+    elif not args.stops:
+        parser.error("--stops is required")
 
     extra: dict[str, str] = {}
     for spec in args.exec_args:
@@ -319,16 +368,20 @@ def main() -> int:
 
     APPS.mkdir(parents=True, exist_ok=True)
     ICONS.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(LEGACY, ignore_errors=True)
+    for partial in APPS.glob(".*.desktop.tmp"):
+        partial.unlink()
 
     for stale in APPS.glob("*.desktop"):
         if stale.name not in wanted and marked(stale):
             stale.unlink()
-            (ICONS / f"{stale.stem}.png").unlink(missing_ok=True)
+            (ICONS / f"{icon_name(stale.name)}.png").unlink(missing_ok=True)
             print(f"recolour-icons: removed {stale.name}")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
-        ramp = gradient(args.stops.split(","), tmp)
+        # --remove-all leaves wanted empty and gives no --stops.
+        ramp = gradient(args.stops.split(","), tmp) if wanted else Path()
         for name, style in wanted.items():
             target = APPS / name
             if target.exists() and not marked(target):
@@ -342,15 +395,23 @@ def main() -> int:
             if icon is None:
                 print(f"recolour-icons: {name}: icon not found", file=sys.stderr)
                 continue
-            out = ICONS / f"{Path(name).stem}.png"
+            out = ICONS / f"{icon_name(name)}.png"
             raster = rasterise(icon, tmp)
             if style == "tile":
                 tile(raster, ramp, out, args.tile_fill, args.tile_edge, tmp)
             else:
                 tone(raster, ramp, out, SIZE, [])
-            write_desktop(source, target, out, extra.get(name, ""))
+            try:
+                write_desktop(source, target, icon_name(name), extra.get(name, ""))
+            except ValueError as err:
+                print(f"recolour-icons: {name}: {err}; not written", file=sys.stderr)
+                continue
             print(f"recolour-icons: {name} <- {icon}")
 
+    # A stale cache hides new icons from GTK, so refresh one if it exists.
+    cache = DATA_HOME / "icons/hicolor/icon-theme.cache"
+    if cache.exists() and shutil.which("gtk-update-icon-cache"):
+        subprocess.run(["gtk-update-icon-cache", "-q", "-t", str(cache.parent)], check=False)
     if shutil.which("update-desktop-database"):
         subprocess.run(["update-desktop-database", str(APPS)], check=False)
     return 0

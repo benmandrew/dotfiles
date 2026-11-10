@@ -1,0 +1,6 @@
+[Unit]
+Description=Remove recoloured launcher icons after GNOME Shell fails
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/recolour-icons --remove-all
