@@ -1394,6 +1394,9 @@ if wezterm.gui then
     key_tables.copy_mode = copy_mode
 end
 config.key_tables = key_tables
+-- The GNOME and Forge layer, so the picker and page cover every desktop key.
+sheet:add_desktop(require("desktop_keys"))
+
 sheet:check(config)
 
 -- Selecting with the mouse copies by default (ClipboardAndPrimarySelection);

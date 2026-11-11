@@ -27,53 +27,66 @@ fi
 
 # Set a key only where its schema is installed and has it, as in the
 # preferences script: a server with glib but no GNOME schemas would otherwise
-# fail `gsettings set` and, under set -e, the whole apply.
-gset() {
-    if gsettings range "$1" "$2" >/dev/null 2>&1; then
-        gsettings set "$1" "$2" "$3"
+# fail `gsettings set` and, under set -e, the whole apply. Forge's schema ships
+# inside the extension, not in the system schema directory, so it needs
+# --schemadir.
+forge_schemas="${HOME}/.local/share/gnome-shell/extensions/forge@jmmaranan.com/schemas"
+kset() {
+    local dir=""
+    case "$1" in
+        wm) set -- org.gnome.desktop.wm.keybindings "$2" "$3" ;;
+        shell) set -- org.gnome.shell.keybindings "$2" "$3" ;;
+        media) set -- org.gnome.settings-daemon.plugins.media-keys "$2" "$3" ;;
+        forge)
+            set -- org.gnome.shell.extensions.forge.keybindings "$2" "$3"
+            dir="${forge_schemas}"
+            ;;
+        *)
+            echo "${0##*/}: unknown schema alias $1" >&2
+            return 1
+            ;;
+    esac
+    if [ -n "${dir}" ]; then
+        if [ -d "${dir}" ] && gsettings --schemadir "${dir}" range "$1" "$2" >/dev/null 2>&1; then
+            gsettings --schemadir "${dir}" set "$@"
+        fi
+    elif gsettings range "$1" "$2" >/dev/null 2>&1; then
+        gsettings set "$@"
     fi
 }
 
-# One modifier per layer: Super moves around the desktop, the WezTerm leader
-# around the terminal, Ctrl around an app's tabs. Each action has one binding;
-# GNOME's defaults gave a workspace move three.
+# Super+N jumps to workspace N, which needs a fixed set of workspaces: with
+# dynamic ones, Super+N past the last does nothing. dash-to-dock's app
+# hotkeys also claim Super+N.
+if gsettings range org.gnome.mutter dynamic-workspaces >/dev/null 2>&1; then
+    gsettings set org.gnome.mutter dynamic-workspaces false
+    gsettings set org.gnome.desktop.wm.preferences num-workspaces 9
+fi
+if gsettings range org.gnome.shell.extensions.dash-to-dock hot-keys >/dev/null 2>&1; then
+    gsettings set org.gnome.shell.extensions.dash-to-dock hot-keys false
+fi
 
-# Super+N goes to workspace N and Super+Shift+N takes the window there, as
-# Leader N goes to WezTerm tab N. Numbered jumps need a fixed set of
-# workspaces; with dynamic ones, Super+N past the last does nothing. GNOME's
-# switch-to-application and dash-to-dock's app hotkeys both claim Super+N.
-gset org.gnome.mutter dynamic-workspaces false
-gset org.gnome.desktop.wm.preferences num-workspaces 9
-gset org.gnome.shell.extensions.dash-to-dock hot-keys false
+# The bindings themselves are desktop_keys in .chezmoidata.yaml, which also
+# feeds the WezTerm cheatsheet. Mutter rereads a changed accelerator, so they
+# apply in the running shell.
+{{- range .desktop_keys.bindings }}
+{{-   if hasSuffix "#" .key }}
 for n in 1 2 3 4 5 6 7 8 9; do
-    gset org.gnome.shell.keybindings "switch-to-application-${n}" "[]"
-    gset org.gnome.desktop.wm.keybindings "switch-to-workspace-${n}" "['<Super>${n}']"
-    gset org.gnome.desktop.wm.keybindings "move-to-workspace-${n}" "['<Super><Shift>${n}']"
+    kset {{ .schema }} "{{ trimSuffix "#" .key }}${n}" "['{{ trimSuffix "#" .accel }}${n}']"
 done
-
-# Neighbouring workspaces on Super+PgUp/PgDn only. Ctrl+Alt+arrows go back to
-# apps, which use them for multiple cursors. Workspaces run left to right, so
-# up and down have nothing to do.
-gset org.gnome.desktop.wm.keybindings switch-to-workspace-left "['<Super>Page_Up']"
-gset org.gnome.desktop.wm.keybindings switch-to-workspace-right "['<Super>Page_Down']"
-gset org.gnome.desktop.wm.keybindings move-to-workspace-left "['<Super><Shift>Page_Up']"
-gset org.gnome.desktop.wm.keybindings move-to-workspace-right "['<Super><Shift>Page_Down']"
-gset org.gnome.desktop.wm.keybindings switch-to-workspace-up "[]"
-gset org.gnome.desktop.wm.keybindings switch-to-workspace-down "[]"
-gset org.gnome.desktop.wm.keybindings move-to-workspace-up "[]"
-gset org.gnome.desktop.wm.keybindings move-to-workspace-down "[]"
-
-# Forge's Super+Shift+h/j/k/l carries a tiled window over the monitor edge.
-# These are for floating windows, which Forge leaves alone. The monitors are
-# stacked vertically, so left and right have nothing to do.
-gset org.gnome.desktop.wm.keybindings move-to-monitor-up "['<Super><Shift>Up']"
-gset org.gnome.desktop.wm.keybindings move-to-monitor-down "['<Super><Shift>Down']"
-gset org.gnome.desktop.wm.keybindings move-to-monitor-left "[]"
-gset org.gnome.desktop.wm.keybindings move-to-monitor-right "[]"
-
-# Free Super+H and Super+L for Forge, which focuses left and right on
-# Super+h/j/k/l. GNOME takes a key first, so on its defaults Super+H minimised
-# the window and Super+L locked the screen.
-gset org.gnome.desktop.wm.keybindings minimize "['<Super>comma']"
-gset org.gnome.settings-daemon.plugins.media-keys screensaver "['<Control><Alt>l']"
+{{-   else }}
+kset {{ .schema }} {{ .key }} "['{{ .accel }}']"
+{{-   end }}
+{{- end }}
+{{- range $schema, $keys := .desktop_keys.cleared }}
+{{-   range $keys }}
+{{-     if hasSuffix "#" . }}
+for n in 1 2 3 4 5 6 7 8 9; do
+    kset {{ $schema }} "{{ trimSuffix "#" . }}${n}" "[]"
+done
+{{-     else }}
+kset {{ $schema }} {{ . }} "[]"
+{{-     end }}
+{{-   end }}
+{{- end }}
 {{- end }}

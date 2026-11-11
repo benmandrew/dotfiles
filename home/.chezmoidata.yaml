@@ -63,3 +63,87 @@ icons:
   ## The copy replaces any hand-made one, so a flag that one carried goes here.
   exec_args:
     com.microsoft.VSCode.desktop: --disable-gpu-rasterization
+
+desktop_keys:
+  ## GNOME and Forge keybindings, which run_once_configure-gnome-keybindings.sh
+  ## sets through gsettings and dot_config/wezterm/desktop_keys.lua lists in the
+  ## WezTerm cheatsheet (Leader ?). One modifier per layer: Super for the
+  ## desktop, the WezTerm leader for the terminal, Ctrl for an app's tabs.
+  ## Within a layer, h/j/k/l focus, with Shift move, with Alt resize.
+  ##
+  ## schema is an alias the script expands: wm, shell, media or forge. accel is
+  ## a GTK accelerator. A trailing # in a key or accel runs from 1 to 9.
+  bindings:
+    ## GNOME takes a key before Forge, so minimise moved off Super+H and
+    ## lock screen off Super+L.
+    - {group: Desktop windows, desc: Focus the window to the left, schema: forge, key: window-focus-left, accel: "<Super>h"}
+    - {group: Desktop windows, desc: Focus the window below, schema: forge, key: window-focus-down, accel: "<Super>j"}
+    - {group: Desktop windows, desc: Focus the window above, schema: forge, key: window-focus-up, accel: "<Super>k"}
+    - {group: Desktop windows, desc: Focus the window to the right, schema: forge, key: window-focus-right, accel: "<Super>l"}
+    ## Forge's move carries a tiled window over the monitor edge.
+    - {group: Desktop windows, desc: Move the window left, schema: forge, key: window-move-left, accel: "<Shift><Super>h"}
+    - {group: Desktop windows, desc: Move the window down, schema: forge, key: window-move-down, accel: "<Shift><Super>j"}
+    - {group: Desktop windows, desc: Move the window up, schema: forge, key: window-move-up, accel: "<Shift><Super>k"}
+    - {group: Desktop windows, desc: Move the window right, schema: forge, key: window-move-right, accel: "<Shift><Super>l"}
+    ## Forge resizes one edge at a time, so h and l work the right edge and k
+    ## and j the bottom.
+    - {group: Desktop windows, desc: Make the window narrower, schema: forge, key: window-resize-right-decrease, accel: "<Alt><Super>h"}
+    - {group: Desktop windows, desc: Make the window taller, schema: forge, key: window-resize-bottom-increase, accel: "<Alt><Super>j"}
+    - {group: Desktop windows, desc: Make the window shorter, schema: forge, key: window-resize-bottom-decrease, accel: "<Alt><Super>k"}
+    - {group: Desktop windows, desc: Make the window wider, schema: forge, key: window-resize-right-increase, accel: "<Alt><Super>l"}
+    - {group: Desktop windows, desc: Swap with the last focused window, schema: forge, key: window-swap-last-active, accel: "<Super>Return"}
+    - {group: Desktop windows, desc: Float or tile the window, schema: forge, key: window-toggle-float, accel: "<Super>c"}
+    - {group: Desktop windows, desc: Always float this app's windows, schema: forge, key: window-toggle-always-float, accel: "<Shift><Super>c"}
+    - {group: Desktop windows, desc: Minimise the window, schema: wm, key: minimize, accel: "<Super>comma"}
+    ## Forge leaves floating windows alone, so they need their own monitor
+    ## move. The monitors are stacked vertically.
+    - {group: Desktop windows, desc: Move a floating window to the monitor above, schema: wm, key: move-to-monitor-up, accel: "<Super><Shift>Up"}
+    - {group: Desktop windows, desc: Move a floating window to the monitor below, schema: wm, key: move-to-monitor-down, accel: "<Super><Shift>Down"}
+
+    ## Super+N matches Leader N for WezTerm tab N.
+    - {group: Desktop workspaces, desc: "Go to workspace 1 to 9", schema: wm, key: "switch-to-workspace-#", accel: "<Super>#"}
+    - {group: Desktop workspaces, desc: "Move the window to workspace 1 to 9", schema: wm, key: "move-to-workspace-#", accel: "<Super><Shift>#"}
+    - {group: Desktop workspaces, desc: Go to the workspace on the left, schema: wm, key: switch-to-workspace-left, accel: "<Super>Page_Up"}
+    - {group: Desktop workspaces, desc: Go to the workspace on the right, schema: wm, key: switch-to-workspace-right, accel: "<Super>Page_Down"}
+    - {group: Desktop workspaces, desc: Move the window a workspace left, schema: wm, key: move-to-workspace-left, accel: "<Super><Shift>Page_Up"}
+    - {group: Desktop workspaces, desc: Move the window a workspace right, schema: wm, key: move-to-workspace-right, accel: "<Super><Shift>Page_Down"}
+
+    - {group: Desktop layout, desc: Change the split direction, schema: forge, key: con-split-layout-toggle, accel: "<Super>g"}
+    - {group: Desktop layout, desc: Open the next window beside this one, schema: forge, key: con-split-horizontal, accel: "<Super>z"}
+    - {group: Desktop layout, desc: Open the next window below this one, schema: forge, key: con-split-vertical, accel: "<Super>v"}
+    - {group: Desktop layout, desc: Stack or unstack the windows, schema: forge, key: con-stacked-layout-toggle, accel: "<Shift><Super>s"}
+    - {group: Desktop layout, desc: Tab or untab the windows, schema: forge, key: con-tabbed-layout-toggle, accel: "<Shift><Super>t"}
+    - {group: Desktop layout, desc: Show or hide the focus border, schema: forge, key: focus-border-toggle, accel: "<Super>x"}
+    - {group: Desktop layout, desc: Turn tiling on or off, schema: forge, key: prefs-tiling-toggle, accel: "<Super>w"}
+    - {group: Desktop layout, desc: Turn tiling on or off for this workspace, schema: forge, key: workspace-active-tile-toggle, accel: "<Shift><Super>w"}
+    - {group: Desktop layout, desc: Open Forge's settings, schema: forge, key: prefs-open, accel: "<Super>period"}
+
+    ## GNOME also put the notification list on Super+V, which Forge needs.
+    - {group: Desktop session, desc: Show the notification list, schema: shell, key: toggle-message-tray, accel: "<Super>m"}
+    - {group: Desktop session, desc: Lock the screen, schema: media, key: screensaver, accel: "<Control><Alt>l"}
+
+  ## Bindings set to nothing. Ctrl+Alt+arrows and Ctrl+Alt+letter go back to
+  ## apps, which use them for multiple cursors. Workspaces run left to right,
+  ## so up and down have nothing to do, as left and right have nothing between
+  ## monitors. switch-to-application-# took Super+N. Forge's swap does what
+  ## its move does, and its gaps stay at 0.
+  cleared:
+    wm: [switch-to-workspace-up, switch-to-workspace-down, move-to-workspace-up, move-to-workspace-down, move-to-monitor-left, move-to-monitor-right]
+    shell: ["switch-to-application-#"]
+    forge:
+      - window-resize-left-decrease
+      - window-resize-left-increase
+      - window-resize-top-decrease
+      - window-resize-top-increase
+      - window-swap-up
+      - window-swap-down
+      - window-swap-left
+      - window-swap-right
+      - window-gap-size-increase
+      - window-gap-size-decrease
+      - window-snap-center
+      - window-snap-one-third-left
+      - window-snap-one-third-right
+      - window-snap-two-third-left
+      - window-snap-two-third-right
+      - con-tabbed-showtab-decoration-toggle

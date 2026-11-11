@@ -1,8 +1,10 @@
 -- Keybinding cheatsheet. wezterm.lua declares each binding through a sheet's
 -- bind helpers, which record a group and a description beside the entry
--- WezTerm sees. The sheet then serves two views of the same rows: a fuzzy
--- picker (LEADER ?) that runs the chosen action, and an HTML page that adds
--- WezTerm's own defaults, read from wezterm.gui at the moment it is written.
+-- WezTerm sees. Desktop rows come from desktop_keys.lua, so one sheet covers
+-- the GNOME and Forge layer as well. The sheet then serves two views of the
+-- same rows: a fuzzy picker (LEADER ?) that runs the chosen action, and an
+-- HTML page that adds WezTerm's own defaults, read from wezterm.gui at the
+-- moment it is written.
 local wezterm = require("wezterm")
 local act = wezterm.action
 
@@ -15,6 +17,14 @@ local KEY_NAMES = {
     UpArrow = "↑",
     DownArrow = "↓",
     Escape = "Esc",
+    -- GTK key names, from desktop rows.
+    Up = "↑",
+    Down = "↓",
+    Page_Up = "PgUp",
+    Page_Down = "PgDn",
+    Return = "Enter",
+    comma = ",",
+    period = ".",
 }
 
 -- default_keys() spells some keys as the character they send. These are named
@@ -89,6 +99,29 @@ function M:add(row)
     table.insert(self.rows, row)
 end
 
+-- GTK accelerator modifiers, as WezTerm spells them.
+local GTK_MODS = { Super = "SUPER", Shift = "SHIFT", Alt = "ALT", Control = "CTRL", Ctrl = "CTRL", Primary = "CTRL" }
+
+-- Desktop rows: { group, desc, accel } with accel a GTK accelerator such as
+-- <Super><Shift>h. GNOME or Forge owns the key, so the row has no action and
+-- no binds, and never counts as overriding a WezTerm default.
+function M:add_desktop(entries)
+    for _, e in ipairs(entries) do
+        local mods = {}
+        for m in e.accel:gmatch("<(%a+)>") do
+            table.insert(mods, GTK_MODS[m] or m:upper())
+        end
+        local key = e.accel:gsub("<%a+>", "")
+        table.insert(self.rows, {
+            group = e.group,
+            desc = e.desc,
+            binds = {},
+            desktop = true,
+            keys = { { self:stroke(key, table.concat(mods, "|")) } },
+        })
+    end
+end
+
 -- Bind into `keys` (config.keys, or a key table's list) and record the row.
 function M:bind(keys, group, key, mods, action, desc)
     table.insert(keys, { key = key, mods = mods, action = action })
@@ -155,7 +188,8 @@ end
 
 -- The picker lists the main table's rows; key-table rows only make sense
 -- inside their table. Choosing a row runs its action, so the sheet doubles as
--- a command palette for anything whose key has been forgotten.
+-- a command palette for anything whose key has been forgotten. A desktop row
+-- has no action, so choosing it only closes the picker.
 function M:picker()
     return wezterm.action_callback(function(window, pane)
         local choices, actions = {}, {}
@@ -433,16 +467,28 @@ document.addEventListener("keydown", e => {
 
 function M:html()
     local leader = self:stroke(self.leader.key, self.leader.mods)
+    local mine, desktop = {}, {}
+    for _, row in ipairs(self.rows) do
+        table.insert(row.desktop and desktop or mine, row)
+    end
+    local desktop_section = ""
+    if #desktop > 0 then
+        desktop_section = '</div><h2>Desktop<span class="bar"></span></h2><div class="grid">\n'
+            .. render_groups(desktop, "mine")
+    end
     return table.concat({
         '<!doctype html><html lang="en"><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        "<title>WezTerm keys</title><style>" .. STYLE .. "</style>",
-        "<header><h1>WezTerm keys</h1><p>Leader is <kbd>" .. escape(leader) .. "</kbd>. Written " .. os.date(
-            "%Y-%m-%d %H:%M"
-        ) .. " from wezterm.lua.</p>",
+        "<title>Keys</title><style>" .. STYLE .. "</style>",
+        "<header><h1>Keys</h1><p>Leader is <kbd>"
+            .. escape(leader)
+            .. "</kbd>. Written "
+            .. os.date("%Y-%m-%d %H:%M")
+            .. " from wezterm.lua and desktop_keys.lua.</p>",
         '<input type="search" placeholder="Filter  ( / )" aria-label="Filter bindings"></header>',
-        '<main><h2>Mine<span class="bar"></span></h2><div class="grid">',
-        render_groups(self.rows, "mine"),
+        '<main><h2>Terminal<span class="bar"></span></h2><div class="grid">',
+        render_groups(mine, "mine"),
+        desktop_section,
         '</div><h2>WezTerm defaults<span class="bar"></span></h2><div class="grid">',
         render_groups(self:defaults(), "default"),
         "</div></main><script>" .. SCRIPT .. "</script></html>",
