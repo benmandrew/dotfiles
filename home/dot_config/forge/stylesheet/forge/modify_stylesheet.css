@@ -1,0 +1,40 @@
+#!/bin/sh
+# Forge's focus border (Super+x): 2px, square and Hacktober orange, in place
+# of 3px rounded red. Forge's settings window rewrites this file, so only the
+# border properties are managed and the rest passes through. The
+# border-color and border-size keys in Forge's gsettings schema are unused.
+#
+# On a first apply there is no file yet, so start from the extension's own
+# stylesheet, which Forge would copy here on enable anyway.
+
+set -eu
+
+default="${HOME}/.local/share/gnome-shell/extensions/forge@jmmaranan.com/stylesheet.css"
+input="$(mktemp)"
+trap 'rm -f "${input}"' EXIT
+cat >"${input}"
+if [ ! -s "${input}" ]; then
+    if [ -f "${default}" ]; then
+        cat "${default}" >"${input}"
+    else
+        exit 0
+    fi
+fi
+
+awk '
+/^[^ \t].*\{/ { sel = $1 }
+/^\}/ { sel = "" }
+sel ~ /^\.window-(tiled|floated|stacked|tabbed)-border$/ && $1 == "border-width:" {
+    sub(/border-width:.*/, "border-width: 2px;")
+}
+sel ~ /^\.window-((tiled|floated|stacked|tabbed)-border|tilepreview-.*)$/ && $1 == "border-radius:" {
+    sub(/border-radius:.*/, "border-radius: 0;")
+}
+sel == ".window-tiled-border" && $1 == "border-color:" {
+    sub(/border-color:.*/, "border-color: rgba(199, 90, 34, 0.6);")
+}
+sel == ".window-floated-border" && $1 == "border-color:" {
+    sub(/border-color:.*/, "border-color: rgba(201, 201, 201, 0.6);")
+}
+{ print }
+' "${input}"

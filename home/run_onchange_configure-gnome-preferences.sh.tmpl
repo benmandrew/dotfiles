@@ -1,4 +1,5 @@
 #!/bin/bash
+# forge-stylesheet-hash: {{ include "dot_config/forge/stylesheet/forge/modify_stylesheet.css" | sha256sum }}
 
 set -euo pipefail
 {{- if eq .chezmoi.os "linux" }}
@@ -84,7 +85,19 @@ fi
 # cannot see it.
 forge_schemas="${HOME}/.local/share/gnome-shell/extensions/forge@jmmaranan.com/schemas"
 if [ -d "${forge_schemas}" ]; then
-    gsettings --schemadir "${forge_schemas}" set org.gnome.shell.extensions.forge window-gap-size 0
+    forge() { gsettings --schemadir "${forge_schemas}" set org.gnome.shell.extensions.forge "$@"; }
+    forge window-gap-size 0
+    # No yellow edge marking where the next window opens.
+    forge split-border-toggle false
+    # Forge overwrites the managed stylesheet on enable when css-last-update
+    # is behind the cssTag in its theme.js, as it is on a fresh install.
+    css_tag="$(sed -n 's/.*this\.cssTag = \([0-9]*\);.*/\1/p' "${forge_schemas}/../theme.js")"
+    if [ -n "${css_tag}" ]; then
+        forge css-last-update "${css_tag}"
+    fi
+    # Reload the stylesheet in the running shell.
+    now="$(date +%s)"
+    forge css-updated "${now}"
 fi
 
 # Search and privacy.
