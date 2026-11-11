@@ -58,11 +58,26 @@ gset org.gnome.desktop.screensaver lock-delay 0
 gset org.gnome.settings-daemon.plugins.power idle-dim false
 gset org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing'
 
-# Dock and desktop icons.
+# Dock.
 gset org.gnome.shell.extensions.dash-to-dock dash-max-icon-size 48
 gset org.gnome.shell.extensions.dash-to-dock show-mounts false
 gset org.gnome.shell.extensions.dash-to-dock show-trash false
-gset org.gnome.shell.extensions.ding icon-size 'small'
+
+# No desktop icons. DING draws the desktop as one invisible NORMAL window per
+# monitor, which Forge tiles like any other, so Super+h/j/k/l focused the
+# desktop on entering a monitor. Ubuntu's session mode enables DING, so it is
+# absent from enabled-extensions; disabled-extensions overrides the session
+# mode, and the running shell applies it at once.
+ding='ding@rastersoft.com'
+if [ -d "/usr/share/gnome-shell/extensions/${ding}" ] &&
+    gsettings range org.gnome.shell disabled-extensions >/dev/null 2>&1; then
+    disabled="$(gsettings get org.gnome.shell disabled-extensions)"
+    case "${disabled}" in
+        *"'${ding}'"*) ;;
+        '@as []' | '[]') gsettings set org.gnome.shell disabled-extensions "['${ding}']" ;;
+        *) gsettings set org.gnome.shell disabled-extensions "${disabled%]}, '${ding}']" ;;
+    esac
+fi
 
 # Forge tiling with no gaps between windows or at the screen edges. Its schema
 # ships inside the extension, not in the system schema directory, so gset
