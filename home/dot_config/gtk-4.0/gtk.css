@@ -1,0 +1,7 @@
+/* Square window corners, to match Forge's tiling; see gtk-3.0/gtk.css. */
+window,
+window.csd,
+headerbar,
+.titlebar {
+    border-radius: 0;
+}

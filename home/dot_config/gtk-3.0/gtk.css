@@ -1,0 +1,8 @@
+/* Square window corners, to match Forge's tiling. */
+decoration,
+window,
+.window-frame,
+headerbar,
+.titlebar {
+    border-radius: 0;
+}
