@@ -34,14 +34,42 @@ gset() {
     fi
 }
 
-# Split monitor vs workspace movement for a vertically stacked two-monitor
-# setup: Up/Down moves the window between monitors, Left/Right between
-# workspaces. Both previously shared <Control><Shift><Alt>{Up,Down}, so only
-# one action could ever fire for a given keypress.
+# One modifier per layer: Super moves around the desktop, the WezTerm leader
+# around the terminal, Ctrl around an app's tabs. Each action has one binding;
+# GNOME's defaults gave a workspace move three.
+
+# Super+N goes to workspace N and Super+Shift+N takes the window there, as
+# Leader N goes to WezTerm tab N. Numbered jumps need a fixed set of
+# workspaces; with dynamic ones, Super+N past the last does nothing. GNOME's
+# switch-to-application and dash-to-dock's app hotkeys both claim Super+N.
+gset org.gnome.mutter dynamic-workspaces false
+gset org.gnome.desktop.wm.preferences num-workspaces 9
+gset org.gnome.shell.extensions.dash-to-dock hot-keys false
+for n in 1 2 3 4 5 6 7 8 9; do
+    gset org.gnome.shell.keybindings "switch-to-application-${n}" "[]"
+    gset org.gnome.desktop.wm.keybindings "switch-to-workspace-${n}" "['<Super>${n}']"
+    gset org.gnome.desktop.wm.keybindings "move-to-workspace-${n}" "['<Super><Shift>${n}']"
+done
+
+# Neighbouring workspaces on Super+PgUp/PgDn only. Ctrl+Alt+arrows go back to
+# apps, which use them for multiple cursors. Workspaces run left to right, so
+# up and down have nothing to do.
+gset org.gnome.desktop.wm.keybindings switch-to-workspace-left "['<Super>Page_Up']"
+gset org.gnome.desktop.wm.keybindings switch-to-workspace-right "['<Super>Page_Down']"
+gset org.gnome.desktop.wm.keybindings move-to-workspace-left "['<Super><Shift>Page_Up']"
+gset org.gnome.desktop.wm.keybindings move-to-workspace-right "['<Super><Shift>Page_Down']"
+gset org.gnome.desktop.wm.keybindings switch-to-workspace-up "[]"
+gset org.gnome.desktop.wm.keybindings switch-to-workspace-down "[]"
 gset org.gnome.desktop.wm.keybindings move-to-workspace-up "[]"
 gset org.gnome.desktop.wm.keybindings move-to-workspace-down "[]"
-gset org.gnome.desktop.wm.keybindings move-to-monitor-up "['<Control><Shift><Alt>Up']"
-gset org.gnome.desktop.wm.keybindings move-to-monitor-down "['<Control><Shift><Alt>Down']"
+
+# Forge's Super+Shift+h/j/k/l carries a tiled window over the monitor edge.
+# These are for floating windows, which Forge leaves alone. The monitors are
+# stacked vertically, so left and right have nothing to do.
+gset org.gnome.desktop.wm.keybindings move-to-monitor-up "['<Super><Shift>Up']"
+gset org.gnome.desktop.wm.keybindings move-to-monitor-down "['<Super><Shift>Down']"
+gset org.gnome.desktop.wm.keybindings move-to-monitor-left "[]"
+gset org.gnome.desktop.wm.keybindings move-to-monitor-right "[]"
 
 # Free Super+H and Super+L for Forge, which focuses left and right on
 # Super+h/j/k/l. GNOME takes a key first, so on its defaults Super+H minimised

@@ -95,6 +95,28 @@ if [ -d "${forge_schemas}" ]; then
     if [ -n "${css_tag}" ]; then
         forge css-last-update "${css_tag}"
     fi
+    # Keybindings follow the layer rule in the keybindings script: Super+h/j/k/l
+    # focuses, with Shift moves and with Alt resizes. Mutter rereads a changed
+    # accelerator, so these apply in the running shell.
+    forge_keys() { gsettings --schemadir "${forge_schemas}" set org.gnome.shell.extensions.forge.keybindings "$@"; }
+    # Forge resizes one edge at a time, so h and l narrow and widen through the
+    # right edge, and k and j through the bottom.
+    forge_keys window-resize-right-decrease "['<Alt><Super>h']"
+    forge_keys window-resize-right-increase "['<Alt><Super>l']"
+    forge_keys window-resize-bottom-decrease "['<Alt><Super>k']"
+    forge_keys window-resize-bottom-increase "['<Alt><Super>j']"
+    # Clear the rest: swap does what move does, the gaps are fixed at 0, and
+    # the snaps and tab-decoration toggle took Ctrl+Alt+letter from apps.
+    for key in \
+        window-resize-left-decrease window-resize-left-increase \
+        window-resize-top-decrease window-resize-top-increase \
+        window-swap-up window-swap-down window-swap-left window-swap-right \
+        window-gap-size-increase window-gap-size-decrease \
+        window-snap-center window-snap-one-third-left window-snap-one-third-right \
+        window-snap-two-third-left window-snap-two-third-right \
+        con-tabbed-showtab-decoration-toggle; do
+        forge_keys "${key}" "[]"
+    done
     # Reload the stylesheet in the running shell.
     now="$(date +%s)"
     forge css-updated "${now}"
