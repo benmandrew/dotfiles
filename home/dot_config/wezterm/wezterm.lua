@@ -181,6 +181,16 @@ config.tab_max_width = TAB_TITLE_MAX_WIDTH + 8
 -- the active value is the midpoint of that chip's orange and the bar's black.
 local TAB_INDEX_FG_ACTIVE = "#6d371b"
 local TAB_INDEX_FG_INACTIVE = hacktober.hover
+-- With no title bar (window_decorations = "RESIZE"), the active chip is the only
+-- sign of which window has focus. In an unfocused window it drops from orange to
+-- the hover grey, as Firefox mutes its bar; the index is again the midpoint of
+-- that chip and the bar's black.
+local TAB_CHIP_BG_UNFOCUSED = hacktober.hover
+local TAB_INDEX_FG_UNFOCUSED = "#2d2c2c"
+-- Keyed by mux window id, and set by window-focus-changed below. A window with
+-- no entry yet counts as focused, so a new window paints orange before its
+-- first focus event.
+local window_focused = {}
 
 -- Claude session status, as a bar down the left edge of the chip. U+258E LEFT
 -- ONE QUARTER BLOCK, by codepoint so an editor can't mangle the literal glyph.
@@ -437,15 +447,22 @@ wezterm.on("format-tab-title", function(tab)
         title = name or tab.active_pane.title
     end
     -- Returned as format elements rather than a string so the index and the
-    -- status bar can be coloured apart from the title. Only foregrounds are set,
-    -- leaving each chip's background to config.colors.tab_bar; the title's own
-    -- colours have to be restored explicitly afterwards for the same reason.
-    local dim = tab.is_active and TAB_INDEX_FG_ACTIVE or TAB_INDEX_FG_INACTIVE
+    -- status bar can be coloured apart from the title. An inactive chip's
+    -- background is left to config.colors.tab_bar. The active chip's is set here
+    -- in both states, since it follows focus, and a window's config overrides
+    -- could otherwise replace it. The title's own colours have to be restored
+    -- explicitly afterwards for the same reason.
+    local muted = tab.is_active and window_focused[tab.window_id] == false
+    local dim = muted and TAB_INDEX_FG_UNFOCUSED or tab.is_active and TAB_INDEX_FG_ACTIVE or TAB_INDEX_FG_INACTIVE
     local elements = {
         { Attribute = { Intensity = "Normal" } },
         { Foreground = { Color = dim } },
         { Text = string.format(" %d ", tab.tab_index + 1) },
     }
+    if tab.is_active then
+        local chip = muted and TAB_CHIP_BG_UNFOCUSED or hacktober.orange
+        table.insert(elements, 1, { Background = { Color = chip } })
+    end
     if kind then
         table.insert(elements, { Text = (kind == "mux" and ICON_TAB_MUX or ICON_TAB_SSH) .. " " })
     end
@@ -470,7 +487,7 @@ wezterm.on("format-tab-title", function(tab)
     end
 
     table.insert(elements, { Attribute = { Intensity = tab.is_active and "Bold" or "Normal" } })
-    table.insert(elements, { Foreground = { Color = tab.is_active and hacktober.bg or hacktober.text } })
+    table.insert(elements, { Foreground = { Color = tab.is_active and not muted and hacktober.bg or hacktober.text } })
     table.insert(elements, { Text = wezterm.truncate_right(title, TAB_TITLE_MAX_WIDTH) })
     table.insert(elements, { Text = " " })
     return elements
@@ -822,10 +839,14 @@ local function left_status(window)
     end
 
     -- Return the bar to its own colours, and keep one column between the last
-    -- chip and the first tab.
+    -- chip and the first tab. That column's foreground follows focus. A space
+    -- shows no foreground, but the cell differs, so the status differs; see
+    -- window-focus-changed below. An attribute with no text after it makes no
+    -- cell, and WezTerm compares cells.
+    local unfocused = window_focused[window_field(window, "window_id") or -1] == false
     table.insert(elements, { Attribute = { Intensity = "Normal" } })
     table.insert(elements, { Background = { Color = hacktober.bg } })
-    table.insert(elements, { Foreground = { Color = hacktober.text } })
+    table.insert(elements, { Foreground = { Color = unfocused and hacktober.hover or hacktober.text } })
     table.insert(elements, { Text = " " })
     return wezterm.format(elements)
 end
@@ -869,6 +890,17 @@ wezterm.on("update-status", function(window)
     clear_active_bell(window)
     window:set_left_status(left_status(window))
     window:set_right_status(right_status(window))
+end)
+
+-- WezTerm redraws the tab bar as focus changes, but before it emits this event,
+-- so that redraw still reads the old window_focused, and the chip took the next
+-- update-status tick to change: 104-109 ms in measurement. A config override
+-- waits for the same tick. A status that differs from the last one redraws at
+-- once, 3-5 ms after the event, and left_status's trailing column guarantees the
+-- difference.
+wezterm.on("window-focus-changed", function(window)
+    window_focused[window:window_id()] = window:is_focused()
+    window:set_left_status(left_status(window))
 end)
 
 -- Clipboard indicator. WezTerm has no clipboard event, so every binding that
