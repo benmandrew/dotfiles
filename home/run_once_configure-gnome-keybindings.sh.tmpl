@@ -42,4 +42,10 @@ gset org.gnome.desktop.wm.keybindings move-to-workspace-up "[]"
 gset org.gnome.desktop.wm.keybindings move-to-workspace-down "[]"
 gset org.gnome.desktop.wm.keybindings move-to-monitor-up "['<Control><Shift><Alt>Up']"
 gset org.gnome.desktop.wm.keybindings move-to-monitor-down "['<Control><Shift><Alt>Down']"
+
+# Free Super+H and Super+L for Forge, which focuses left and right on
+# Super+h/j/k/l. GNOME takes a key first, so on its defaults Super+H minimised
+# the window and Super+L locked the screen.
+gset org.gnome.desktop.wm.keybindings minimize "['<Super>comma']"
+gset org.gnome.settings-daemon.plugins.media-keys screensaver "['<Control><Alt>l']"
 {{- end }}

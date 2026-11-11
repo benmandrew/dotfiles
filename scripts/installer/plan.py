@@ -143,6 +143,7 @@ LINUX = Plan(
             "set_default_terminal_wezterm",
             "install_nerd_font",
             "install_terminal_font",
+            "install_forge_extension",
         ),
         OptionalStep(
             "obsidian",

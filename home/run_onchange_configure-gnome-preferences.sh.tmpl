@@ -64,6 +64,14 @@ gset org.gnome.shell.extensions.dash-to-dock show-mounts false
 gset org.gnome.shell.extensions.dash-to-dock show-trash false
 gset org.gnome.shell.extensions.ding icon-size 'small'
 
+# Forge tiling with no gaps between windows or at the screen edges. Its schema
+# ships inside the extension, not in the system schema directory, so gset
+# cannot see it.
+forge_schemas="${HOME}/.local/share/gnome-shell/extensions/forge@jmmaranan.com/schemas"
+if [ -d "${forge_schemas}" ]; then
+    gsettings --schemadir "${forge_schemas}" set org.gnome.shell.extensions.forge window-gap-size 0
+fi
+
 # Search and privacy.
 gset org.gnome.desktop.search-providers disabled "['org.gnome.Characters.desktop', 'org.gnome.seahorse.Application.desktop', 'org.gnome.Software.desktop', 'org.gnome.Calendar.desktop']"
 gset org.gnome.system.location enabled false

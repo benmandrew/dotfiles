@@ -306,6 +306,20 @@ if [[ "${headless_linux}" == false ]]; then
     fi
 fi
 
+# install_forge_extension runs only where GNOME Shell is, and leaves Forge
+# installed but not enabled when it finds no session bus, so both only warn.
+# gsettings get reads dconf and writes nothing.
+has_forge_enabled() {
+    gsettings get org.gnome.shell enabled-extensions 2>/dev/null | grep -q "'forge@jmmaranan.com'"
+}
+
+if [[ "${os_name}" == "Linux" ]] && command -v gnome-shell >/dev/null 2>&1 &&
+    command -v gnome-extensions >/dev/null 2>&1; then
+    check_optional "forge extension" \
+        test -f "${HOME}/.local/share/gnome-shell/extensions/forge@jmmaranan.com/metadata.json"
+    check_optional "forge extension enabled" has_forge_enabled
+fi
+
 # Optional (opted into per machine) and, even when opted in, the `obsidian`
 # command only appears after the app's GUI registration step — so absence is
 # never a failure. The CLI works only by talking to the running app, exiting 1
