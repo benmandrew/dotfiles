@@ -36,6 +36,7 @@ kset() {
     case "$1" in
         wm) set -- org.gnome.desktop.wm.keybindings "$2" "$3" ;;
         shell) set -- org.gnome.shell.keybindings "$2" "$3" ;;
+        mutter) set -- org.gnome.mutter.keybindings "$2" "$3" ;;
         media) set -- org.gnome.settings-daemon.plugins.media-keys "$2" "$3" ;;
         forge)
             set -- org.gnome.shell.extensions.forge.keybindings "$2" "$3"

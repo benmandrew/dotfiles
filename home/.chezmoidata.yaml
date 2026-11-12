@@ -103,10 +103,12 @@ desktop_keys:
     ## Super+N matches Leader N for WezTerm tab N.
     - {group: Desktop workspaces, desc: "Go to workspace 1 to 9", schema: wm, key: "switch-to-workspace-#", accel: "<Super>#"}
     - {group: Desktop workspaces, desc: "Move the window to workspace 1 to 9", schema: wm, key: "move-to-workspace-#", accel: "<Super><Shift>#"}
-    - {group: Desktop workspaces, desc: Go to the workspace on the left, schema: wm, key: switch-to-workspace-left, accel: "<Super>Page_Up"}
-    - {group: Desktop workspaces, desc: Go to the workspace on the right, schema: wm, key: switch-to-workspace-right, accel: "<Super>Page_Down"}
-    - {group: Desktop workspaces, desc: Move the window a workspace left, schema: wm, key: move-to-workspace-left, accel: "<Super><Shift>Page_Up"}
-    - {group: Desktop workspaces, desc: Move the window a workspace right, schema: wm, key: move-to-workspace-right, accel: "<Super><Shift>Page_Down"}
+    - {group: Desktop workspaces, desc: Go to the workspace on the left, schema: wm, key: switch-to-workspace-left, accel: "<Super>Left"}
+    - {group: Desktop workspaces, desc: Go to the workspace on the right, schema: wm, key: switch-to-workspace-right, accel: "<Super>Right"}
+    ## Super+Left/Right go between workspaces, and Shift moves the window
+    ## with them, as Shift+Up/Down does between monitors.
+    - {group: Desktop workspaces, desc: Move the window a workspace left, schema: wm, key: move-to-workspace-left, accel: "<Super><Shift>Left"}
+    - {group: Desktop workspaces, desc: Move the window a workspace right, schema: wm, key: move-to-workspace-right, accel: "<Super><Shift>Right"}
 
     - {group: Desktop layout, desc: Change the split direction, schema: forge, key: con-split-layout-toggle, accel: "<Super>g"}
     - {group: Desktop layout, desc: Open the next window beside this one, schema: forge, key: con-split-horizontal, accel: "<Super>z"}
@@ -125,11 +127,13 @@ desktop_keys:
   ## Bindings set to nothing. Ctrl+Alt+arrows and Ctrl+Alt+letter go back to
   ## apps, which use them for multiple cursors. Workspaces run left to right,
   ## so up and down have nothing to do, as left and right have nothing between
-  ## monitors. switch-to-application-# took Super+N. Forge's swap does what
-  ## its move does, and its gaps stay at 0.
+  ## monitors. switch-to-application-# took Super+N. Mutter's half-screen
+  ## tiling took Super+Left/Right, and Forge does the tiling. Forge's swap does
+  ## what its move does, and its gaps stay at 0.
   cleared:
     wm: [switch-to-workspace-up, switch-to-workspace-down, move-to-workspace-up, move-to-workspace-down, move-to-monitor-left, move-to-monitor-right]
     shell: ["switch-to-application-#"]
+    mutter: [toggle-tiled-left, toggle-tiled-right]
     forge:
       - window-resize-left-decrease
       - window-resize-left-increase
