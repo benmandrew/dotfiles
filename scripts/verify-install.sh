@@ -125,6 +125,7 @@ check_cmd jq
 check_cmd zstd
 check_cmd hyperfine
 check_cmd zoxide
+check_cmd tdf
 check_cmd fzf
 check_cmd atuin
 check_cmd gh

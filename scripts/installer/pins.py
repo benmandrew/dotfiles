@@ -52,6 +52,7 @@ UPSTREAM = {
     "RIPGREP_VERSION": "BurntSushi/ripgrep",
     "SAMPLY_VERSION": "mstange/samply",
     "SCCACHE_VERSION": "mozilla/sccache",
+    "TDF_VERSION": "itsjunetime/tdf",
     "TMUX_VERSION": "tmux/tmux",
     "TREEHOUSE_VERSION": "kunchenguid/treehouse",
     "TYPST_VERSION": "typst/typst",

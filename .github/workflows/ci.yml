@@ -5,9 +5,9 @@ on:
     branches: [ main ]
   pull_request:
   schedule:
-    # A weekly cold run. The install job below restores a cached btop, which
-    # leaves the source build unrun, and it runs only when the installer
-    # changes. This run skips the restore, so it builds btop and catches a
+    # A weekly cold run. The install job below restores a cached btop and tdf,
+    # which leaves the source builds unrun, and it runs only when the installer
+    # changes. This run skips the restore, so it builds both and catches a
     # release that upstream has moved or withdrawn.
     - cron: '0 4 * * 1'
 
@@ -184,29 +184,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      # btop is the one tool this job builds from source, measured at 28 to 90
-      # seconds, so its binary and themes are cached. The other steps fetch
-      # prebuilt releases and run on every push, which is what the job exists
-      # to test. The key covers what decides the binary: the runner image, the
-      # btop pin and the module that builds it. No restore-keys, since a change
-      # to any of those should build afresh. install_btop skips the build when
-      # btop is on PATH.
+      # btop and tdf are the tools this job builds from source, btop measured
+      # at 28 to 90 seconds and tdf compiling MuPDF, so their binaries and
+      # btop's themes are cached. The other steps fetch prebuilt releases and
+      # run on every push, which is what the job exists to test. The key covers
+      # what decides the binaries: the runner image, the two pins and the
+      # module that builds them. No restore-keys, since a change to any of
+      # those should build afresh. install_btop and install_tdf skip the build
+      # when their binary is on PATH.
       #
       # Nothing under /usr/local goes in, nor the ~/.rustup the runner image
       # ships: tar cannot set modes on the root-owned directories there and
       # exits 2, which the action reports as a miss, saving the cache again.
-      - name: Hash btop setup
-        id: btop
+      - name: Hash source builds
+        id: builds
         if: github.event_name != 'schedule'
         run: |
           hash="$({
             echo "${ImageOS:-}"
-            grep -h '^BTOP_VERSION=' scripts/pins.sh
+            grep -h -e '^BTOP_VERSION=' -e '^TDF_VERSION=' scripts/pins.sh
             cat scripts/installer/steps/builds.py
           } | sha256sum | cut -c1-16)"
           echo "hash=${hash}" >> "${GITHUB_OUTPUT}"
 
-      - name: Cache btop
+      - name: Cache source builds
         # Skipped on the weekly cold run — see the `schedule:` trigger above.
         if: github.event_name != 'schedule'
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
@@ -214,7 +215,8 @@ jobs:
           path: |
             ~/.local/bin/btop
             ~/.config/btop/themes
-          key: btop-${{ runner.os }}-${{ steps.btop.outputs.hash }}
+            ~/.local/bin/tdf
+          key: builds-${{ runner.os }}-${{ steps.builds.outputs.hash }}
 
       - name: Run install script
         env:

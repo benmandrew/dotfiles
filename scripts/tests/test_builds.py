@@ -178,3 +178,81 @@ class BtopTest(BuildCase):
             self.run_step(STEPS["install_btop"], system="Darwin", machine="arm64", upgrade=True)
         )
         self.assertEqual(self.called()[-1], "brew upgrade btop")
+
+
+# A cargo that says how it ran, and leaves a tdf under the --root it was given.
+CARGO = """#!/bin/sh
+echo "cargo $* [PATH=$PATH CC=${CC:-} CXX=${CXX:-}]" >>"$FAKE_CALLS"
+while [ "$1" != "--root" ]; do shift; done
+mkdir -p "$2/bin"
+printf '#!/bin/sh\\necho 0.5.0\\n' >"$2/bin/tdf"
+chmod +x "$2/bin/tdf"
+"""
+
+
+class TdfTest(BuildCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.tag = pins.pin("TDF_VERSION")
+        self.fake("cargo", CARGO)
+        self.recording("apt-get")
+
+    def install(self, *, upgrade: bool = False) -> bool:
+        return self.run_step(STEPS["install_tdf"], upgrade=upgrade)
+
+    def test_build(self) -> None:
+        self.fake("dpkg", "#!/bin/sh\nexit 1\n")
+        self.assertTrue(self.install())
+        self.assertEqual(self.said(), f"[install] Installing tdf {self.tag}\n")
+        update, apt_install, cargo = self.called()
+        self.assertEqual(update, "apt-get update")
+        self.assertEqual(apt_install, "apt-get install -y clang libfontconfig-dev")
+        self.assertTrue(cargo.startswith("cargo install --locked --root "))
+        self.assertIn(f" --git {builds.TDF_URL} --tag {self.tag} tdf-viewer [", cargo)
+        self.assertIn(
+            f"[PATH={self.bin}:{self.system_path} CC=/usr/bin/gcc CXX=/usr/bin/g++]", cargo
+        )
+        self.assertTrue((self.home / ".local/bin/tdf").is_file())
+
+    def test_build_packages_already_present(self) -> None:
+        self.fake("dpkg", "#!/bin/sh\n")
+        self.assertTrue(self.install())
+        self.assertEqual(len(self.called()), 1)
+        self.assertTrue(self.called()[0].startswith("cargo install "))
+
+    def test_present(self) -> None:
+        self.fake("tdf", prints(self.tag.removeprefix("v")))
+        self.assertTrue(self.install())
+        self.assertEqual(self.said(), "[install] tdf already installed; skipping\n")
+        self.assertEqual(self.requests(), [])
+        self.serve(f"{github.API}/itsjunetime/tdf/releases/latest", f'{{"tag_name": "{self.tag}"}}')
+        self.assertTrue(self.install(upgrade=True))
+        self.assertIn(
+            f"[install] tdf {self.tag.removeprefix('v')} already at latest; skipping\n",
+            self.said(),
+        )
+        self.assertEqual(self.called(), [])
+
+    def test_upgrade(self) -> None:
+        self.fake("dpkg", "#!/bin/sh\n")
+        self.fake("tdf", prints("0.4.3"))
+        self.serve(f"{github.API}/itsjunetime/tdf/releases/latest", '{"tag_name": "v9.0.0"}')
+        self.assertTrue(self.install(upgrade=True))
+        self.assertTrue(self.said().startswith("[install] Upgrading tdf to v9.0.0\n"))
+        self.assertIn(" --tag v9.0.0 tdf-viewer [", self.called()[0])
+
+    def test_a_failed_build(self) -> None:
+        self.fake("dpkg", "#!/bin/sh\n")
+        self.fake("cargo", "#!/bin/sh\nexit 101\n")
+        self.assertFalse(self.install())
+        self.assertFalse((self.home / ".local/bin/tdf").exists())
+
+    def test_macos_is_a_formula(self) -> None:
+        self.installer("brew", creates="tdf")
+        self.assertTrue(self.run_step(STEPS["install_tdf"], system="Darwin", machine="arm64"))
+        self.assertEqual(self.said(), "[install] Installing tdf\n")
+        self.assertEqual(self.called(), ["brew install tdf"])
+        self.assertTrue(
+            self.run_step(STEPS["install_tdf"], system="Darwin", machine="arm64", upgrade=True)
+        )
+        self.assertEqual(self.called()[-1], "brew upgrade tdf")

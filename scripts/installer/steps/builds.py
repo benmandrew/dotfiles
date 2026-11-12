@@ -1,4 +1,4 @@
-"""Tools built from source on Linux: tmux and btop."""
+"""Tools built from source on Linux: tmux, btop and tdf."""
 
 from __future__ import annotations
 
@@ -14,6 +14,10 @@ from ..runner import Step, StepContext, StepFailed
 TMUX_MIN = (3, 4)
 TMUX = Path("/usr/local/bin/tmux")
 BTOP_URL = "https://github.com/aristocratos/btop.git"
+TDF_URL = "https://github.com/itsjunetime/tdf.git"
+# What tdf's MuPDF binding needs to build: clang for bindgen, and the
+# fontconfig headers for its system-fonts feature.
+TDF_BUILD_PACKAGES = ("clang", "libfontconfig-dev")
 
 # Both builds run with a pruned PATH and an explicit compiler. direnv activates
 # this repo's own flake for anyone running the installer from a shell sat in
@@ -173,7 +177,64 @@ def install_btop(context: StepContext) -> None:
     tools.require_runs(context, target)
 
 
+def _tdf_version(context: StepContext) -> str:
+    found = _VERSION.search(context.capture(["tdf", "--version"], quiet=True) or "")
+    return found.group() if found else ""
+
+
+def install_tdf(context: StepContext) -> None:
+    present = context.which("tdf") is not None
+    if context.host.system == "Darwin":
+        # Homebrew has a bottle, which pulls in fontconfig and freetype itself.
+        if tools.announce(context, "tdf", present):
+            brew.install_or_upgrade(context, "tdf", present)
+            tools.require_runs(context, "tdf", "--version")
+        return
+
+    # Linux: upstream attaches no binary to its releases and publishes no
+    # crate, so cargo builds the tag from git. The skip check comes before the
+    # tag resolves, so an installed tdf costs no API call.
+    if present and not context.upgrade:
+        context.log("tdf already installed; skipping")
+        return
+    tag = pins.pinned_tag(context, "TDF_VERSION")
+    version = tag.removeprefix("v")
+    if present:
+        current = _tdf_version(context)
+        if current == version:
+            context.log(f"tdf {current} already at latest; skipping")
+            return
+        context.log(f"Upgrading tdf to {tag}")
+    else:
+        context.log(f"Installing tdf {tag}")
+
+    missing = [package for package in TDF_BUILD_PACKAGES if not apt.installed(context, package)]
+    if missing:
+        apt.update(context)
+        apt.install(context, *missing)
+
+    tools.load_cargo_env(context)
+    cargo = context.which("cargo")
+    if cargo is None:
+        raise StepFailed("Missing required command: cargo")
+    # Into a scratch root rather than ~/.cargo/bin, so the binary lands in
+    # ~/.local/bin beside btop, where CI caches both. MuPDF is C, so the
+    # build takes the pruned PATH with cargo's directory put back in front.
+    root = context.tmpdir() / "tdf"
+    env = {
+        **_build_env(context, "CC", "/usr/bin/gcc"),
+        "CXX": "/usr/bin/g++",
+        "PATH": f"{Path(cargo).parent}:{SYSTEM_PATH}",
+    }
+    command = ["cargo", "install", "--locked", "--root", str(root)]
+    context.run([*command, "--git", TDF_URL, "--tag", tag, "tdf-viewer"], env=env)
+    target = tools.install_binary(context, root / "bin" / "tdf", "tdf")
+    tools.note_shadowed(context, "tdf", target)
+    tools.require_runs(context, target, "--version")
+
+
 STEPS = (
     Step("install_tmux_from_source", install_tmux_from_source),
     Step("install_btop", install_btop),
+    Step("install_tdf", install_tdf),
 )
