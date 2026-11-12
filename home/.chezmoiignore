@@ -3,6 +3,7 @@ Library/Application Support/Code/User/settings.json
 {{ end }}
 {{ if ne .chezmoi.os "linux" }}
 .config/Code/User/settings.json
+.config/obsidian
 .config/systemd
 .local/bin/code
 .local/bin/recolour-icons

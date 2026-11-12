@@ -1,0 +1,27 @@
+#!/bin/sh
+# Obsidian owns obsidian.json, rewriting it whenever a vault opens, so chezmoi
+# manages only the "frame" key. The current file arrives on stdin and the
+# merged result goes to stdout.
+#
+# "native" draws a GTK title bar, which takes its square corners from
+# gtk-3.0/gtk.css. Obsidian's default, "hidden", is a frameless Electron
+# window, and Electron rounds those itself unless the compositor marks the
+# window tiled, which Pop Shell never does.
+set -eu
+
+current=$(cat)
+
+if ! printf '%s' "$current" | grep -q '[^[:space:]]'; then
+    printf '{"frame":"native"}\n'
+    exit 0
+fi
+
+# Whatever this prints replaces the file, so on any failure hand back what
+# came in rather than lose the vault list.
+if command -v jq >/dev/null 2>&1 &&
+    merged=$(printf '%s' "$current" | jq -c 'if type == "object" then . + {frame: "native"} else error("not an object") end' 2>/dev/null); then
+    printf '%s\n' "$merged"
+else
+    echo "obsidian: cannot merge obsidian.json; leaving it unchanged" >&2
+    printf '%s' "$current"
+fi
