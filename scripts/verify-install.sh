@@ -311,18 +311,18 @@ if [[ "${headless_linux}" == false ]]; then
     fi
 fi
 
-# install_forge_extension runs only where GNOME Shell is, and leaves Forge
-# installed but not enabled when it finds no session bus, so both only warn.
-# gsettings get reads dconf and writes nothing.
-has_forge_enabled() {
-    gsettings get org.gnome.shell enabled-extensions 2>/dev/null | grep -q "'forge@jmmaranan.com'"
+# install_pop_shell_extension runs only where GNOME Shell is, and leaves Pop
+# Shell installed but not enabled when it finds no session bus, so both only
+# warn. gsettings get reads dconf and writes nothing.
+has_pop_shell_enabled() {
+    gsettings get org.gnome.shell enabled-extensions 2>/dev/null | grep -q "'pop-shell@system76.com'"
 }
 
 if [[ "${os_name}" == "Linux" ]] && command -v gnome-shell >/dev/null 2>&1 &&
     command -v gnome-extensions >/dev/null 2>&1; then
-    check_optional "forge extension" \
-        test -f "${HOME}/.local/share/gnome-shell/extensions/forge@jmmaranan.com/metadata.json"
-    check_optional "forge extension enabled" has_forge_enabled
+    check_optional "pop-shell extension" \
+        test -f "${HOME}/.local/share/gnome-shell/extensions/pop-shell@system76.com/extension.js"
+    check_optional "pop-shell extension enabled" has_pop_shell_enabled
 fi
 
 # Optional (opted into per machine) and, even when opted in, the `obsidian`

@@ -52,39 +52,51 @@ icons:
     com.microsoft.VSCode.desktop: --disable-gpu-rasterization
 
 desktop_keys:
-  ## GNOME and Forge keybindings, which run_once_configure-gnome-keybindings.sh
-  ## sets through gsettings. One modifier per layer: Super for the desktop, the
-  ## tmux prefix for the terminal, Ctrl for an app's tabs.
+  ## GNOME and Pop Shell keybindings, which
+  ## run_once_configure-gnome-keybindings.sh sets through gsettings. One
+  ## modifier per layer: Super for the desktop, the tmux prefix for the
+  ## terminal, Ctrl for an app's tabs.
   ## Within a layer, h/j/k/l focus, with Shift move, with Alt resize.
   ##
-  ## schema is an alias the script expands: wm, shell, media or forge. accel is
-  ## a GTK accelerator. A trailing # in a key or accel runs from 1 to 9.
+  ## schema is an alias the script expands: wm, shell, mutter, media or pop.
+  ## accel is a GTK accelerator. A trailing # in a key or accel runs from 1 to
+  ## 9. Setting a key replaces all of Pop Shell's defaults for it, several of
+  ## which sit on Super+arrows.
   bindings:
-    ## GNOME takes a key before Forge, so minimise moved off Super+H and
+    ## GNOME takes a key before Pop Shell, so minimise moved off Super+H and
     ## lock screen off Super+L.
-    - {group: Desktop windows, desc: Focus the window to the left, schema: forge, key: window-focus-left, accel: "<Super>h"}
-    - {group: Desktop windows, desc: Focus the window below, schema: forge, key: window-focus-down, accel: "<Super>j"}
-    - {group: Desktop windows, desc: Focus the window above, schema: forge, key: window-focus-up, accel: "<Super>k"}
-    - {group: Desktop windows, desc: Focus the window to the right, schema: forge, key: window-focus-right, accel: "<Super>l"}
-    ## Forge's move carries a tiled window over the monitor edge.
-    - {group: Desktop windows, desc: Move the window left, schema: forge, key: window-move-left, accel: "<Shift><Super>h"}
-    - {group: Desktop windows, desc: Move the window down, schema: forge, key: window-move-down, accel: "<Shift><Super>j"}
-    - {group: Desktop windows, desc: Move the window up, schema: forge, key: window-move-up, accel: "<Shift><Super>k"}
-    - {group: Desktop windows, desc: Move the window right, schema: forge, key: window-move-right, accel: "<Shift><Super>l"}
-    ## Forge resizes one edge at a time, so h and l work the right edge and k
-    ## and j the bottom.
-    - {group: Desktop windows, desc: Make the window narrower, schema: forge, key: window-resize-right-decrease, accel: "<Alt><Super>h"}
-    - {group: Desktop windows, desc: Make the window taller, schema: forge, key: window-resize-bottom-increase, accel: "<Alt><Super>j"}
-    - {group: Desktop windows, desc: Make the window shorter, schema: forge, key: window-resize-bottom-decrease, accel: "<Alt><Super>k"}
-    - {group: Desktop windows, desc: Make the window wider, schema: forge, key: window-resize-right-increase, accel: "<Alt><Super>l"}
-    - {group: Desktop windows, desc: Swap with the last focused window, schema: forge, key: window-swap-last-active, accel: "<Super>Return"}
-    - {group: Desktop windows, desc: Float or tile the window, schema: forge, key: window-toggle-float, accel: "<Super>c"}
-    - {group: Desktop windows, desc: Always float this app's windows, schema: forge, key: window-toggle-always-float, accel: "<Shift><Super>c"}
+    - {group: Desktop windows, desc: Focus the window to the left, schema: pop, key: focus-left, accel: "<Super>h"}
+    - {group: Desktop windows, desc: Focus the window below, schema: pop, key: focus-down, accel: "<Super>j"}
+    - {group: Desktop windows, desc: Focus the window above, schema: pop, key: focus-up, accel: "<Super>k"}
+    - {group: Desktop windows, desc: Focus the window to the right, schema: pop, key: focus-right, accel: "<Super>l"}
+    - {group: Desktop windows, desc: Move the window left, schema: pop, key: tile-move-left-global, accel: "<Shift><Super>h"}
+    - {group: Desktop windows, desc: Move the window down, schema: pop, key: tile-move-down-global, accel: "<Shift><Super>j"}
+    - {group: Desktop windows, desc: Move the window up, schema: pop, key: tile-move-up-global, accel: "<Shift><Super>k"}
+    - {group: Desktop windows, desc: Move the window right, schema: pop, key: tile-move-right-global, accel: "<Shift><Super>l"}
+    - {group: Desktop windows, desc: Float or tile the window, schema: pop, key: toggle-floating, accel: "<Super>c"}
     - {group: Desktop windows, desc: Minimise the window, schema: wm, key: minimize, accel: "<Super>comma"}
-    ## Forge leaves floating windows alone, so they need their own monitor
-    ## move. The monitors are stacked vertically.
-    - {group: Desktop windows, desc: Move a floating window to the monitor above, schema: wm, key: move-to-monitor-up, accel: "<Super><Shift>Up"}
-    - {group: Desktop windows, desc: Move a floating window to the monitor below, schema: wm, key: move-to-monitor-down, accel: "<Super><Shift>Down"}
+    ## Pop Shell's monitor move carries floating windows as well as tiled
+    ## ones. The monitors are stacked vertically.
+    - {group: Desktop windows, desc: Move the window to the monitor above, schema: pop, key: pop-monitor-up, accel: "<Super><Shift>Up"}
+    - {group: Desktop windows, desc: Move the window to the monitor below, schema: pop, key: pop-monitor-down, accel: "<Super><Shift>Down"}
+
+    ## Pop Shell resizes and swaps only in its tiling mode, whose keys work
+    ## only while the mode is on. Alt resizes there as it would elsewhere.
+    - {group: Desktop tiling mode, desc: Start tiling mode, schema: pop, key: tile-enter, accel: "<Super>Return"}
+    - {group: Desktop tiling mode, desc: Keep the changes and leave, schema: pop, key: tile-accept, accel: "Return"}
+    - {group: Desktop tiling mode, desc: Undo the changes and leave, schema: pop, key: tile-reject, accel: "Escape"}
+    - {group: Desktop tiling mode, desc: Move the window left, schema: pop, key: tile-move-left, accel: "h"}
+    - {group: Desktop tiling mode, desc: Move the window down, schema: pop, key: tile-move-down, accel: "j"}
+    - {group: Desktop tiling mode, desc: Move the window up, schema: pop, key: tile-move-up, accel: "k"}
+    - {group: Desktop tiling mode, desc: Move the window right, schema: pop, key: tile-move-right, accel: "l"}
+    - {group: Desktop tiling mode, desc: Make the window narrower, schema: pop, key: tile-resize-left, accel: "<Alt>h"}
+    - {group: Desktop tiling mode, desc: Make the window taller, schema: pop, key: tile-resize-down, accel: "<Alt>j"}
+    - {group: Desktop tiling mode, desc: Make the window shorter, schema: pop, key: tile-resize-up, accel: "<Alt>k"}
+    - {group: Desktop tiling mode, desc: Make the window wider, schema: pop, key: tile-resize-right, accel: "<Alt>l"}
+    - {group: Desktop tiling mode, desc: Swap with the window to the left, schema: pop, key: tile-swap-left, accel: "<Control>h"}
+    - {group: Desktop tiling mode, desc: Swap with the window below, schema: pop, key: tile-swap-down, accel: "<Control>j"}
+    - {group: Desktop tiling mode, desc: Swap with the window above, schema: pop, key: tile-swap-up, accel: "<Control>k"}
+    - {group: Desktop tiling mode, desc: Swap with the window to the right, schema: pop, key: tile-swap-right, accel: "<Control>l"}
 
     ## Super+N matches prefix N for tmux window N.
     - {group: Desktop workspaces, desc: "Go to workspace 1 to 9", schema: wm, key: "switch-to-workspace-#", accel: "<Super>#"}
@@ -96,17 +108,11 @@ desktop_keys:
     - {group: Desktop workspaces, desc: Move the window a workspace left, schema: wm, key: move-to-workspace-left, accel: "<Super><Shift>Left"}
     - {group: Desktop workspaces, desc: Move the window a workspace right, schema: wm, key: move-to-workspace-right, accel: "<Super><Shift>Right"}
 
-    - {group: Desktop layout, desc: Change the split direction, schema: forge, key: con-split-layout-toggle, accel: "<Super>g"}
-    - {group: Desktop layout, desc: Open the next window beside this one, schema: forge, key: con-split-horizontal, accel: "<Super>z"}
-    - {group: Desktop layout, desc: Open the next window below this one, schema: forge, key: con-split-vertical, accel: "<Super>v"}
-    - {group: Desktop layout, desc: Stack or unstack the windows, schema: forge, key: con-stacked-layout-toggle, accel: "<Shift><Super>s"}
-    - {group: Desktop layout, desc: Tab or untab the windows, schema: forge, key: con-tabbed-layout-toggle, accel: "<Shift><Super>t"}
-    - {group: Desktop layout, desc: Show or hide the focus border, schema: forge, key: focus-border-toggle, accel: "<Super>x"}
-    - {group: Desktop layout, desc: Turn tiling on or off, schema: forge, key: prefs-tiling-toggle, accel: "<Super>w"}
-    - {group: Desktop layout, desc: Turn tiling on or off for this workspace, schema: forge, key: workspace-active-tile-toggle, accel: "<Shift><Super>w"}
-    - {group: Desktop layout, desc: Open Forge's settings, schema: forge, key: prefs-open, accel: "<Super>period"}
+    - {group: Desktop layout, desc: Change the split direction, schema: pop, key: tile-orientation, accel: "<Super>g"}
+    - {group: Desktop layout, desc: Stack or unstack the windows, schema: pop, key: toggle-stacking-global, accel: "<Shift><Super>s"}
+    - {group: Desktop layout, desc: Turn tiling on or off, schema: pop, key: toggle-tiling, accel: "<Super>w"}
 
-    ## GNOME also put the notification list on Super+V, which Forge needs.
+    ## Moved off Super+V while Forge held that key.
     - {group: Desktop session, desc: Show the notification list, schema: shell, key: toggle-message-tray, accel: "<Super>m"}
     - {group: Desktop session, desc: Lock the screen, schema: media, key: screensaver, accel: "<Control><Alt>l"}
 
@@ -114,26 +120,12 @@ desktop_keys:
   ## apps, which use them for multiple cursors. Workspaces run left to right,
   ## so up and down have nothing to do, as left and right have nothing between
   ## monitors. switch-to-application-# took Super+N. Mutter's half-screen
-  ## tiling took Super+Left/Right, and Forge does the tiling. Forge's swap does
-  ## what its move does, and its gaps stay at 0.
+  ## tiling took Super+Left/Right, and Pop Shell does the tiling. GNOME's own
+  ## monitor moves give way to Pop Shell's. Pop Shell's workspace and
+  ## left/right monitor moves sat on Super+Shift+arrows and Super+Shift+h/l,
+  ## and its launcher needs pop-launcher, which nothing installs.
   cleared:
-    wm: [switch-to-workspace-up, switch-to-workspace-down, move-to-workspace-up, move-to-workspace-down, move-to-monitor-left, move-to-monitor-right]
+    wm: [switch-to-workspace-up, switch-to-workspace-down, move-to-workspace-up, move-to-workspace-down, move-to-monitor-left, move-to-monitor-right, move-to-monitor-up, move-to-monitor-down]
     shell: ["switch-to-application-#"]
     mutter: [toggle-tiled-left, toggle-tiled-right]
-    forge:
-      - window-resize-left-decrease
-      - window-resize-left-increase
-      - window-resize-top-decrease
-      - window-resize-top-increase
-      - window-swap-up
-      - window-swap-down
-      - window-swap-left
-      - window-swap-right
-      - window-gap-size-increase
-      - window-gap-size-decrease
-      - window-snap-center
-      - window-snap-one-third-left
-      - window-snap-one-third-right
-      - window-snap-two-third-left
-      - window-snap-two-third-right
-      - con-tabbed-showtab-decoration-toggle
+    pop: [pop-workspace-up, pop-workspace-down, pop-monitor-left, pop-monitor-right, activate-launcher]

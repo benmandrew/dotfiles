@@ -27,10 +27,10 @@ fi
 
 # Set a key only where its schema is installed and has it, as in the
 # preferences script: a server with glib but no GNOME schemas would otherwise
-# fail `gsettings set` and, under set -e, the whole apply. Forge's schema ships
-# inside the extension, not in the system schema directory, so it needs
+# fail `gsettings set` and, under set -e, the whole apply. Pop Shell's schema
+# ships inside the extension, not in the system schema directory, so it needs
 # --schemadir.
-forge_schemas="${HOME}/.local/share/gnome-shell/extensions/forge@jmmaranan.com/schemas"
+pop_schemas="${HOME}/.local/share/gnome-shell/extensions/pop-shell@system76.com/schemas"
 kset() {
     local dir=""
     case "$1" in
@@ -38,9 +38,9 @@ kset() {
         shell) set -- org.gnome.shell.keybindings "$2" "$3" ;;
         mutter) set -- org.gnome.mutter.keybindings "$2" "$3" ;;
         media) set -- org.gnome.settings-daemon.plugins.media-keys "$2" "$3" ;;
-        forge)
-            set -- org.gnome.shell.extensions.forge.keybindings "$2" "$3"
-            dir="${forge_schemas}"
+        pop)
+            set -- org.gnome.shell.extensions.pop-shell "$2" "$3"
+            dir="${pop_schemas}"
             ;;
         *)
             echo "${0##*/}: unknown schema alias $1" >&2

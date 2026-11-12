@@ -143,7 +143,7 @@ LINUX = Plan(
             "install_ghostty",
             "install_nerd_font",
             "install_terminal_font",
-            "install_forge_extension",
+            "install_pop_shell_extension",
         ),
         OptionalStep(
             "obsidian",

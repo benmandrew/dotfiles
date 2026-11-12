@@ -2,7 +2,6 @@
 Library/Application Support/Code/User/settings.json
 {{ end }}
 {{ if ne .chezmoi.os "linux" }}
-.config/forge
 .config/Code/User/settings.json
 .config/systemd
 .local/bin/code
