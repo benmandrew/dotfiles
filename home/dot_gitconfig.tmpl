@@ -70,6 +70,13 @@
     # wt is ~/.local/bin/git-wt, not an alias — git runs any git-* on PATH.
 [init]
     defaultBranch = main
+# Clones the main worktree's build directories into each new worktree; see the
+# script's header. A hook set in config runs alongside a repository's own
+# .git/hooks/post-checkout, where core.hooksPath would replace every one of
+# them. Git before 2.54 ignores this section.
+[hook "seed-worktree"]
+    event = post-checkout
+    command = {{ .chezmoi.homeDir }}/.local/bin/git-seed-worktree
 [commit]
     gpgsign = true
     template = {{ .chezmoi.homeDir }}/.config/git/.gitmessage

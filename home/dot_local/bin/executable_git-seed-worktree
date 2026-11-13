@@ -1,0 +1,100 @@
+#!/bin/sh
+# Seeds a new worktree with build directories cloned from the main worktree,
+# so the first build in it is incremental. dot_gitconfig.tmpl runs this as a
+# post-checkout hook, which git also fires for `git worktree add`; a new
+# worktree is the case where the previous HEAD is the null object ID.
+#
+# Each candidate directory (seedWorktree.dir, multi-valued, or the defaults
+# below) is copied only if it is gitignored in the main worktree and absent
+# from the new one, and only as a copy-on-write clone: `cp -c` on APFS,
+# `--reflink=always` on btrfs and XFS. A real copy of a multi-gigabyte target/
+# would hold up `git worktree add` for minutes, so a filesystem that cannot
+# clone gets nothing.
+#
+# A build directory that records absolute paths cannot move. CMake refuses a
+# CMakeCache.txt created for another source directory, and Meson, autotools'
+# config.status, Python venvs and local opam switches all embed their own
+# location. Such a directory is skipped, with a message on stderr; ccache or
+# sccache with a shared base directory is the way to share their work.
+#
+# Then the modification times. Checkout stamps every file with the current
+# time, newer than every cloned object, so Make and Ninja would rebuild
+# everything. Setting each file to its commit time instead (git-restore-mtime)
+# would be wrong: a file that differs from the main worktree's copy can come
+# out older than the object built from that copy, and the build would skip it.
+# So a file takes the main worktree's mtime only when its content matches the
+# main worktree's working tree, which `git diff <new HEAD>` run there decides,
+# uncommitted edits included. Every other file keeps the checkout time and
+# rebuilds.
+
+[ "${1:-}" = 0000000000000000000000000000000000000000 ] || exit 0
+[ "${3:-}" = 1 ] || exit 0
+new_head=$2
+
+new=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+list=$(git worktree list --porcelain 2>/dev/null) || exit 0
+# The first record is the main worktree; a bare repository has nothing to seed
+# from.
+second=$(printf '%s\n' "$list" | sed -n 2p) || exit 0
+[ "$second" = bare ] && exit 0
+main=$(printf '%s\n' "$list" | sed -n '1s/^worktree //p')
+[ -d "$main" ] || exit 0
+# git clone fires this hook with a null previous HEAD as well, and there the
+# main worktree is the new one.
+main_real=$(cd "$main" && pwd -P) || exit 0
+new_real=$(cd "$new" && pwd -P) || exit 0
+[ "$main_real" = "$new_real" ] && exit 0
+
+dirs=$(git -C "$main" config --get-all seedWorktree.dir) ||
+    dirs="target _build build node_modules"
+
+# /bin/cp by path, since Nix or Homebrew coreutils can put a GNU cp, which has
+# no -c, ahead of it on PATH.
+case $(uname -s) in
+    Darwin) clone="/bin/cp -cRp" ;;
+    *) clone="cp -a --reflink=always" ;;
+esac
+
+seeded=""
+for dir in $dirs; do
+    src=$main/$dir
+    [ -d "$src" ] && [ ! -L "$src" ] || continue
+    [ -e "$new/$dir" ] && continue
+    git -C "$main" check-ignore -q "$dir/" || continue
+    baked=$(find "$src" -maxdepth 3 \( -name CMakeCache.txt -o -name meson-private \
+        -o -name config.status -o -name pyvenv.cfg -o -name .opam-switch \) -print -quit)
+    if [ -n "$baked" ]; then
+        echo "git-seed-worktree: skipped $dir/: ${baked#"$main"/} records absolute paths" >&2
+        continue
+    fi
+    # $clone holds the command and its flags, so it is split on purpose.
+    # shellcheck disable=SC2086
+    if $clone "$src" "$new/$dir" 2>/dev/null; then
+        seeded="$seeded $dir/"
+    else
+        rm -rf "${new:?}/$dir"
+        echo "git-seed-worktree: skipped $dir/: this filesystem cannot clone it" >&2
+    fi
+done
+[ -n "$seeded" ] || exit 0
+
+differ=$(mktemp) || exit 0
+trap 'rm -f "$differ"' EXIT
+git -C "$main" diff --no-ext-diff --name-only -z "$new_head" -- >"$differ" || exit 0
+cd "$new" || exit 0
+# Time::HiRes keeps the nanoseconds: Ninja and Make compare them, and a
+# truncated time could put a source a fraction of a second behind its object.
+git ls-files -z | perl -0 -e '
+    use Time::HiRes qw(stat utime);
+    my ($main, $differ) = @ARGV;
+    open my $fh, "<", $differ or exit;
+    my %differs = map { chomp; ($_ => 1) } <$fh>;
+    while (my $path = <STDIN>) {
+        chomp $path;
+        next if $differs{$path} || -l $path || -l "$main/$path";
+        my @st = stat "$main/$path" or next;
+        utime $st[8], $st[9], $path;
+    }
+' "$main" "$differ"
+
+echo "git-seed-worktree: cloned$seeded from $main" >&2
