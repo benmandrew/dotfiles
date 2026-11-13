@@ -21,6 +21,14 @@
 # run, so a restored /etc/zshrc block costs nothing rather than prepending a
 # second copy. The second path covers a single-user install, which has no
 # /nix/var/nix/profiles/default.
+#
+# The guard is unset first, since a login shell can inherit it with PATH already
+# rebuilt. A tmux server keeps the environment of the shell that started it,
+# guard included, and each pane is a login shell, whose /etc/zprofile runs
+# path_helper and puts /bin back ahead of the profile. With the guard still set,
+# nix-daemon.sh returned at once and direnv in a tmux pane found bash 3.2.
+# .zshrc's typeset -U drops the second copy of each entry this prepends.
+unset __ETC_PROFILE_NIX_SOURCED
 for _nix_profile in \
     /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh \
     "$HOME/.nix-profile/etc/profile.d/nix.sh"; do
