@@ -13,6 +13,8 @@ bind-key C-a send-prefix
 # the entry every time this file is sourced (prefix r, or the chezmoi reload).
 set-option -su terminal-features
 set-option -sa terminal-features 'xterm-256color:RGB:extkeys:hyperlinks'
+# Ghostty's TERM, which the entry above does not match.
+set-option -sa terminal-features 'xterm-ghostty:RGB:extkeys:hyperlinks'
 set-option -g focus-events on
 set -g extended-keys on
 

@@ -1,0 +1,52 @@
+# Ghostty is only a window around tmux: tmux owns tabs, splits and sessions,
+# and ~/.zshrc attaches the local `main` session when TERM_PROGRAM is ghostty.
+
+# Font: as in wezterm.lua. Iosevka's strokes are thin, so text takes SemiBold
+# and bold takes Heavy, the faces install_terminal_font unpacks.
+# Ghostty embeds the Nerd Font symbols itself; the patched font stays as the
+# fallback for anything outside that set.
+font-family = Iosevka Term
+font-family = CodeNewRoman Nerd Font Mono
+font-style = Semibold
+font-style-bold = Heavy
+font-size = 14
+
+# Hacktober, as WezTerm's built-in scheme of that name. The Doom theme and the
+# tmux status bar copy the same colours; change them together.
+background = #141414
+foreground = #c9c9c9
+cursor-color = #c9c9c9
+# WezTerm's selection_fg = "none": selected text keeps its own colour.
+selection-background = #3d5278
+selection-foreground = cell-foreground
+palette = 0=#191918
+palette = 1=#b34538
+palette = 2=#587744
+palette = 3=#d08949
+palette = 4=#206ec5
+palette = 5=#864651
+palette = 6=#ac9166
+palette = 7=#f1eee7
+palette = 8=#2c2b2a
+palette = 9=#b33323
+palette = 10=#42824a
+palette = 11=#c75a22
+palette = 12=#5389c5
+palette = 13=#e795a5
+palette = 14=#ebc587
+palette = 15=#ffffff
+
+# Window: no title bar, as WezTerm's window_decorations = "RESIZE".
+window-padding-x = 8
+window-padding-y = 8
+window-padding-balance = true
+{{- if eq .chezmoi.os "darwin" }}
+macos-titlebar-style = hidden
+# WezTerm's default: left Option is Alt, right Option still composes.
+macos-option-as-alt = left
+{{- else }}
+window-decoration = none
+{{- end }}
+
+# tmux holds the state, so closing a window loses nothing worth a prompt.
+confirm-close-surface = false

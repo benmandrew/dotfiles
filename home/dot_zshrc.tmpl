@@ -734,6 +734,15 @@ _cache_eval starship init zsh
 # nothing, at 3 ms a prompt.
 RPROMPT=''
 
+# Ghostty is only a window around tmux, so a local shell in it attaches the
+# `main` session, as every interactive shell did before e87f557. Other
+# terminals (WezTerm, VS Code's) open a plain shell. Ghostty sets TERM_PROGRAM,
+# and tmux overwrites it, so a pane's own shells do not nest.
+if [[ -o interactive ]] && [[ -z "$TMUX" ]] && [[ -z "$SSH_CONNECTION" ]] &&
+   [[ "$TERM_PROGRAM" == ghostty ]] && [[ -z "$SSH_TMUX_DISABLE" ]]; then
+  tmux new-session -A -s main
+fi
+
 # WEZTERM_PANE marks a pane wezterm-mux-server spawned, which inherits
 # SSH_CONNECTION from the session that started the server; tmux there would
 # nest inside a pane that already outlasts the connection.
