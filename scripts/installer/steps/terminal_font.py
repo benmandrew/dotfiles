@@ -1,4 +1,4 @@
-"""Iosevka Term, WezTerm's text font: the release zip on both platforms.
+"""Iosevka Term, the terminal's text font: the release zip on both platforms.
 
 Homebrew has no cask for it, only the Nerd Font build, whose family name differs.
 """
@@ -12,11 +12,12 @@ from ..runner import Step, StepContext
 
 NAME = "Iosevka Term"
 PIN = "IOSEVKA_VERSION"
-# Unhinted, at 122 MB against 177 MB hinted. wezterm.lua sets light hinting,
-# under which FreeType's auto-hinter replaces the font's own instructions.
+# Unhinted, at 122 MB against 177 MB hinted. WezTerm, which this was first
+# chosen for, set light hinting, under which FreeType's auto-hinter replaces
+# the font's own instructions.
 ASSET = "PkgTTF-Unhinted-IosevkaTerm-{version}.zip"
-# The faces wezterm.lua resolves to: SemiBold for normal text, Heavy for bold
-# and Light for half intensity, each with its italic.
+# SemiBold for normal text and Heavy for bold, the faces the Ghostty config
+# names, each with its italic. Light was WezTerm's half-intensity face.
 MEMBERS = tuple(
     f"IosevkaTerm-{weight}{style}.ttf"
     for weight in ("SemiBold", "Heavy", "Light")

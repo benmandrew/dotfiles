@@ -7,7 +7,7 @@ bind-key C-a send-prefix
 # modified keys (e.g. Ctrl/Option+arrow) instead of collapsing them; hyperlinks
 # so OSC 8 survives the pass through tmux. tmux's built-in xterm* feature set
 # omits hyperlinks, so without this it strips the links delta, eza and gh emit,
-# and the ctrl-click gesture in wezterm.lua has nothing to open.
+# and Ghostty has no link to open.
 #
 # Reset to tmux's defaults before appending, since -a alone adds another copy of
 # the entry every time this file is sourced (prefix r, or the chezmoi reload).
@@ -18,8 +18,8 @@ set-option -sa terminal-features 'xterm-ghostty:RGB:extkeys:hyperlinks'
 set-option -g focus-events on
 set -g extended-keys on
 
-# forward OSC 7 (cwd) escape sequences to the outer terminal so WezTerm can
-# track the pane's cwd through tmux — needed for SSH sessions where WezTerm
+# forward OSC 7 (cwd) escape sequences to the outer terminal so it can track
+# the pane's cwd through tmux — needed for SSH sessions, where the terminal
 # can't introspect the remote foreground process directly
 set -g allow-passthrough on
 
@@ -27,9 +27,8 @@ set -g allow-passthrough on
 set -s set-clipboard on
 
 # Windows and panes count from 1, matching the number on the key you press to
-# reach them. wezterm.lua renders tab_index + 1 for the same reason, so with the
-# default base of 0 the two bars disagreed and prefix 1 landed on the second
-# window. renumber-windows closes the gap a closed window leaves, so the numbers
+# reach them. With the default base of 0, prefix 1 landed on the second window.
+# renumber-windows closes the gap a closed window leaves, so the numbers
 # stay contiguous and #I keeps matching the key.
 set -g base-index 1
 setw -g pane-base-index 1
@@ -42,7 +41,7 @@ bind r source-file ~/.tmux.conf
 # lag when exiting insert mode in vim/nvim
 set -sg escape-time 0
 
-# mirror WezTerm split/navigation bindings. New panes and windows inherit the
+# Split and navigation bindings. New panes and windows inherit the
 # pane's directory, but resolve it through claude-pane-session first: a pane
 # running claude hands over the directory claude is actually working in, which
 # diverges from #{pane_current_path} once claude moves workspace (into a
@@ -57,17 +56,16 @@ bind l select-pane -R
 bind x kill-pane
 
 # The three defaults the bindings above displaced, given somewhere else to live.
-# Shift is the free half of each key: s, l and x are taken by the WezTerm-mirror
-# bindings, and their uppercase forms are unbound.
+# Shift is the free half of each key: s, l and x are taken by the bindings
+# above, and their uppercase forms are unbound.
 #
 # last-window is the one that is missed most, so it also gets Tab, which is where
 # the muscle memory for "the other one" already is.
 bind S choose-tree -Zs
 bind Tab last-window
 bind L last-window
-# `x` is deliberately unconfirmed, mirroring CloseCurrentPane({confirm = false})
-# in wezterm.lua. This is the same kill with the prompt tmux ships by default,
-# for the pane you are less sure about.
+# `x` is deliberately unconfirmed. This is the same kill with the prompt tmux
+# ships by default, for the pane you are less sure about.
 bind X confirm-before -p "kill-pane #P? (y/n)" kill-pane
 
 
@@ -75,17 +73,16 @@ bind X confirm-before -p "kill-pane #P? (y/n)" kill-pane
 set -g mouse on
 set -g default-terminal "tmux-256color"
 
-# Status bar — Hacktober palette (mirrors WezTerm tab bar)
+# Status bar — Hacktober palette, as in the Ghostty config
 set -g status-style bg=#141414,fg=#c9c9c9
 set -g window-status-style bg=#191918,fg=#c9c9c9
 set -g window-status-current-style bg=#c75a22,fg=#141414,bold
-# A window is drawn the way WezTerm draws a tab: " <index> <bar><name> ".
+# A window is drawn as " <index> <bar><name> ".
 #
 # A window running claude is named after the agent ("counter-fe"), the same
-# identifier `gwt` lists and the WezTerm tab shows, so a window can be matched to
-# a row of that listing; #{window_name} is only the directory, which agents
-# share. Anything else is named after its directory, as a WezTerm tab is, and
-# either is truncated to the width WezTerm truncates a tab title to. tmux
+# identifier `gwt` lists, so a window can be matched to a row of that listing;
+# #{window_name} is only the directory, which agents share. Anything else is
+# named after its directory, and either is truncated to 24 columns. tmux
 # expands #() per window, with that window's own #{pane_pid}, and caches each
 # job by command string.
 #
@@ -99,16 +96,13 @@ set -g window-status-current-style bg=#c75a22,fg=#141414,bold
 set -g window-status-format ' #[fg=#464444,nobold]#I #(~/.local/bin/claude-pane-session status "#{pane_pid}")#[fg=#c9c9c9,nobold]#{=24:#(~/.local/bin/claude-pane-session name "#{pane_pid}" "#{window_name}")} '
 set -g window-status-current-format ' #[fg=#6d371b,nobold]#I #(~/.local/bin/claude-pane-session status-current "#{pane_pid}")#[fg=#141414,bold]#{=24:#(~/.local/bin/claude-pane-session name "#{pane_pid}" "#{window_name}")} '
 set -g window-status-separator ""
-# Named by directory rather than by the running command, so a window and the
-# WezTerm tab around the same shell read alike.
+# Named by directory, so the name says where the window is working.
 set -g automatic-rename-format '#{b:pane_current_path}'
-# The terminal title is the current window's name, worked out as above. Over
-# ssh, WezTerm sees only the ssh process and tmux swallows OSC 7, so this title
-# is the only name it gets for the tab, which it shows as host:name.
+# The terminal title is the current window's name, worked out as above.
 set -g set-titles on
 set -g set-titles-string '#{=24:#(~/.local/bin/claude-pane-session name "#{pane_pid}" "#{window_name}")}'
 
-# Pane borders: active uses Hacktober orange to match WezTerm focus highlight
+# Pane borders: active uses Hacktober orange, as the current window chip does
 set -g pane-active-border-style fg=#c75a22
 set -g pane-border-style fg=#464444
 
@@ -118,7 +112,7 @@ set -g status-position top
 # putting the one ps snapshot and jq pass here keeps each window's lookup down to
 # an awk over the cache. It prints nothing, and the leader chip follows it.
 #
-# The leader chip mirrors WezTerm's, rendering ⌃a (U+2303 UP ARROWHEAD, matching
+# The leader chip renders ⌃a (U+2303 UP ARROWHEAD, matching
 # the C-a prefix set at the top of this file). #{?client_prefix,…} picks the
 # style: orange #c75a22 on #141414 and bold while the prefix is armed, the tab
 # bar's hover grey #464444 on the bar's own #141414 otherwise. The chip holds a
@@ -132,9 +126,8 @@ set -g status-position top
 set -g status-left-length 20
 set -g status-left '#(~/.local/bin/claude-pane-session refresh)#{?client_prefix,#[bg=#c75a22#,fg=#141414#,bold],#[bg=#141414#,fg=#464444#,nobold]} ⌃a #[bg=#141414,fg=#c9c9c9,nobold] '
 set -g status-right-length 120
-# The tick has to keep up with the busy/idle bar on the window chips, which
-# WezTerm redraws against a 1s TTL; at the old interval of 5 a session going idle
-# could sit stale for five seconds. What stopped it being lowered was the cost:
+# The tick has to keep up with the busy/idle bar on the window chips; at the old
+# interval of 5 a session going idle could sit stale for five seconds. What stopped it being lowered was the cost:
 # cpu.sh, ram.sh and uptime.sh took 238 ms between them per tick, 218 of it the
 # blocking `sleep 0.2` inside cpu.sh, and each window costs two more #() jobs on
 # top. Folding the three into status.sh and dropping the per-window `find` in
@@ -143,8 +136,7 @@ set -g status-right-length 120
 # started in parallel the way tmux starts them, this Mac).
 #
 # 1 rather than 2 would hold 287 ms of CPU per second, near a third of a core,
-# indefinitely and on battery. 2 halves that, and leaves a worst-case lag within
-# a second of WezTerm's own TTL, which is what the bar is being matched against.
+# indefinitely and on battery. 2 halves that, for a worst-case lag of 2 s.
 set -g status-interval 2
 # One #() job for all three metrics rather than three. tmux cannot split a job's
 # output across fields, so the glyphs and gaps between them moved into the
@@ -152,8 +144,7 @@ set -g status-interval 2
 set -g status-right "#[bg=#191918,fg=#c9c9c9] 󰒋 #{host_short}  #(~/.config/tmux/status.sh) "
 
 # Drop the attention flag of every claude session in a window once it is looked
-# at, as clear_active_bell does for a WezTerm tab, whose process walk cannot see
-# inside tmux. pane-focus-in covers the terminal regaining focus and a change of
+# at. pane-focus-in covers the terminal regaining focus and a change of
 # pane; the other two cover a change of window or session, where focus-in does
 # not always fire. #{P:} hands over every pane of the window, since typing in a
 # split beside claude still means the window has been seen. The script returns

@@ -67,9 +67,8 @@ if gsettings range org.gnome.shell.extensions.dash-to-dock hot-keys >/dev/null 2
     gsettings set org.gnome.shell.extensions.dash-to-dock hot-keys false
 fi
 
-# The bindings themselves are desktop_keys in .chezmoidata.yaml, which also
-# feeds the WezTerm cheatsheet. Mutter rereads a changed accelerator, so they
-# apply in the running shell.
+# The bindings themselves are desktop_keys in .chezmoidata.yaml. Mutter rereads
+# a changed accelerator, so they apply in the running shell.
 {{- range .desktop_keys.bindings }}
 {{-   if hasSuffix "#" .key }}
 for n in 1 2 3 4 5 6 7 8 9; do

@@ -25,3 +25,6 @@
 # token-filtering proxy.
 .claude/RTK.md
 .claude-work/RTK.md
+
+# WezTerm is gone: Ghostty is the terminal, with tmux doing the multiplexing.
+.config/wezterm

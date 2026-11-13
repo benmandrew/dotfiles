@@ -6,7 +6,7 @@ Use Plain English/Plain Language (PL). When appropriate, use ASD-STE100.
 
 # Tab titles
 
-Run `claude-tab-title <word>` when you start a distinct task, to title the WezTerm tab and tmux window with what you are working on. One word, lowercase. `claude-tab-title --clear` restores the agent identifier.
+Run `claude-tab-title <word>` when you start a distinct task, to title the tmux window with what you are working on. One word, lowercase. `claude-tab-title --clear` restores the agent identifier.
 
 # Best Practices
 

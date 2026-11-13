@@ -1,7 +1,7 @@
-## Hacktober, matching the WezTerm and tmux palettes in this repo.
+## Hacktober, matching the Ghostty and tmux palettes in this repo.
 ##
 ## atuin themes set foreground colours only, so the background is whatever the
-## terminal already draws — which is the point, since WezTerm is already on
+## terminal already draws — which is the point, since Ghostty is already on
 ## #141414. Any meaning left out here inherits from the built-in "default"
 ## theme, so this file only needs the ones that should differ.
 ##
@@ -13,7 +13,7 @@
 [theme]
 name = "hacktober"
 
-## Shared with home/dot_config/wezterm/wezterm.lua and dot_tmux.conf.tmpl:
+## Shared with home/dot_config/ghostty/config.tmpl and dot_tmux.conf.tmpl:
 ##   text #c9c9c9   orange #c75a22   hover #464444   selection #3d5278
 ## Three colours here are not in that palette. #6b83ab is the selection blue
 ## lightened to stay legible as text on #141414, #8a8a8a sits between the text

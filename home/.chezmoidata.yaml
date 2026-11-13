@@ -20,18 +20,6 @@ atuin:
     av2: av2
     av3: av3
 
-wezterm:
-  ## Hosts WezTerm attaches as SSH multiplexing domains, rendered into
-  ## dot_config/wezterm/mux_domains.lua.tmpl. Typing `ssh <user>@<host>` in a
-  ## local WezTerm pane attaches the domain instead (the ssh function in
-  ## dot_zshrc.tmpl), so remote panes live in wezterm-mux-server there and
-  ## outlast the connection. Each host needs a WezTerm whose mux protocol
-  ## matches this machine's, since a mismatch refuses the connection.
-  mux_domains:
-    - name: manc
-      host: ben-manchester
-      user: y19056ba
-
 icons:
   ## Launcher icons that run_onchange_after_recolour-icons.sh.tmpl redraws in
   ## the palette of benmandrew.com, on Linux. Each key is a .desktop filename,
@@ -49,7 +37,6 @@ icons:
     firefox.desktop: tone
     nemo.desktop: tone
     md.obsidian.Obsidian.desktop: tone
-    org.wezfurlong.wezterm.desktop: tone
     zotero.desktop: tone
     org.gnome.eog.desktop: tone
     org.pwmt.zathura.desktop: tone
@@ -66,9 +53,8 @@ icons:
 
 desktop_keys:
   ## GNOME and Forge keybindings, which run_once_configure-gnome-keybindings.sh
-  ## sets through gsettings and dot_config/wezterm/desktop_keys.lua lists in the
-  ## WezTerm cheatsheet (Leader ?). One modifier per layer: Super for the
-  ## desktop, the WezTerm leader for the terminal, Ctrl for an app's tabs.
+  ## sets through gsettings. One modifier per layer: Super for the desktop, the
+  ## tmux prefix for the terminal, Ctrl for an app's tabs.
   ## Within a layer, h/j/k/l focus, with Shift move, with Alt resize.
   ##
   ## schema is an alias the script expands: wm, shell, media or forge. accel is
@@ -100,7 +86,7 @@ desktop_keys:
     - {group: Desktop windows, desc: Move a floating window to the monitor above, schema: wm, key: move-to-monitor-up, accel: "<Super><Shift>Up"}
     - {group: Desktop windows, desc: Move a floating window to the monitor below, schema: wm, key: move-to-monitor-down, accel: "<Super><Shift>Down"}
 
-    ## Super+N matches Leader N for WezTerm tab N.
+    ## Super+N matches prefix N for tmux window N.
     - {group: Desktop workspaces, desc: "Go to workspace 1 to 9", schema: wm, key: "switch-to-workspace-#", accel: "<Super>#"}
     - {group: Desktop workspaces, desc: "Move the window to workspace 1 to 9", schema: wm, key: "move-to-workspace-#", accel: "<Super><Shift>#"}
     - {group: Desktop workspaces, desc: Go to the workspace on the left, schema: wm, key: switch-to-workspace-left, accel: "<Super>Left"}

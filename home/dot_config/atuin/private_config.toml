@@ -159,7 +159,7 @@ columns = [{ type = "time", width = 5 }, { type = "host", width = 5 }, "command"
 syntax_highlight = true
 
 [theme]
-## themes/hacktober.toml, matching WezTerm and tmux. Loaded only by the
+## themes/hacktober.toml, matching Ghostty and tmux. Loaded only by the
 ## interactive TUI, so a broken theme is invisible to every other command.
 name = "hacktober"
 

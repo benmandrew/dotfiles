@@ -1,11 +1,11 @@
 #!/bin/sh
-# Title the calling Claude Code session's WezTerm tab and tmux window with a
-# word describing what it is working on.
+# Title the calling Claude Code session's tmux window with a word describing
+# what it is working on.
 #
-# Both terminals title a claude pane from the agent identifier in
-# <config dir>/sessions/<pid>.json ("chezmoi-d8"), which says which agent the tab
-# holds and nothing about what it is doing. This writes an override to
-# ~/.claude/tab-titles/<pid>, which wezterm.lua and claude-pane-session prefer
+# tmux names a claude window from the agent identifier in
+# <config dir>/sessions/<pid>.json ("chezmoi-d8"), which says which agent the
+# window holds and nothing about what it is doing. This writes an override to
+# ~/.claude/tab-titles/<pid>, which claude-pane-session prefers
 # over that identifier, rendering "atuin:d8" -- the task, plus the suffix claude
 # derives names with, so two agents in one project still read apart.
 #

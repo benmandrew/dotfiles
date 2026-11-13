@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Claude Code "Notification" hook (idle_prompt matcher): fires an OS notification
-# and flags the WezTerm tab so it's visible even when unfocused, since Claude Code
+# and flags the tmux window so it's visible even when unfocused, since Claude Code
 # runs as one continuous foreground process and never triggers shell "command finished".
 set -euo pipefail
 
@@ -9,7 +9,7 @@ cwd="$(echo "$input" | jq -r '.cwd // empty')"
 session_id="$(echo "$input" | jq -r '.session_id // empty')"
 
 # Prefer the agent identifier claude registers for this session ("counter-fe"),
-# matching what `gwt` lists and what the WezTerm tab already shows, so the
+# matching what `gwt` lists and what the tmux window already shows, so the
 # notification names the agent rather than a directory several agents share.
 # The session files are keyed by pid, so find ours by its recorded sessionId.
 # A session registers under CLAUDE_CONFIG_DIR, so the work account — the
@@ -76,11 +76,10 @@ case "$(uname -s)" in
         ;;
 esac
 
-# Flag the tab so the notification is visible on an unfocused one. WezTerm
-# colours the tab's status bar from this and drops the flag when the tab is next
-# viewed. A flag file rather than `wezterm cli set-tab-title`, which wrote the
-# state into the title string and so overwrote whatever the tab was called --
-# the task word, the agent identifier or a manual rename.
+# Flag the window so the notification is visible on an unfocused one. tmux
+# colours the window's chip from this, and claude-pane-session's clear-bell
+# drops the flag when the window is next viewed. A flag file keeps the state out
+# of the title, so it never overwrites the task word or the agent identifier.
 bells="${HOME}/.claude/tab-bells"
 if [ -n "$pid" ]; then
     mkdir -p "$bells"

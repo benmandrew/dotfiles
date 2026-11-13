@@ -23,7 +23,7 @@ Luminance mapping keeps an icon's shape and shading and swaps its hues, so every
 icon comes out in the same few colours and still reads as itself. An icon with
 almost no shading, such as Yaru's file manager folder, comes out as one flat
 tone; the `tile` style lifts its contrast and sets it on a rounded tile, as
-Obsidian and WezTerm already are.
+Obsidian's already is.
 
 Every copy written here carries X-Recolour-Icons=true. A copy without it was
 made by hand and is left alone, and a marked copy whose app is no longer named

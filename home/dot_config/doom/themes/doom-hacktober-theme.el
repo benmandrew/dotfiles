@@ -1,8 +1,8 @@
-;;; doom-hacktober-theme.el --- Hacktober, as WezTerm and tmux draw it -*- lexical-binding: t; no-byte-compile: t; -*-
+;;; doom-hacktober-theme.el --- Hacktober, as Ghostty and tmux draw it -*- lexical-binding: t; no-byte-compile: t; -*-
 
-;; The palette is WezTerm's built-in Hacktober scheme, plus the colours this
-;; repository shares between home/dot_config/wezterm/wezterm.lua,
-;; dot_tmux.conf.tmpl and the atuin theme:
+;; The palette is the Hacktober scheme in home/dot_config/ghostty/config.tmpl,
+;; plus the colours this repository shares between dot_tmux.conf.tmpl and the
+;; atuin theme:
 ;;   bg #141414   surface #191918   hover #464444   text #c9c9c9
 ;;   orange #c75a22   selection #3d5278
 ;; A Doom theme wants nine greys, base0 to base8. Hacktober gives three of them
@@ -11,12 +11,12 @@
 ;;
 ;; Each entry is (truecolour 256-colour 16-colour). Panes export
 ;; COLORTERM=truecolor, so Emacs draws the first. The last is the terminal's
-;; own ANSI name, which in WezTerm is Hacktober's matching entry anyway.
+;; own ANSI name, which in Ghostty is Hacktober's matching entry anyway.
 
 (require 'doom-themes)
 
 (def-doom-theme doom-hacktober
-  "Hacktober, matching the WezTerm and tmux palettes."
+  "Hacktober, matching the Ghostty and tmux palettes."
   :family 'doom-hacktober
   :background-mode 'dark
 

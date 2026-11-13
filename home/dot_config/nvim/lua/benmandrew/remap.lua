@@ -3,7 +3,7 @@ vim.keymap.set("n", "<leader>pv", vim.cmd.Ex)
 
 -- Copy-on-select: releasing a mouse drag yanks the visual selection to the system
 -- clipboard, matching terminal behaviour. 'mouse=a' means nvim swallows the drag, so
--- neither WezTerm's nor tmux's copy-on-select ever sees it.
+-- tmux's copy-on-select never sees it.
 vim.keymap.set("x", "<LeftRelease>", '"+y<LeftRelease>')
 
 -- 'clipboard=unnamedplus' routes every delete through the system clipboard, so a

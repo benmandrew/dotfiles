@@ -5,7 +5,7 @@
 ;; `doom sync', which `chezmoi apply' runs through
 ;; run_onchange_after_sync-doom-emacs.sh.tmpl.
 
-;; Hacktober, the scheme WezTerm and tmux use, from themes/ beside this file.
+;; Hacktober, the scheme Ghostty and tmux use, from themes/ beside this file.
 (setq doom-theme 'doom-hacktober)
 
 ;; As in Neovim: relative line numbers, and eight lines of context kept above

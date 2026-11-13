@@ -38,8 +38,7 @@ is_number() {
     esac
 }
 
-# Diff two /proc/stat snapshots taken across ticks, as cpu_linux() in
-# wezterm.lua does. The old cpu.sh took both snapshots itself either side of a
+# Diff two /proc/stat snapshots taken across ticks. The old cpu.sh took both snapshots itself either side of a
 # blocking `sleep 0.2`, which was 218 ms of the 238 ms the three scripts cost
 # between them; the gap between two status ticks serves as the interval instead,
 # so the first tick after a restart has no baseline and prints "--".
@@ -57,8 +56,7 @@ cpu_linux() {
     printf '%d\n' $(((total - prev_total - (id - prev_idle)) * 100 / (total - prev_total)))
 }
 
-# Sum of per-process %cpu over the core count, as cpu_macos() in wezterm.lua
-# does. macOS reports each process's average over its own lifetime, so this is a
+# Sum of per-process %cpu over the core count. macOS reports each process's average over its own lifetime, so this is a
 # smoothed approximation rather than an instantaneous reading; the alternative,
 # `top -l 2`, stalls about a second.
 cpu_macos() {
@@ -76,8 +74,8 @@ ram_linux() {
     }' /proc/meminfo 2>/dev/null
 }
 
-# used = (active + wired + compressed) pages * page size, as ram_macos() in
-# wezterm.lua does; total from hw.memsize. vm_stat writes the page size into its
+# used = (active + wired + compressed) pages * page size; total from
+# hw.memsize. vm_stat writes the page size into its
 # header line and suffixes every count with a full stop, which awk's numeric
 # coercion drops.
 ram_macos() {
