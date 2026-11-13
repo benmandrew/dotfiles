@@ -16,6 +16,7 @@ from . import (
     emacs,
     forge,
     gh,
+    ghostty,
     git,
     go,
     latex,
@@ -33,7 +34,6 @@ from . import (
     system,
     terminal_font,
     vendor,
-    wezterm,
     zathura,
 )
 
@@ -52,6 +52,7 @@ STEPS: dict[str, Step] = {
         emacs,
         forge,
         gh,
+        ghostty,
         git,
         go,
         latex,
@@ -69,7 +70,6 @@ STEPS: dict[str, Step] = {
         system,
         terminal_font,
         vendor,
-        wezterm,
         zathura,
     )
     for step in module.STEPS

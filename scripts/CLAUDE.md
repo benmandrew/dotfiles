@@ -14,7 +14,7 @@ Steps are *idempotent*: they skip a tool already present and upgrade only under 
 
 **Download through the helper.** Every fetch goes through `fetch.download`, or a verified variant where upstream or GitHub publishes a digest; a comment notes where none exists. `--retry-all-errors` stays off, since it retries a 404 through the whole backoff. Vendor installers run from a downloaded file, never `curl | sh`. Extract with `release.unpack`, which uses `tar -xf`, never `-xzf`.
 
-**Pin versions.** Tags in `pins.sh` are spelled exactly as upstream publishes them, one `NAME_VERSION="value"` line each with no expansion and no trailing comment, since `installer/pins.py` parses the file. `BTOP_VERSION` holds at 1.4.4, since later releases need GNU Compiler Collection (GCC) 14 and jammy ships GCC 11. WezTerm has no pin, upstream tagging no releases. Obsidian on Linux uses `desktop_version`, since the newest release can be Android-only.
+**Pin versions.** Tags in `pins.sh` are spelled exactly as upstream publishes them, one `NAME_VERSION="value"` line each with no expansion and no trailing comment, since `installer/pins.py` parses the file. `BTOP_VERSION` holds at 1.4.4, since later releases need GNU Compiler Collection (GCC) 14 and jammy ships GCC 11. Obsidian on Linux uses `desktop_version`, since the newest release can be Android-only.
 
 **Pin the system toolchain.** Source builds use `SYSTEM_PATH` and the `/usr/bin` compilers, since the direnv devShell's nix gcc wrapper cannot see `/usr/include`.
 
@@ -40,7 +40,8 @@ Steps are *idempotent*: they skip a tool already present and upgrade only under 
 - On Linux ARM64, Obsidian's `chrome-sandbox` must be setuid root, which Electron requires.
 - Obsidian config stays out of chezmoi, since Obsidian and obsync rewrite it. The vault clone stays manual, its address exposing an otherwise proxied origin. macOS schedules obsync by LaunchAgent, since its cron lacks Full Disk Access and Homebrew.
 - Never install the `font-iosevka-slab` cask: it is a 495 MB collection, and WezTerm took 2 s to find its font in it on every zoom. Take the unhinted Iosevka packages. Libertinus downloads unverified, as no digest exists for it. Fonts come from upstream, never from the site's woff2 files.
-- Iosevka Term comes from the release zip, since Homebrew has only its Nerd Font build, under another family name. `MEMBERS` in `steps/terminal_font.py` must match the weights `wezterm.lua` uses.
+- Iosevka Term comes from the release zip, since Homebrew has only its Nerd Font build, under another family name. `MEMBERS` in `steps/terminal_font.py` must match the weights `wezterm.lua` uses. Ghostty's `font-style` keys name the same faces.
+- Ghostty on Linux is the classic snap, the one source that builds for jammy; Ubuntu packages it from 26.04, and the community debs start there too.
 - The zathura tap needs `brew trust` under Homebrew 6, as does `Noah4ever/tap` in the `deps` Make target. `zathurarc` relies on SyncTeX, so `--with-synctex` goes on install and upgrade. `_link_pdf_plugin` runs every time, since zathura scans only `$(brew --prefix zathura)/lib/zathura`. Poppler keeps one renderer on both platforms.
 - `install_latex` on Linux installs upstream TeX Live, since apt holds it at the distro's year. It fetches `install-tl` and its SHA-512 from one resolved mirror, since `mirror.ctan.org` otherwise serves the pair from different mirrors. The old year is deleted only after the new one runs.
 - `install_doom_emacs` takes Linux's Emacs from the nix profile, since jammy's apt holds 27.1 and Doom needs 29.1. It runs `bin/doom` with `EMACS` set, since an older Emacs can come first on `PATH`. No probe calls `bin/doom`, which writes a log on every run.

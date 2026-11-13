@@ -273,13 +273,17 @@ check_cmd ccusage
 check_cmd starship
 
 if [[ "${headless_linux}" == false ]]; then
-    # install_wezterm skips Linux ARM64, which upstream publishes no build for.
-    arch_name="$(uname -m)"
-    if [[ "${os_name}" == "Linux" && "${arch_name}" != "x86_64" ]] &&
-        ! command -v wezterm >/dev/null 2>&1; then
-        printf "\033[1;33m[warn]\033[0m wezterm (no Linux %s build; skipped by the installer)\n" "${arch_name}"
+    # install_ghostty takes the snap on Linux, and skips a machine without snapd.
+    # The macOS cask links no binary, so the app's own is probed there.
+    if [[ "${os_name}" == "Darwin" ]]; then
+        check_cmd /Applications/Ghostty.app/Contents/MacOS/ghostty +version
+    elif [[ "${os_name}" == "Linux" ]] && ! command -v ghostty >/dev/null 2>&1 &&
+        [[ ! -x /snap/bin/ghostty ]] && ! command -v snap >/dev/null 2>&1; then
+        printf "\033[1;33m[warn]\033[0m ghostty (no snapd; skipped by the installer)\n"
+    elif [[ "${os_name}" == "Linux" && -x /snap/bin/ghostty ]] && ! command -v ghostty >/dev/null 2>&1; then
+        check_cmd /snap/bin/ghostty +version
     else
-        check_cmd wezterm
+        check_cmd ghostty +version
     fi
     if [[ "${os_name}" == "Darwin" ]]; then
         if brew list --cask font-code-new-roman-nerd-font >/dev/null 2>&1; then
