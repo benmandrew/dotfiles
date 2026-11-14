@@ -1,0 +1,17 @@
+#!/bin/sh
+# A tmux that shows no messages, for running tmux-resurrect's restore.sh
+# without its banners. dot_tmux.conf.tmpl puts this directory first on PATH for
+# that one run. restore.sh draws its spinner and its "restore complete" message
+# with display-message, and has no setting to turn either off.
+#
+# display -p prints to stdout and draws nothing, and restore.sh reads pane and
+# session IDs with it, so it goes through. Every other command goes to the real
+# tmux, with this directory taken off PATH so the lookup does not find this
+# file again.
+case "$1" in
+    display | display-message)
+        [ "$2" = -p ] || exit 0
+        ;;
+esac
+PATH=${PATH#"${0%/*}:"}
+exec tmux "$@"

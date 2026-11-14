@@ -231,14 +231,15 @@ if-shell '[ -f ~/.tmux/plugins/tpm/tpm ]' "run '~/.tmux/plugins/tpm/tpm'"
 # sessions. The sleep lets the first session finish being created, which
 # resurrect then replaces. Only the default socket does either, so a scratch
 # server (tmux -L audit) neither restores the saved layout into itself nor
-# saves its own over it.
+# saves its own over it. The restore runs with ~/.config/tmux/quiet first on
+# PATH, whose tmux drops resurrect's spinner and its "restore complete" banner.
 if -F '#{m:*/default,#{socket_path}}' {
     set-hook -g client-detached 'run-shell -b "[ -x ~/.tmux/plugins/tmux-resurrect/scripts/save.sh ] && ~/.tmux/plugins/tmux-resurrect/scripts/save.sh quiet"'
     set-hook -g session-closed 'if -F "#{server_sessions}" "run-shell -b \"[ -x ~/.tmux/plugins/tmux-resurrect/scripts/save.sh ] && ~/.tmux/plugins/tmux-resurrect/scripts/save.sh quiet\""'
     if -F '#{@resurrect-restored}' '' {
         set -g @resurrect-restored 1
         if-shell '[ -x ~/.tmux/plugins/tmux-resurrect/scripts/restore.sh ] && [ $(($(date +%s) - #{start_time})) -lt 10 ]' {
-            run-shell -b 'sleep 1; ~/.tmux/plugins/tmux-resurrect/scripts/restore.sh'
+            run-shell -b 'sleep 1; PATH="$HOME/.config/tmux/quiet:$PATH" ~/.tmux/plugins/tmux-resurrect/scripts/restore.sh'
         }
     }
 }

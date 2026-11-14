@@ -20,7 +20,8 @@ REPO_BASH       := .githooks/pre-commit
 # Tools in home/dot_local/bin are shell unless their shebang names python3.
 DEPLOYED_PY     := $(shell for f in home/dot_local/bin/executable_*; do head -n 1 "$$f" | grep -q python && echo "$$f"; done)
 DEPLOYED_SH     := $(filter-out $(DEPLOYED_PY),$(wildcard home/dot_local/bin/executable_*)) \
-                   $(wildcard home/dot_config/tmux/*.sh)
+                   $(wildcard home/dot_config/tmux/*.sh) \
+                   $(wildcard home/dot_config/tmux/quiet/executable_*)
 
 BASH_SCRIPTS := $(INSTALL_SCRIPTS) $(DEPLOYED_BASH) $(REPO_BASH)
 SH_SCRIPTS   := $(DEPLOYED_SH)
