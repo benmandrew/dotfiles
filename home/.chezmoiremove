@@ -28,3 +28,5 @@
 
 # WezTerm is gone: Ghostty is the terminal, with tmux doing the multiplexing.
 .config/wezterm
+# The idle hook kept WezTerm's name after it stopped touching WezTerm.
+.claude/wezterm-notify.sh

@@ -33,7 +33,7 @@ have_sessions() {
 # same pid, which replaces the agent identifier in the window name. One
 # directory for every profile, the pid being the key either way.
 titles="${HOME}/.claude/tab-titles"
-# Sessions asking to be looked at, written by wezterm-notify.sh and removed by
+# Sessions asking to be looked at, written by idle-notify.sh and removed by
 # `clear-bell` below once the tmux window is looked at. The file's existence is
 # the whole signal; its name is the same pid again.
 bells="${HOME}/.claude/tab-bells"

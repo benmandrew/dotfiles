@@ -3,7 +3,7 @@
 # window's busy/idle bar follows the session without waiting out status-interval.
 #
 # Run as the UserPromptSubmit and Stop hooks, with the hook's JSON on stdin, and
-# by wezterm-notify.sh and claude-tab-title once they have written a bell or a
+# by idle-notify.sh and claude-tab-title once they have written a bell or a
 # title, with nothing on stdin. Claude writes "busy" to its session file before
 # UserPromptSubmit fires, but writes "idle" about 30 ms after Stop fires (timed
 # against a scratch session), so after Stop this waits for the file to stop
