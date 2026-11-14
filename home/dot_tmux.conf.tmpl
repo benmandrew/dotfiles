@@ -166,18 +166,21 @@ set -g status-position top
 set -g status-left-length 20
 set -g status-left '#(~/.local/bin/claude-pane-session refresh)#{?client_prefix,#[bg=#c75a22#,fg=#141414#,bold],#[bg=#141414#,fg=#464444#,nobold]} ⌃a #[bg=#141414,fg=#c9c9c9,nobold] '
 set -g status-right-length 120
-# The tick has to keep up with the busy/idle bar on the window chips; at the old
-# interval of 5 a session going idle could sit stale for five seconds. What stopped it being lowered was the cost:
-# cpu.sh, ram.sh and uptime.sh took 238 ms between them per tick, 218 of it the
-# blocking `sleep 0.2` inside cpu.sh, and each window costs two more #() jobs on
-# top. Folding the three into status.sh and dropping the per-window `find` in
-# claude-pane-session took a whole five-window tick from 336 ms +/- 37 to 148 ms
-# +/- 61 of wall time, and 339 ms to 287 ms of CPU (hyperfine, 25 runs, jobs
-# started in parallel the way tmux starts them, this Mac).
+# The busy/idle bar on the window chips does not wait on the tick. Claude's
+# UserPromptSubmit and Stop hooks, and the scripts that write a bell or a title,
+# run ~/.claude/tmux-status-refresh.sh, which redraws every client as soon as
+# the state changes. The tick is left with the bar turning blue after a minute
+# idle and the host metrics, where 5 s of lag goes unnoticed.
 #
-# 1 rather than 2 would hold 287 ms of CPU per second, near a third of a core,
-# indefinitely and on battery. 2 halves that, for a worst-case lag of 2 s.
-set -g status-interval 2
+# A tick costs CPU for every window. cpu.sh, ram.sh and uptime.sh took 238 ms
+# between them per tick, 218 of it the blocking `sleep 0.2` inside cpu.sh, and
+# each window costs two more #() jobs on top. Folding the three into status.sh
+# and dropping the per-window `find` in claude-pane-session took a whole
+# five-window tick from 336 ms +/- 37 to 148 ms +/- 61 of wall time, and 339 ms
+# to 287 ms of CPU (hyperfine, 25 runs, jobs started in parallel the way tmux
+# starts them, this Mac). At an interval of 2 that held 144 ms of CPU a second;
+# 5 cuts it by 60%.
+set -g status-interval 5
 # One #() job for all three metrics rather than three. tmux cannot split a job's
 # output across fields, so the glyphs and gaps between them moved into the
 # script; the host stays here, since tmux already knows it.

@@ -104,5 +104,9 @@ if [ -n "$pid" ]; then
             case "$flags" in *focused*) in_view=1 ;; esac
         fi
     fi
-    [ -n "$in_view" ] || : >"$bells/$pid"
+    if [ -z "$in_view" ]; then
+        : >"$bells/$pid"
+        # Turn the chip blue now rather than on the next status tick.
+        "${HOME}/.claude/tmux-status-refresh.sh" </dev/null || true
+    fi
 fi

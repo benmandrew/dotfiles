@@ -84,10 +84,13 @@ case $title in
 esac
 [ "${#title}" -le 24 ] || die "title must be 24 characters or fewer"
 
-# Written atomically: the tmux status line reads this once a second.
+# Written atomically, since the tmux status line reads it on every tick.
 tmp="$titles/.$claude_pid.$$"
 printf '%s\n' "$title" >"$tmp" || exit 1
 mv -f "$tmp" "$titles/$claude_pid" || {
     rm -f "$tmp"
     exit 1
 }
+
+# Redraw the window chips now rather than on the next status tick.
+[ ! -x "${HOME}/.claude/tmux-status-refresh.sh" ] || "${HOME}/.claude/tmux-status-refresh.sh" </dev/null
