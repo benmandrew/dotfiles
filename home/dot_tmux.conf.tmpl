@@ -95,6 +95,10 @@ bind j select-pane -D
 bind k select-pane -U
 bind l select-pane -R
 bind x kill-pane
+# Move the window one place along, as WezTerm's MoveTabRelative did. Without
+# select-window, focus would stay on the index and land on the swapped-in window.
+bind N { swap-window -t +1; select-window -t +1 }
+bind P { swap-window -t -1; select-window -t -1 }
 
 # The three defaults the bindings above displaced, given somewhere else to live.
 # Shift is the free half of each key: s, l and x are taken by the bindings
