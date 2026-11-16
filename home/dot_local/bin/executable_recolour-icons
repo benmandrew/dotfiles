@@ -414,7 +414,33 @@ def main() -> int:
         subprocess.run(["gtk-update-icon-cache", "-q", "-t", str(cache.parent)], check=False)
     if shutil.which("update-desktop-database"):
         subprocess.run(["update-desktop-database", str(APPS)], check=False)
+    reload_icon_theme()
     return 0
+
+
+def reload_icon_theme() -> None:
+    """Make a running GNOME Shell see icons written since it started.
+
+    GNOME Shell 42 keeps the icon directories it read at login, and touching the
+    theme directory does not make it scan them again, so a newly listed app
+    shows no icon until the next login. Setting the icon theme away and back
+    makes it load the theme from scratch. Outside a graphical session there is
+    no shell to reload, and the next login reads the new icons anyway.
+    """
+    if not (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY")):
+        return
+    if not shutil.which("gsettings"):
+        return
+    key = ["org.gnome.desktop.interface", "icon-theme"]
+    current = (
+        subprocess.run(["gsettings", "get", *key], capture_output=True, text=True, check=False)
+        .stdout.strip()
+        .strip("'")
+    )
+    if not current or current == "hicolor":
+        return
+    subprocess.run(["gsettings", "set", *key, "hicolor"], check=False)
+    subprocess.run(["gsettings", "set", *key, current], check=False)
 
 
 if __name__ == "__main__":
