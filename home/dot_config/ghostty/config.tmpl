@@ -50,3 +50,8 @@ window-decoration = none
 
 # tmux holds the state, so closing a window loses nothing worth a prompt.
 confirm-close-surface = false
+
+# Ctrl+Backspace sends ^H by default, the same byte as Ctrl+H, so neither tmux
+# nor the shell can tell them apart. Send ^W, which deletes the previous word in
+# zsh, bash, vim insert mode and most readline prompts.
+keybind = ctrl+backspace=text:\x17
