@@ -44,6 +44,7 @@ icons:
     org.gnome.Calculator.desktop: tone
     gnome-control-center.desktop: tone
     com.microsoft.VSCode.desktop: tone
+    ghostty_ghostty.desktop: tone
     google-chrome.desktop: tone
     com.google.Chrome.desktop: tone
   ## Arguments added after the program on each Exec= line of an app's copy.
