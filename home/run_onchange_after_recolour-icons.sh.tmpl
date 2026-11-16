@@ -23,6 +23,11 @@ exec_args=(
 {{- range $app, $args := .icons.exec_args }}
     --exec-args '{{ $app }}={{ $args }}'
 {{- end }}
+{{- range $app, $vars := .icons.exec_env }}
+{{- range $var, $value := $vars }}
+    --exec-env '{{ $app }}={{ $var }}={{ $value }}'
+{{- end }}
+{{- end }}
 )
 
 "${HOME}/.local/bin/recolour-icons" \
