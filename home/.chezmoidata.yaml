@@ -51,13 +51,6 @@ icons:
   ## The copy replaces any hand-made one, so a flag that one carried goes here.
   exec_args:
     com.microsoft.VSCode.desktop: --disable-gpu-rasterization
-  ## Environment variables set on each Exec= line of an app's copy.
-  exec_env:
-    ## The snap's GTK 4.22 draws its own pointer on GNOME 42, which lacks the
-    ## cursor-shape protocol, and draws it too large at any size setting.
-    ## Under XWayland the shell draws it.
-    ghostty_ghostty.desktop:
-      GDK_BACKEND: x11
 
 desktop_keys:
   ## GNOME and Pop Shell keybindings, which

@@ -36,11 +36,9 @@ changes stays old until this runs again.
 
 A launch flag that a hand-made copy used to add, such as VS Code's
 --disable-gpu-rasterization, goes in with --exec-args, since this owns the copy.
-An environment variable goes in with --exec-env, which puts `env VAR=VALUE` before the program.
 
 Usage: recolour-icons --stops C1,C2[,...] [--tile-fill C] [--tile-edge C]
-                      [--exec-args APP.desktop=ARGS ...]
-                      [--exec-env APP.desktop=VAR=VALUE ...] APP.desktop[=tone|=tile] ...
+                      [--exec-args APP.desktop=ARGS ...] APP.desktop[=tone|=tile] ...
        recolour-icons --remove-all
 """
 
@@ -301,7 +299,7 @@ def check_icon(value: str) -> None:
         raise ValueError(f"Icon={value} is not a theme icon name")
 
 
-def write_desktop(source: Path, target: Path, icon: str, extra: str, env: list[str]) -> None:
+def write_desktop(source: Path, target: Path, icon: str, extra: str) -> None:
     check_icon(icon)
     lines = []
     for line in source.read_text(errors="replace").splitlines():
@@ -316,8 +314,6 @@ def write_desktop(source: Path, target: Path, icon: str, extra: str, env: list[s
             if extra:
                 program, _, rest = line.partition(" ")
                 line = f"{program} {extra} {rest}".rstrip()
-            if env:
-                line = "Exec=env " + " ".join(env) + " " + line[len("Exec=") :]
         lines.append(line)
         if line.strip() == "[Desktop Entry]":
             lines.append(MARKER)
@@ -349,13 +345,6 @@ def main() -> int:
         metavar="APP.desktop=ARGS",
         help="arguments to add after the program on each of APP's Exec= lines",
     )
-    parser.add_argument(
-        "--exec-env",
-        action="append",
-        default=[],
-        metavar="APP.desktop=VAR=VALUE",
-        help="an environment variable to set, through env, on each of APP's Exec= lines",
-    )
     parser.add_argument("apps", nargs="*", metavar="APP.desktop[=STYLE]")
     args = parser.parse_args()
     if args.remove_all:
@@ -369,12 +358,6 @@ def main() -> int:
     for spec in args.exec_args:
         name, _, value = spec.partition("=")
         extra[name] = value
-    env: dict[str, list[str]] = {}
-    for spec in args.exec_env:
-        name, _, assignment = spec.partition("=")
-        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=\S*", assignment):
-            parser.error(f"{spec}: expected APP.desktop=VAR=VALUE")
-        env.setdefault(name, []).append(assignment)
 
     wanted: dict[str, str] = {}
     for spec in args.apps:
@@ -419,9 +402,7 @@ def main() -> int:
             else:
                 tone(raster, ramp, out, SIZE, [])
             try:
-                write_desktop(
-                    source, target, icon_name(name), extra.get(name, ""), env.get(name, [])
-                )
+                write_desktop(source, target, icon_name(name), extra.get(name, ""))
             except ValueError as err:
                 print(f"recolour-icons: {name}: {err}; not written", file=sys.stderr)
                 continue
