@@ -55,3 +55,7 @@ confirm-close-surface = false
 # nor the shell can tell them apart. Send ^W, which deletes the previous word in
 # zsh, bash, vim insert mode and most readline prompts.
 keybind = ctrl+backspace=text:\x17
+
+# Ctrl+Enter toggles fullscreen by default. Unbind it so the key reaches tmux
+# and the programs inside it.
+keybind = ctrl+enter=unbind
