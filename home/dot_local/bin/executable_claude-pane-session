@@ -6,7 +6,7 @@
 # recording the agent identifier it is known by (`gwt` lists agents under these
 # names) and the cwd it is actually working in. tmux sees only the shell, so it
 # knows neither: #{pane_current_path} goes stale once claude chdir()s into a
-# worktree while zsh sits suspended behind it, and #{window_name} follows the
+# worktree while the shell sits suspended behind it, and #{window_name} follows the
 # foreground command, which is "claude" for every agent alike. Look for a
 # registered session inside the pane's process subtree and read the field off
 # it; otherwise pass through whatever tmux already knew.
