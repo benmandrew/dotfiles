@@ -13,12 +13,12 @@ PREFIX = Path("/usr/local")
 _ARCH = {"aarch64": "linux-aarch64"}
 
 
-def _current(context: StepContext) -> str | None:
-    """The version of the cmake on PATH, or None when there is none."""
-    if context.which("cmake") is None:
+def _current(context: StepContext, command: str | Path = "cmake") -> str | None:
+    """The version `command` reports, or None when there is no such command."""
+    if context.which(str(command)) is None:
         return None
     # `cmake version 4.4.3`, on the first line.
-    words = (context.capture(["cmake", "--version"]) or "").partition("\n")[0].split()
+    words = (context.capture([str(command), "--version"]) or "").partition("\n")[0].split()
     return words[2] if len(words) > 2 else ""
 
 
@@ -41,10 +41,20 @@ def install(context: StepContext) -> None:
         tools.require_runs(context, "cmake")
         return
 
+    # Guard the copy this step installs, when there is one. Another copy earlier
+    # on PATH, such as pip's in ~/.local/bin, would otherwise reinstall cmake
+    # on every run without ever changing the version on PATH.
+    target = PREFIX / "bin" / "cmake"
+    owned = context.which(str(target)) is not None
+    if owned:
+        current = _current(context, target)
+
     if context.upgrade:
         version = github.latest_tag(context, pins.UPSTREAM[PIN]).removeprefix("v")
         if current == version:
             context.log(f"cmake {current} already at latest; skipping")
+            if owned:
+                tools.note_shadowed(context, "cmake", target)
             return
         context.log(f"Upgrading cmake to {version}")
     else:
@@ -53,6 +63,8 @@ def install(context: StepContext) -> None:
             context.log(f"Installing cmake {version}")
         elif tools.version_gte(current, required):
             context.log(f"cmake {current} already satisfies >= {required}; skipping")
+            if owned:
+                tools.note_shadowed(context, "cmake", target)
             return
         else:
             context.log(f"cmake {current} < {required}; installing {version}")
@@ -66,7 +78,6 @@ def install(context: StepContext) -> None:
         f"cmake-{version}-SHA-256.txt",
     )
     tools.sudo(context, ["sh", str(installer), f"--prefix={PREFIX}", "--skip-license"])
-    target = PREFIX / "bin" / "cmake"
     tools.note_shadowed(context, "cmake", target)
     tools.require_runs(context, target)
 

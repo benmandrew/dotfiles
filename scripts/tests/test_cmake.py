@@ -63,6 +63,20 @@ class CmakeTest(StepCase):
         self.assertIn(f"[install] cmake 3.22.1 < {VERSION}; installing {VERSION}\n", said)
         self.assertIn(f"Note: cmake on PATH is {self.bin}/cmake, which shadows", said)
 
+    def test_shadowed_installed_copy_is_skipped(self) -> None:
+        # pip's cmake in ~/.local/bin comes first on PATH and is older than the
+        # pin, but the copy this step installed is new enough.
+        self.fake("cmake", prints("cmake version 3.22.1"))
+        target = self.fake("cmake", prints(f"cmake version {VERSION}"), self.prefix / "bin")
+        self.assertTrue(self.run_step(STEPS["install_cmake"]))
+        self.assertEqual(
+            self.said(),
+            f"[install] cmake {VERSION} already satisfies >= {VERSION}; skipping\n"
+            f"[install] Note: cmake on PATH is {self.bin}/cmake, which shadows the copy"
+            f" just installed at {target}\n",
+        )
+        self.assertEqual(self.requests(), [])
+
     def test_upgrade_already_at_latest(self) -> None:
         self.fake("cmake", prints(f"cmake version {VERSION}"))
         self.serve(
