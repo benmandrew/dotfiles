@@ -40,7 +40,7 @@
 # start time must match the session's procStart, since a pid can be reused.
 #
 # --paths writes the same rows as "<absolute path>\t<row>" for the `gws` picker
-# in .zshrc, which cannot reconstruct an absolute path from a shortened one. It
+# in the shell config, which cannot reconstruct an absolute path from a shortened one. It
 # never prints the header, with or without --full: field 1 already says where
 # every row is, so nothing is left for a header to disambiguate.
 

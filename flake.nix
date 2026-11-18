@@ -65,6 +65,8 @@
             # before, so the check ran against whatever the machine happened to
             # have, and against nothing at all on a runner without zsh.
             zsh
+            # fish --no-execute and fish_indent read the rendered fish config.
+            fish
             jq
             git
           ];

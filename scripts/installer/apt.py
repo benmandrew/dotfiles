@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import tools
-from .runner import StepContext
+from . import fetch, tools
+from .runner import StepContext, StepFailed
 
 # Where a repository's signing key and its source line go.
 KEYRINGS = Path("/etc/apt/keyrings")
@@ -38,3 +38,40 @@ def key_fingerprints(context: StepContext, key: Path) -> list[str]:
 def architecture(context: StepContext) -> str:
     """The architecture as dpkg names it: amd64, arm64."""
     return context.capture(["dpkg", "--print-architecture"]) or ""
+
+
+def keyserver_url(fingerprint: str) -> str:
+    """Where Ubuntu's keyserver serves the key with this fingerprint."""
+    return f"https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x{fingerprint}"
+
+
+def add_ppa(
+    context: StepContext, label: str, fingerprint: str, archive: str, codename: str, slug: str
+) -> None:
+    """Trust a Launchpad PPA's key and add its archive, then refresh the index.
+
+    The key comes from the keyserver, which TLS alone authenticates, so the
+    caller pins the fingerprint Launchpad reports for the archive. The keyring
+    and source list are named `slug`.gpg and `slug`.list.
+    """
+    scratch = context.tmpdir()
+    armored = scratch / "key.asc"
+    fetch.download(context, keyserver_url(fingerprint), armored)
+    # Check the key that came back is the pinned one before apt is told to
+    # trust everything it signs.
+    if fingerprint not in key_fingerprints(context, armored):
+        raise StepFailed(f"{label} key does not carry the pinned fingerprint")
+    tools.sudo(context, ["mkdir", "-p", "-m", "755", KEYRINGS])
+    binary = scratch / f"{slug}.gpg"
+    context.run(["gpg", "--output", str(binary), "--dearmor", str(armored)])
+    keyring = KEYRINGS / f"{slug}.gpg"
+    tools.sudo(context, ["install", "-m", "644", binary, keyring])
+    arch = context.capture(["dpkg", "--print-architecture"])
+    if arch is None:
+        raise StepFailed
+    tools.sudo_write(
+        context,
+        SOURCES / f"{slug}.list",
+        f"deb [arch={arch} signed-by={keyring}] {archive} {codename} main\n",
+    )
+    update(context)

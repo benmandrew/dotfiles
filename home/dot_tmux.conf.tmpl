@@ -267,7 +267,7 @@ set -g display-time 4000
 set -g status-keys emacs
 
 # Plugins. Session persistence, which is the one thing here that genuinely needs
-# a plugin: tmux has no save/restore of its own, and dot_zshrc.tmpl auto-attaches
+# a plugin: tmux has no save/restore of its own, and the shell config auto-attaches
 # on every SSH host, so a reboot silently costs the layout on machines that are
 # only ever reached through tmux. Capturing pane contents keeps the scrollback
 # that was on screen, and the nvim strategy restores sessions written by

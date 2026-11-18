@@ -32,9 +32,18 @@ class PlanTest(unittest.TestCase):
             self.assertEqual(len(titles), len(set(titles)))
 
     def test_completions_run_last(self) -> None:
-        # install_zsh_completions calls each installed binary.
+        # install_shell_completions calls each installed binary.
         for plan in (LINUX, MACOS):
-            self.assertEqual(list(steps(plan))[-1].name, "install_zsh_completions")
+            self.assertEqual(list(steps(plan))[-1].name, "install_shell_completions")
+
+    def test_fish_is_in_place_before_it_becomes_the_login_shell(self) -> None:
+        names = [step.name for step in steps(LINUX)]
+        self.assertLess(names.index("install_git"), names.index("install_fish"))
+        self.assertLess(names.index("install_fish"), names.index("install_login_shell"))
+        names = [step.name for step in steps(MACOS)]
+        self.assertLess(
+            names.index("install_brew_formulae_if_missing"), names.index("install_login_shell")
+        )
 
     def test_macos_order_around_homebrew(self) -> None:
         items = list(MACOS.items)
@@ -58,7 +67,7 @@ class PlanTest(unittest.TestCase):
         self.assertIn("build-essential", first.args)
         self.assertEqual(first.title.split()[:2], ["install_apt_packages_if_missing", "git"])
         formulae = next(s for s in steps(MACOS) if s.name == "install_brew_formulae_if_missing")
-        self.assertEqual(formulae.args, ("git", "zsh", "tmux", "node", "entr"))
+        self.assertEqual(formulae.args, ("git", "zsh", "fish", "tmux", "node", "entr"))
 
     def test_linux_keeps_apt_from_asking(self) -> None:
         self.assertIn(("DEBIAN_FRONTEND", "noninteractive"), LINUX.env)

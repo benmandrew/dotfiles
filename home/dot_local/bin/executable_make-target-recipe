@@ -1,7 +1,8 @@
 #!/bin/sh
-# Print the recipe body of a single make target, for the fzf-tab preview pane
-# wired up in ~/.zshrc. Lives on PATH rather than as a shell function because
-# fzf-tab evaluates previews in a separate `zsh -c`, which inherits no functions.
+# Print the recipe body of a single make target, for the completion preview
+# pane: fifc's in ~/.config/fish/config.fish, fzf-tab's in ~/.zshrc. Lives on
+# PATH rather than as a shell function because both evaluate previews in a
+# separate `fish -c` or `zsh -c`, which inherits no functions.
 #
 # The recipe is read straight out of the makefile with awk. `make -n` would
 # resolve variables for us, but it also evaluates $(shell ...) at parse time —

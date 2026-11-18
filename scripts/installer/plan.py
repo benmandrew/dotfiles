@@ -83,9 +83,11 @@ LINUX = Plan(
         ),
         _step("install_perf", fatal=True),
         # Early, so every later step and the user's own work runs against the
-        # newer git rather than jammy's 2.34.1.
+        # newer git rather than jammy's 2.34.1. fish goes ahead of
+        # install_login_shell, which makes it the login shell.
         *_steps(
             "install_git",
+            "install_fish",
             "install_login_shell",
             "install_inotify_limits",
             "install_vscode_unattended_upgrades",
@@ -109,6 +111,8 @@ LINUX = Plan(
             "install_zoxide",
             "install_fzf",
             "install_fzf_tab",
+            "install_fifc",
+            "install_nvm_fish",
             "install_zsh_autosuggestions",
             "install_atuin",
             "install_gh",
@@ -201,7 +205,7 @@ LINUX = Plan(
         _step("install_neovim_if_missing"),
         # After every other step: it runs each tool to get its completion
         # script.
-        _step("install_zsh_completions"),
+        _step("install_shell_completions"),
     ),
 )
 
@@ -221,7 +225,7 @@ MACOS = Plan(
         # Homebrew's installer prompts, so its output cannot be held.
         _step("install_homebrew", interactive=True, fatal=True),
         Require(("brew",)),
-        _step("install_brew_formulae_if_missing", "git", "zsh", "tmux", "node", "entr"),
+        _step("install_brew_formulae_if_missing", "git", "zsh", "fish", "tmux", "node", "entr"),
         *_steps(
             "install_login_shell",
             "install_cmake",
@@ -242,6 +246,8 @@ MACOS = Plan(
             "install_zoxide",
             "install_fzf",
             "install_fzf_tab",
+            "install_fifc",
+            "install_nvm_fish",
             "install_zsh_autosuggestions",
             "install_atuin",
             "install_gh",
@@ -330,7 +336,7 @@ MACOS = Plan(
         _step("install_neovim_if_missing"),
         # After every other step: it runs each tool to get its completion
         # script.
-        _step("install_zsh_completions"),
+        _step("install_shell_completions"),
     ),
 )
 

@@ -15,7 +15,9 @@ set -euo pipefail
 # changed to explain it.
 #
 # home/dot_zprofile.tmpl now asserts that PATH entry from a file chezmoi owns,
-# which is the actual fix. This is the tripwire for the next thing to break the
+# which is the actual fix, and the `status is-login` block of
+# home/dot_config/fish/config.fish.tmpl does the same for fish, now the login
+# shell. This is the tripwire for the next thing to break the
 # same way, and it runs after every apply rather than on a content hash, since
 # the change it watches for happens in /etc where no hash of this tree can see
 # it.
@@ -34,7 +36,17 @@ if [[ ! -r /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]] &&
     exit 0
 fi
 
-if ! command -v zsh >/dev/null 2>&1; then
+# The login shell install_login_shell sets: fish from the paths it takes, or
+# the zsh kept as a fallback where there is no fish. Found by path, not on
+# PATH, since PATH is the thing under suspicion.
+login_shell=""
+for candidate in /usr/bin/fish /opt/homebrew/bin/fish /usr/bin/zsh /bin/zsh; do
+    if [[ -x "${candidate}" ]]; then
+        login_shell="${candidate}"
+        break
+    fi
+done
+if [[ -z "${login_shell}" ]]; then
     exit 0
 fi
 
@@ -42,14 +54,17 @@ fi
 # __ETC_PROFILE_NIX_SOURCED and returns early when it is already set:
 # inheriting it would leave the profile directory wherever the caller happened
 # to have it, and the answer would describe chezmoi's parent shell instead of
-# the machine. `zsh -lc` reads .zshenv, .zprofile and .zlogin and skips .zshrc,
-# so nothing interactive writes to the stdout being read here. That understates
-# the real PATH by whatever .zshrc prepends, which can only move bash earlier,
-# so a pass here is a pass in the interactive shell direnv runs from.
+# the machine. Under -l -c, fish runs the `status is-login` block of
+# config.fish but nothing guarded by `status is-interactive`, and zsh reads
+# .zshenv, .zprofile and .zlogin but skips .zshrc, so nothing interactive
+# writes to the stdout being read here. Quoted, fish joins $PATH with colons.
+# That understates the real PATH by whatever the interactive setup prepends,
+# which can only move bash earlier, so a pass here is a pass in the
+# interactive shell direnv runs from.
 login_path=""
 # shellcheck disable=SC2016 # $PATH is the inner shell's to expand
 login_path="$(env -i "HOME=${HOME}" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
-    zsh -lc 'printf "%s" "$PATH"' 2>/dev/null)" || true
+    "${login_shell}" -l -c 'printf "%s" "$PATH"' 2>/dev/null)" || true
 
 bash_path=""
 bash_path="$(PATH="${login_path:-${PATH}}" command -v bash 2>/dev/null)" || true
@@ -68,6 +83,7 @@ fi
 printf "\033[1;33m[warn]\033[0m login shell resolves bash to %s (%s)\n" \
     "${bash_path:-none}" "${version:-unknown version}" >&2
 printf "       nix-direnv needs 4.4 or newer, so every flake .envrc will fail to load.\n" >&2
-printf "       ~/.nix-profile/bin is missing from the login PATH. Check that ~/.zprofile\n" >&2
-printf "       still carries its Nix block, then run: chezmoi apply ~/.zprofile\n" >&2
+printf "       ~/.nix-profile/bin is missing from %s's login PATH. Check the Nix block in\n" \
+    "${login_shell}" >&2
+printf "       ~/.config/fish/config.fish (or ~/.zprofile under zsh), then run: chezmoi apply\n" >&2
 exit 0

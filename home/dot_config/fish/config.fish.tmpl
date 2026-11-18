@@ -1,0 +1,321 @@
+# fish is the login shell. zsh stays installed, with its config, as a fallback.
+#
+# The file branches on `uname` at run time rather than on .chezmoi.os, so a
+# rendering on one platform still holds the other's arm, and
+# scripts/lint-templates.sh parses both.
+#
+# Every fish reads this file, including the non-interactive `fish -c` that
+# fzf runs for each fifc preview. The environment sections come first and
+# apply to all of them; the interactive one is guarded.
+
+set -l os (uname)
+
+# --- Login environment: what ~/.zprofile and ~/.zshenv do for zsh ----------
+#
+# fish reads neither file, nor /etc/profile. snapd and the other packages that
+# care ship a vendor_conf.d script, and PAM sets /etc/environment.
+if status is-login
+    # nix-daemon.fish returns early when this is set, and the tmux server
+    # hands it to every pane, so a pane would keep whatever PATH the server
+    # started with.
+    set -e __ETC_PROFILE_NIX_SOURCED
+    for nix_profile in /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.fish \
+        ~/.nix-profile/etc/profile.d/nix.fish
+        if test -r $nix_profile
+            source $nix_profile
+            break
+        end
+    end
+
+    # After Nix, as in .zprofile: Homebrew's shellenv prepends, so its bin
+    # comes first.
+    for brew in /opt/homebrew/bin/brew /home/linuxbrew/.linuxbrew/bin/brew ~/.linuxbrew/bin/brew
+        if test -x $brew
+            $brew shellenv fish | source
+            break
+        end
+    end
+
+    fish_add_path --global --path --move ~/.elan/bin
+
+    # The active switch's bin, read from opam's config rather than running
+    # `opam env`, which costs a fork of opam on every login.
+    if test -r ~/.opam/config
+        set -l switch (string replace --regex --filter '^switch: "?([^"]*)"?$' '$1' <~/.opam/config)[1]
+        if test -n "$switch"
+            if string match --quiet '/*' -- $switch
+                fish_add_path --global --path --move $switch/_opam/bin
+            else
+                fish_add_path --global --path --move ~/.opam/$switch/bin
+            end
+        end
+    end
+end
+
+# --- Environment for every fish ---------------------------------------------
+#
+# fish_add_path skips a directory that does not exist and, with --move, moves
+# one already present to the front, as zsh's `typeset -U path` did.
+switch $os
+    case Darwin
+        set -gx HOMEBREW_BASE /opt/homebrew/opt
+        set -gx CC clang
+        set -gx CXX clang++
+        fish_add_path --global --path --move ~/.local/bin ~/bin ~/Library/Python/3.10/bin \
+            ~/.cargo/bin (set -q GOPATH; and echo $GOPATH; or echo ~/go)/bin
+        fish_add_path --global --path --append $HOMEBREW_BASE/openjdk/bin $HOMEBREW_BASE/llvm/bin \
+            /Applications/Docker.app/Contents/Resources/bin
+        set -gx JAVA_DIR $HOMEBREW_BASE/openjdk
+        set -gx JAVA_HOME $HOMEBREW_BASE/openjdk/libexec/openjdk.jdk/Contents/Home
+        set -l brew_lib (string replace --regex '/opt$' '' -- $HOMEBREW_BASE)/lib
+        contains -- $brew_lib $LIBRARY_PATH; or set -gxa LIBRARY_PATH $brew_lib
+    case Linux
+        fish_add_path --global --path --move ~/.local/bin ~/usr/bin ~/.cargo/bin \
+            (set -q GOPATH; and echo $GOPATH; or echo ~/go)/bin /opt/nvim-linux-{x86_64,arm64}/bin
+        fish_add_path --global --path --append /usr/local/go/bin ~/.dotnet/tools
+end
+fish_add_path --global --path --append ~/.config/emacs/bin ~/.fzf/bin
+
+set -gx LANG en_GB.UTF-8
+set -gx LC_ALL en_GB.UTF-8
+set -gx COLORTERM truecolor
+set -gx VISUAL nvim
+set -gx EDITOR $VISUAL
+set -gx VIRTUAL_ENV_DISABLE_PROMPT 1
+# Every core, at a level that compresses a build tree in seconds.
+set -gx ZSTD_NBTHREADS 0
+set -gx ZSTD_CLEVEL 6
+if command -q moor
+    set -gx PAGER "moor --wrap --tab-size=4 --quit-if-one-screen"
+    set -gx MANPAGER $PAGER
+end
+set -gx GLOW_CONFIG_HOME (set -q XDG_CONFIG_HOME; and echo $XDG_CONFIG_HOME; or echo ~/.config)/glow
+set -gx MAX_THINKING_TOKENS 8000
+set -gx WORKSPACE_ROOTS ~/projects
+set -gx CLAUDE_CODE_MAX_OUTPUT_TOKENS 64000
+set -gx _ZO_DOCTOR 0
+set -gx DIRENV_LOG_FORMAT ''
+# A literal, as in .zshrc: dircolors would cost a fork on every start.
+set -gx LS_COLORS "rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35"\
+":bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00"\
+":tw=30;42:ow=34;42:st=37;44:ex=01;32"\
+":*.tar=01;31:*.tgz=01;31:*.zip=01;31:*.gz=01;31:*.bz2=01;31:*.xz=01;31"\
+":*.zst=01;31:*.7z=01;31:*.rar=01;31:*.deb=01;31:*.rpm=01;31"\
+":*.jpg=01;35:*.jpeg=01;35:*.png=01;35:*.gif=01;35:*.bmp=01;35:*.tif=01;35"\
+":*.svg=01;35:*.webp=01;35:*.pdf=01;35"\
+":*.mp4=01;35:*.mkv=01;35:*.webm=01;35:*.mov=01;35:*.avi=01;35"\
+":*.mp3=00;36:*.flac=00;36:*.wav=00;36:*.ogg=00;36:*.opus=00;36"
+
+# --- Plugins: clones the installer puts under XDG_DATA_HOME -------------------
+#
+# fifc's preview rules load only in the `fish -c` fzf runs, which is not
+# interactive, so the plugins load there too.
+set -l data_home (set -q XDG_DATA_HOME; and echo $XDG_DATA_HOME; or echo ~/.local/share)
+if status is-interactive; or set -q _fifc_launched_by_fzf
+    # fifc replaces Tab with fzf over fish's own completions.
+    if test -d $data_home/fifc
+        set -g fifc_editor nvim
+        set -g fifc_eza_opts --oneline --group-directories-first
+        set -g fifc_bat_opts --style=numbers --line-range=:200
+        set -g fifc_custom_fzf_opts -i --height=60% --layout=reverse --border --info=inline
+        contains -- $data_home/fifc/functions $fish_function_path
+        or set -p fish_function_path $data_home/fifc/functions
+        contains -- $data_home/fifc/completions $fish_complete_path
+        or set -p fish_complete_path $data_home/fifc/completions
+        source $data_home/fifc/conf.d/fifc.fish
+        # After the built-in rules, which match first. A make target or a git
+        # ref is neither a file nor a directory, so those rules pass them on.
+        fifc -n 'string match --regex --quiet "^\s*make\b" -- "$fifc_commandline"' \
+            -p 'make-target-recipe $fifc_candidate'
+        fifc -n 'string match --regex --quiet "^\s*git\s+(checkout|switch|rebase|merge)\b" -- "$fifc_commandline"' \
+            -p 'git log --oneline --graph --color=always -20 $fifc_candidate 2>/dev/null'
+    end
+
+    # nvm.fish reads nvm's own install tree, so the Node versions installed
+    # under zsh-nvm stay usable. `nvm use` matches against an index that only
+    # `nvm install` and `nvm list-remote` download, so run one of them once.
+    if test -d $data_home/nvm.fish
+        set -g nvm_data ~/.nvm/versions/node
+        contains -- $data_home/nvm.fish/functions $fish_function_path
+        or set -p fish_function_path $data_home/nvm.fish/functions
+        contains -- $data_home/nvm.fish/completions $fish_complete_path
+        or set -p fish_complete_path $data_home/nvm.fish/completions
+        source $data_home/nvm.fish/conf.d/nvm.fish
+    end
+end
+
+status is-interactive; or return
+
+# --- Interactive shell --------------------------------------------------------
+
+set -g fish_greeting
+
+# One ssh-agent per login session, at a fixed socket, so every pane shares it.
+# `ssh-add -l` exits 2 only when it cannot reach an agent.
+if not set -q SSH_AUTH_SOCK; and command -q ssh-agent
+    set -l agent_dir (set -q XDG_RUNTIME_DIR; and echo $XDG_RUNTIME_DIR; or echo ~/.cache)
+    set -l agent_sock $agent_dir/ssh-agent.sock
+    set -l live
+    if test -S $agent_sock
+        SSH_AUTH_SOCK=$agent_sock ssh-add -l >/dev/null 2>&1
+        test $status -ne 2; and set live 1
+    end
+    if test -z "$live"
+        mkdir -p $agent_dir
+        rm -f $agent_sock
+        ssh-agent -a $agent_sock >/dev/null 2>&1
+    end
+    test -S $agent_sock; and set -gx SSH_AUTH_SOCK $agent_sock
+end
+
+# OSC 7 reports the working directory, so tmux and Ghostty open a new pane in
+# it. Before every prompt, as zsh's precmd did, so it is right again after an
+# ssh session that reported a remote one.
+function _osc7_cwd --on-event fish_prompt
+    printf '\e]7;file://%s%s\e\\' $hostname (string escape --style=url -- $PWD)
+end
+
+bind ctrl-x,ctrl-e edit_command_buffer
+
+if command -q moor
+    alias less moor
+end
+
+# Abbreviations expand on the line before running, so history and atuin record
+# the real command. Each git one is defined twice: once in command position,
+# and once as an argument of watch, so `watch gst` still works.
+function _git_abbr
+    abbr --add $argv[1] -- $argv[2..]
+    abbr --add $argv[1] --command watch -- $argv[2..]
+end
+_git_abbr gst git st
+_git_abbr gs git st
+_git_abbr gsv git sv
+_git_abbr gbv git bv
+_git_abbr grv git rv
+_git_abbr gch git ch
+_git_abbr ga git add -A
+_git_abbr gd git diff
+_git_abbr gdc git diff --cached
+_git_abbr gll git ll
+_git_abbr gdl git dl
+_git_abbr gwt git wt
+_git_abbr gcm git cm
+_git_abbr gp git push
+_git_abbr gpl git pull
+_git_abbr gb git branch
+_git_abbr gf git fetch --prune
+functions --erase _git_abbr
+
+abbr --add vim nvim
+abbr --add python python3
+abbr --add cz chezmoi
+abbr --add cc claude
+abbr --add cc-work 'CLAUDE_CONFIG_DIR=$HOME/.claude-work claude'
+abbr --add tarc tar -a -cf
+if command -q fd
+    abbr --add f fd
+    abbr --add fa fd --hidden --no-ignore
+end
+command -q rg; and abbr --add rga rg --hidden --no-ignore
+
+# `...` is `cd ../..`, and each further dot climbs one more level.
+function _multicd
+    echo cd (string repeat --count (math (string length -- $argv[1]) - 1) ../)
+end
+abbr --add dotdot --regex '^\.\.\.+$' --function _multicd
+
+function watch --wraps watch
+    GIT_WT_FORCE_COLOUR=1 command watch --color $argv
+end
+
+if command -q eza
+    function ls --wraps eza
+        if isatty stdout
+            eza --long --group-directories-first $argv
+        else
+            eza --oneline --group-directories-first $argv
+        end
+    end
+    abbr --add lsa eza --long --group-directories-first --all
+end
+abbr --add ll ls -l
+abbr --add la ls -la
+
+function mkcd
+    mkdir -p -- $argv[1]; and cd -- $argv[1]
+end
+
+function cpwd
+    for tool in pbcopy wl-copy 'xclip -selection clipboard' 'xsel --clipboard --input'
+        set -l cmd (string split ' ' -- $tool)
+        if command -q $cmd[1]
+            printf %s $PWD | $cmd
+            return
+        end
+    end
+    echo "cpwd: no clipboard tool found (pbcopy, wl-copy, xclip, xsel)" >&2
+    return 1
+end
+
+function gws
+    set -l rows (GIT_WT_FORCE_COLOUR=1 git wt --paths); or return
+    set -l target (printf '%s\n' $rows | fzf --ansi --delimiter='\t' --with-nth=2.. \
+        --height=40% --reverse --no-multi --prompt='worktree> '); or return
+    test -n "$target"; and cd (string split --fields 1 \t -- $target)
+end
+
+# A remote program that dies mid-screen leaves the terminal in its modes.
+function ssh --wraps ssh
+    command ssh $argv
+    set -l ret $status
+    if isatty stdout
+        stty sane
+        printf '\e[?1049l\e[?25h\e[?1000l\e[?1002l\e[?1003l\e[?1006l\e[?2004l\e(B\e[m\017'
+    end
+    return $ret
+end
+
+# Loads opam's environment on first use.
+function opam --wraps opam
+    functions --erase opam
+    test -r ~/.opam/opam-init/init.fish; and source ~/.opam/opam-init/init.fish >/dev/null 2>&1
+    command opam $argv
+end
+
+# Order as in .zshrc: fzf first, then atuin, so atuin owns Ctrl+R.
+command -q zoxide; and zoxide init fish --cmd cd | source
+command -q direnv; and direnv hook fish | source
+command -q fzf; and fzf --fish | source
+if command -q atuin
+{{- $atuinHost := index .atuin.hostnames .chezmoi.hostname | default "" }}
+{{- if $atuinHost }}
+    set -gx ATUIN_HOST_NAME {{ $atuinHost }}
+{{- end }}
+    atuin init fish --disable-up-arrow --disable-ai | source
+end
+if command -q starship
+    starship init fish | source
+    # starship.toml sets no right_format, so the right prompt would only fork
+    # starship to print nothing.
+    functions --erase fish_right_prompt
+end
+
+# Ghostty is only a window around tmux, so a local shell in it attaches the
+# `main` session, and so does an SSH login, except one carrying scp or rsync.
+# Other terminals, such as VS Code's, open a plain shell. tmux overwrites
+# TERM_PROGRAM, so a pane's own shells do not nest.
+function _tmux_attach_main
+    if test (uname) = Linux
+        tmux has-session -t main 2>/dev/null
+        or systemctl --user start tmux.service 2>/dev/null
+    end
+    tmux new-session -A -s main
+end
+if not set -q TMUX; and not set -q SSH_TMUX_DISABLE
+    if not set -q SSH_CONNECTION; and test "$TERM_PROGRAM" = ghostty
+        _tmux_attach_main
+    else if set -q SSH_CONNECTION; and not string match --quiet --regex '^(scp|rsync)' -- "$SSH_ORIGINAL_COMMAND"
+        _tmux_attach_main
+    end
+end

@@ -13,8 +13,11 @@ from ..runner import Step, StepContext, StepFailed
 HOMEBREW_URL = "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 BREW = Path("/opt/homebrew/bin/brew")
 
-# The system zsh, in the order tried.
-ZSH_CANDIDATES = (Path("/usr/bin/zsh"), Path("/bin/zsh"))
+# The fish to make the login shell on each platform, in the order tried.
+FISH_CANDIDATES = {
+    "Linux": (Path("/usr/bin/fish"),),
+    "Darwin": (Path("/opt/homebrew/bin/fish"),),
+}
 SHELLS = Path("/etc/shells")
 PASSWD = Path("/etc/passwd")
 
@@ -71,28 +74,33 @@ def login_shell(context: StepContext, user: str) -> str:
 
 
 def install_login_shell(context: StepContext) -> None:
-    """Make the system zsh the login shell.
+    """Make fish the login shell.
 
-    Any zsh already set and listed in /etc/shells is left alone, so a Homebrew
-    or nix zsh chosen by hand survives. The system one is preferred over
-    whatever zsh is first on PATH, since a login shell under ~/.nix-profile or
-    /opt/homebrew breaks when that tree is upgraded or removed.
+    Any fish already set and listed in /etc/shells is left alone, so one chosen
+    by hand survives. Linux takes the package manager's /usr/bin/fish. macOS
+    ships no fish, so it takes Homebrew's /opt/homebrew/bin/fish, a symlink
+    brew repoints on every upgrade, so the path outlives each Cellar version.
+    Never the fish first on PATH, which may sit under ~/.nix-profile and break
+    when that profile is upgraded or garbage collected.
     """
     user = pwd.getpwuid(os.geteuid()).pw_name
     current = login_shell(context, user)
-    if Path(current).name == "zsh" and os.access(current, os.X_OK) and current in _lines(SHELLS):
+    if Path(current).name == "fish" and os.access(current, os.X_OK) and current in _lines(SHELLS):
         context.log(f"Login shell is already {current}; skipping")
         return
+    candidates = FISH_CANDIDATES.get(context.host.system, ())
     target = next(
         (
             str(candidate)
-            for candidate in ZSH_CANDIDATES
-            if os.access(candidate, os.X_OK) and context.succeeds([str(candidate), "-fc", "exit 0"])
+            for candidate in candidates
+            if os.access(candidate, os.X_OK)
+            and context.succeeds([str(candidate), "--no-config", "-c", "exit 0"])
         ),
         None,
     )
     if target is None:
-        raise StepFailed("No working zsh at /usr/bin/zsh or /bin/zsh")
+        tried = " or ".join(str(candidate) for candidate in candidates) or "(none for this OS)"
+        raise StepFailed(f"No working fish at {tried}")
     # chsh edits /etc/passwd alone, so an account held in LDAP or SSSD has to
     # have its shell changed by whoever runs the directory.
     if context.host.system != "Darwin" and not any(

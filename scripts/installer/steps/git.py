@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from .. import apt, fetch, tools
+from .. import apt, tools
 from ..runner import Step, StepContext, StepFailed
 
 # Ubuntu freezes git's upstream version at release and backports fixes only, so
@@ -16,11 +16,10 @@ from ..runner import Step, StepContext, StepFailed
 # releases, and publishes amd64 and arm64 for every supported series.
 GIT_MIN_VERSION = "2.35.0"
 # Launchpad reports this for ~git-core/+archive/ubuntu/ppa. Pinned because the
-# keyserver below is authenticated by TLS alone.
+# keyserver apt.add_ppa fetches it from is authenticated by TLS alone.
 GIT_CORE_PPA_FINGERPRINT = "F911AB184317630C59970973E363C90F8F1B6217"
-KEY_URL = f"https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x{GIT_CORE_PPA_FINGERPRINT}"
-KEYRING = "git-core-ppa.gpg"
-SOURCE_LIST = "git-core-ppa.list"
+KEY_URL = apt.keyserver_url(GIT_CORE_PPA_FINGERPRINT)
+ARCHIVE = "https://ppa.launchpadcontent.net/git-core/ppa/ubuntu"
 
 _VERSION = re.compile(r"\d+\.\d+\.\d+")
 
@@ -44,28 +43,9 @@ def install_git(context: StepContext) -> None:
         return
 
     context.log(f"Installing git from the git-core PPA (distro git is {version or 'absent'})")
-    scratch = context.tmpdir()
-    armored = scratch / "key.asc"
-    fetch.download(context, KEY_URL, armored)
-    # Check the key that came back is the pinned one before apt is told to
-    # trust everything it signs.
-    if GIT_CORE_PPA_FINGERPRINT not in apt.key_fingerprints(context, armored):
-        raise StepFailed("git-core PPA key does not carry the pinned fingerprint")
-    tools.sudo(context, ["mkdir", "-p", "-m", "755", apt.KEYRINGS])
-    binary = scratch / KEYRING
-    context.run(["gpg", "--output", str(binary), "--dearmor", str(armored)])
-    keyring = apt.KEYRINGS / KEYRING
-    tools.sudo(context, ["install", "-m", "644", binary, keyring])
-    arch = context.capture(["dpkg", "--print-architecture"])
-    if arch is None:
-        raise StepFailed
-    tools.sudo_write(
-        context,
-        apt.SOURCES / SOURCE_LIST,
-        f"deb [arch={arch} signed-by={keyring}]"
-        f" https://ppa.launchpadcontent.net/git-core/ppa/ubuntu {codename} main\n",
+    apt.add_ppa(
+        context, "git-core PPA", GIT_CORE_PPA_FINGERPRINT, ARCHIVE, codename, "git-core-ppa"
     )
-    apt.update(context)
     apt.install(context, "git")
     # apt can succeed and still leave the old git, when the PPA has no build
     # for this series or a pin holds the distro's one.

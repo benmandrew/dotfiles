@@ -8,7 +8,7 @@ The installer must run on Python 3.9 (the Xcode Command Line Tools ship 3.9.6) w
 
 ## Steps
 
-Steps are *idempotent*: they skip a tool already present and upgrade only under `--upgrade`. Steps share one environment, `context.env`, so a step that changes `PATH` changes it for every later step. A failing step fails alone unless it has `fatal=True`. `install_homebrew` is the only interactive step; the Command Line Tools install lives in `install.sh` because `/usr/bin/python3` is a stub without them. `install_zsh_completions` runs last, since it invokes each installed binary. Keep `[install]` log lines stable, since tests assert them. A comment that gives a fix its reason moves with the code.
+Steps are *idempotent*: they skip a tool already present and upgrade only under `--upgrade`. Steps share one environment, `context.env`, so a step that changes `PATH` changes it for every later step. A failing step fails alone unless it has `fatal=True`. `install_homebrew` is the only interactive step; the Command Line Tools install lives in `install.sh` because `/usr/bin/python3` is a stub without them. `install_shell_completions` runs last, since it invokes each installed binary. Keep `[install]` log lines stable, since tests assert them. A comment that gives a fix its reason moves with the code.
 
 **Prove the binary runs.** Every path that installs or upgrades an executable ends with `tools.require_runs`, since an installer's exit status says nothing about what it left behind: `claude update` once exited 0 and left an npm stub in place of the native binary. The probe makes no network calls, opens no GUI and writes nothing.
 
@@ -30,9 +30,9 @@ Steps are *idempotent*: they skip a tool already present and upgrade only under 
 
 ## Per-tool constraints
 
-- `install_git` runs after the two fatal steps; the git-core personal package archive (PPA) key must match `GIT_CORE_PPA_FINGERPRINT`.
+- `install_git` runs after the two fatal steps; the git-core personal package archive (PPA) key must match `GIT_CORE_PPA_FINGERPRINT`. `install_fish` takes fish 4 from the `fish-shell/release-4` PPA, since jammy's apt holds 3.3.1, and its key must match `FISH_PPA_FINGERPRINT`. Both add their PPA through `apt.add_ppa`.
 - tmux needs 3.4 for the `hyperlinks` terminal feature; Neovim needs 0.12 for built-in completion.
-- `install_login_shell` reads the shell from `getent passwd` or `dscl`, never `$SHELL`, which stays stale until the next login. It skips an account missing from `/etc/passwd`, which chsh cannot change.
+- `install_login_shell` makes fish the login shell, from `/usr/bin/fish` on Linux and `/opt/homebrew/bin/fish` on macOS, never one under `~/.nix-profile`; zsh stays installed as the fallback. It reads the shell from `getent passwd` or `dscl`, never `$SHELL`, which stays stale until the next login. It skips an account missing from `/etc/passwd`, which chsh cannot change. The login-PATH probe in `verify-install.sh` takes the same paths.
 - nix settings belong in `home/dot_config/nix/nix.conf`; `enable_nix_flakes` is only a fallback for a machine that has not run `chezmoi apply`. `configure_nix_trusted_user` is required, since the daemon silently ignores restricted settings from untrusted users.
 - `install_nix_direnv` downloads `direnvrc` directly, since `nix profile install` took 18 seconds in CI to place that one file. Upstream attaches no file to a release, so `DIRENVRC_SHA256` moves with `NIX_DIRENV_VERSION`. The step sets `NIX_DIRENV_FALLBACK_NIX`, which the nixpkgs build had patched in.
 - `install_opam` is optional, since compiling OCaml for the default switch took 396 to 595 seconds on a CI runner.

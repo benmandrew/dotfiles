@@ -43,6 +43,7 @@ classify() {
         home/dot_zshrc.tmpl | home/dot_zprofile.tmpl | home/dot_zshenv.tmpl | home/dot_fzf.zsh.tmpl)
             printf 'zsh'
             ;;
+        home/dot_config/fish/*.fish.tmpl) printf 'fish' ;;
         home/run_*.sh.tmpl) printf 'bash' ;;
         # The modify_ one-liners render to the same script as the fragment they
         # include, so linting both is redundant today. They are linted anyway,
@@ -58,6 +59,7 @@ classify() {
 
 seen=0
 zsh_files=()
+fish_files=()
 bash_files=()
 sh_files=()
 json_files=()
@@ -86,6 +88,7 @@ while IFS= read -r -d '' template; do
     dialect="$(classify "${template}")"
     case "${dialect}" in
         zsh) zsh_files+=("${rendered}") ;;
+        fish) fish_files+=("${rendered}") ;;
         bash) bash_files+=("${rendered}") ;;
         sh) sh_files+=("${rendered}") ;;
         json) json_files+=("${rendered}") ;;
@@ -138,6 +141,14 @@ fi
 # without running a line of it.
 for rendered in "${zsh_files[@]}"; do
     zsh -n "${rendered}" || status=1
+done
+
+# fish parses its own rendering, and fish_indent holds it to the one layout
+# fish has. The config branches on `uname` at run time, never on .chezmoi.os,
+# so one rendering carries every platform's arm.
+for rendered in "${fish_files[@]}"; do
+    fish --no-execute "${rendered}" || status=1
+    fish_indent --check "${rendered}" || status=1
 done
 
 for rendered in "${json_files[@]}"; do

@@ -1,4 +1,5 @@
-"""Tools that are a git clone: the zsh plugins, fzf and the tmux plugin manager."""
+"""Tools that are a git clone: the zsh and fish plugins, fzf and the tmux plugin
+manager."""
 
 from __future__ import annotations
 
@@ -35,6 +36,17 @@ CLONES = (
     ),
     Clone(
         "install_fzf_tab", "fzf-tab", "fzf-tab", "https://github.com/Aloxaf/fzf-tab.git", "master"
+    ),
+    # fifc is fish's counterpart to fzf-tab, and nvm.fish its node version
+    # manager, since nvm itself is a POSIX shell function fish cannot load. The fish
+    # config sources both from their clones, as the zsh config does fzf-tab.
+    Clone("install_fifc", "fifc", "fifc", "https://github.com/gazorby/fifc.git", "main"),
+    Clone(
+        "install_nvm_fish",
+        "nvm.fish",
+        "nvm.fish",
+        "https://github.com/jorgebucaran/nvm.fish.git",
+        "main",
     ),
     Clone(
         "install_zsh_autosuggestions",

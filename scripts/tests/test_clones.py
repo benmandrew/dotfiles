@@ -34,10 +34,25 @@ class ClonesTest(StepCase):
             self.said(),
             "[install] zinit already installed; skipping\n"
             "[install] fzf-tab already installed; skipping\n"
+            "[install] fifc already installed; skipping\n"
+            "[install] nvm.fish already installed; skipping\n"
             "[install] zsh-autosuggestions already installed; skipping\n"
             "[install] fzf-git.sh already installed; skipping\n",
         )
         self.assertEqual(self.called(), [])
+
+    def test_the_fish_plugins(self) -> None:
+        self.assertTrue(self.run_step(STEPS["install_fifc"]))
+        self.assertTrue(self.run_step(STEPS["install_nvm_fish"]))
+        self.assertEqual(self.said(), "[install] Installing fifc\n[install] Installing nvm.fish\n")
+        self.assertEqual(
+            self.called(),
+            [
+                f"git clone --depth 1 https://github.com/gazorby/fifc.git {self.data}/fifc",
+                "git clone --depth 1 https://github.com/jorgebucaran/nvm.fish.git"
+                f" {self.data}/nvm.fish",
+            ],
+        )
 
     def test_upgrade_resets_to_the_remote_branch(self) -> None:
         self.env["XDG_DATA_HOME"] = str(self.home / "data")

@@ -85,6 +85,7 @@ check_cmd_optional() {
 check_cmd git
 check_cmd curl
 check_cmd zsh
+check_cmd fish
 check_cmd tmux -V
 # entr has no version flag, and every invocation without a file list on stdin
 # exits 1, so there is nothing to tell a working one from a stub.
@@ -95,8 +96,10 @@ check_cmd_optional perf
 
 check_dir "zinit" "${HOME}/.local/share/zinit/zinit.git"
 check_dir "fzf-tab" "${HOME}/.local/share/fzf-tab"
+check_dir "fifc" "${HOME}/.local/share/fifc"
+check_dir "nvm.fish" "${HOME}/.local/share/nvm.fish"
 check_dir "zsh-autosuggestions" "${HOME}/.local/share/zsh-autosuggestions"
-# install_zsh_completions generates this one on every platform: no package
+# install_shell_completions generates this one on every platform: no package
 # ships a _delta, and zsh's bundled _sccs claims the command name, so its
 # absence means git-delta is completing SCCS flags.
 check_file "zsh completions" "${HOME}/.local/share/zsh/site-functions/_delta"
@@ -154,18 +157,28 @@ check_file "nix-direnv wired into direnvrc" "${HOME}/.config/direnv/direnvrc"
 # nix-daemon.sh exports __ETC_PROFILE_NIX_SOURCED and returns early when it is
 # already set: inheriting it from the caller leaves the profile directory
 # wherever the caller happened to have it, and the answer says more about this
-# script's parent than about the machine. `zsh -lc` reads .zshenv, .zprofile
-# and .zlogin and skips .zshrc, so nothing interactive writes to the stdout
-# being read here. That understates the real PATH by whatever .zshrc prepends,
-# which can only move bash earlier, so a pass here is a pass in the interactive
-# shell direnv actually runs from.
+# script's parent than about the machine. It runs the login shell
+# install_login_shell sets, fish, or the zsh kept as a fallback where there is
+# no fish, found by path since PATH is the thing under suspicion. Under -l -c,
+# fish runs the `status is-login` block of config.fish but nothing guarded by
+# `status is-interactive`, and zsh reads .zshenv, .zprofile and .zlogin but
+# skips .zshrc, so nothing interactive writes to the stdout being read here.
+# Quoted, fish joins $PATH with colons. That understates the real PATH by
+# whatever the interactive setup prepends, which can only move bash earlier, so
+# a pass here is a pass in the interactive shell direnv actually runs from.
 check_bash_version() {
-    local login_path bash_path version major minor
+    local login_shell="" candidate login_path bash_path version major minor
+    for candidate in /usr/bin/fish /opt/homebrew/bin/fish /usr/bin/zsh /bin/zsh; do
+        if [[ -x "${candidate}" ]]; then
+            login_shell="${candidate}"
+            break
+        fi
+    done
     # Single-quoted on purpose in both: the PATH and the version are the inner
     # shell's to expand, and expanding them here would report this one.
     # shellcheck disable=SC2016
     login_path="$(env -i "HOME=${HOME}" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
-        zsh -lc 'printf "%s" "$PATH"' 2>/dev/null)"
+        "${login_shell:-/nonexistent}" -l -c 'printf "%s" "$PATH"' 2>/dev/null)"
     bash_path="$(PATH="${login_path:-${PATH}}" command -v bash 2>/dev/null)"
     # shellcheck disable=SC2016
     version="$("${bash_path:-/nonexistent}" -c 'printf "%s.%s" "${BASH_VERSINFO[0]}" "${BASH_VERSINFO[1]}"' 2>/dev/null)"
@@ -194,14 +207,14 @@ check_login_shell() {
     else
         shell="$(getent passwd "${user}" | cut -d: -f7)"
     fi
-    if [[ "${shell##*/}" == "zsh" && -x "${shell}" ]]; then
+    if [[ "${shell##*/}" == "fish" && -x "${shell}" ]]; then
         printf "\033[1;32m[ok]\033[0m   login shell (%s)\n" "${shell}"
         ((ok++)) || true
     elif [[ "${os_name}" != "Darwin" ]] && ! grep -q "^${user}:" /etc/passwd; then
         printf "\033[1;33m[warn]\033[0m login shell is %s; %s is not in /etc/passwd, so chsh cannot change it\n" \
             "${shell:-unknown}" "${user}"
     else
-        printf "\033[1;31m[FAIL]\033[0m login shell is %s, not zsh\n" "${shell:-unknown}" >&2
+        printf "\033[1;31m[FAIL]\033[0m login shell is %s, not fish\n" "${shell:-unknown}" >&2
         ((fail++)) || true
     fi
 }

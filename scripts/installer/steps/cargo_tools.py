@@ -262,13 +262,13 @@ def _install_completion(context: StepContext, unpacked: Path, command: str) -> N
 
     Several of these tarballs carry a completions/ directory, and for a tool
     with no "print your own completion" subcommand that archive is the only
-    source there is: install_zsh_completions can generate for uv, fd, delta and
+    source there is: install_shell_completions can generate for uv, fd, delta and
     the rest, but zoxide 0.9.9 has no such subcommand, so on Linux, where these
     arrive as bare binaries with no package manager to link a site-functions
     file, `zoxide <TAB>` completed nothing at all. Homebrew links one on macOS,
     which is why the gap only shows on the other platform. Skipped where a
     system-wide copy already exists, so the package manager keeps ownership,
-    matching the policy install_zsh_completions follows.
+    matching the policy install_shell_completions follows.
     """
     completion = release.find_file(unpacked, f"_{command}")
     if completion is None or _completion_installed(command):
@@ -287,7 +287,7 @@ def _install_completion(context: StepContext, unpacked: Path, command: str) -> N
     context.log(f"Installed the zsh completion shipped with {command}")
     # compinit caches the command-to-function map in the dump and only rereads
     # fpath when the dump is stale, so drop it. Cheap, and this step does not
-    # always run before install_zsh_completions, which does the same at the
+    # always run before install_shell_completions, which does the same at the
     # end of a full run.
     zdotdir = Path(context.env.get("ZDOTDIR") or context.home)
     for dump in (".zcompdump", ".zcompdump.zwc"):

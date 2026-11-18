@@ -68,12 +68,13 @@ class HomebrewTest(SystemCase):
 class LoginShellTest(SystemCase):
     def setUp(self) -> None:
         super().setUp()
-        self.zsh = self.fake("zsh", "#!/bin/sh\n", self.etc / "usr-bin")
+        self.fish = self.fake("fish", "#!/bin/sh\n", self.etc / "usr-bin")
         self.shells = self.etc / "shells"
-        self.shells.write_text(f"/bin/sh\n{self.zsh}\n")
+        self.shells.write_text(f"/bin/sh\n{self.fish}\n")
         self.passwd = self.etc / "passwd"
         self.passwd.write_text(f"root:x:0:0::/root:/bin/sh\n{USER}:x:1000:1000::/home:/bin/bash\n")
-        self.patch("ZSH_CANDIDATES", (self.etc / "missing" / "zsh", self.zsh))
+        candidates = (self.etc / "missing" / "fish", self.fish)
+        self.patch("FISH_CANDIDATES", {"Linux": candidates, "Darwin": candidates})
         self.patch("SHELLS", self.shells)
         self.patch("PASSWD", self.passwd)
         # An account database of one line, which chsh rewrites.
@@ -88,13 +89,13 @@ class LoginShellTest(SystemCase):
     def test_change(self) -> None:
         self.assertTrue(self.run_step(STEPS["install_login_shell"]))
         self.assertEqual(
-            self.said(), f"[install] Changing login shell from /bin/bash to {self.zsh}\n"
+            self.said(), f"[install] Changing login shell from /bin/bash to {self.fish}\n"
         )
-        self.assertEqual(self.called(), [f"chsh -s {self.zsh} {USER}"])
+        self.assertEqual(self.called(), [f"chsh -s {self.fish} {USER}"])
 
-    def test_a_listed_zsh_is_kept(self) -> None:
-        # One chosen by hand, which is not the system zsh.
-        own = self.fake("zsh", "#!/bin/sh\n", self.home / "bin")
+    def test_a_listed_fish_is_kept(self) -> None:
+        # One chosen by hand, which is not the system fish.
+        own = self.fake("fish", "#!/bin/sh\n", self.home / "bin")
         self.record.write_text(f"{own}\n")
         self.shells.write_text(f"{own}\n")
         for system_name in ("Linux", "Darwin"):
@@ -106,7 +107,7 @@ class LoginShellTest(SystemCase):
     def test_an_unlisted_shell_is_added_to_etc_shells(self) -> None:
         self.shells.write_text("/bin/sh\n")
         self.assertTrue(self.run_step(STEPS["install_login_shell"]))
-        self.assertEqual(self.shells.read_text(), f"/bin/sh\n{self.zsh}\n")
+        self.assertEqual(self.shells.read_text(), f"/bin/sh\n{self.fish}\n")
 
     def test_an_account_outside_etc_passwd_is_left(self) -> None:
         self.passwd.write_text("root:x:0:0::/root:/bin/sh\n")
@@ -117,12 +118,22 @@ class LoginShellTest(SystemCase):
         )
         # macOS keeps its accounts elsewhere, and chsh reaches them.
         self.assertTrue(self.run_step(STEPS["install_login_shell"], system="Darwin"))
-        self.assertEqual(self.called(), [f"chsh -s {self.zsh} {USER}"])
+        self.assertEqual(self.called(), [f"chsh -s {self.fish} {USER}"])
 
-    def test_no_zsh(self) -> None:
-        self.fake("zsh", "#!/bin/sh\nexit 1\n", self.etc / "usr-bin")
+    def test_a_listed_zsh_is_replaced(self) -> None:
+        # zsh stays installed as a fallback, but is no longer the login shell.
+        zsh = self.fake("zsh", "#!/bin/sh\n", self.etc / "usr-bin")
+        self.record.write_text(f"{zsh}\n")
+        self.shells.write_text(f"{zsh}\n{self.fish}\n")
+        self.assertTrue(self.run_step(STEPS["install_login_shell"]))
+        self.assertEqual(self.called(), [f"chsh -s {self.fish} {USER}"])
+
+    def test_no_fish(self) -> None:
+        self.fake("fish", "#!/bin/sh\nexit 1\n", self.etc / "usr-bin")
         self.assertFalse(self.run_step(STEPS["install_login_shell"]))
-        self.assertIn("ERROR: No working zsh at /usr/bin/zsh or /bin/zsh\n", self.said())
+        self.assertIn(
+            f"ERROR: No working fish at {self.etc}/missing/fish or {self.fish}\n", self.said()
+        )
 
     def test_a_chsh_that_changes_nothing_fails_the_step(self) -> None:
         self.recording("chsh")
@@ -133,7 +144,7 @@ class LoginShellTest(SystemCase):
         self.fake("getent", "#!/bin/sh\nexit 2\n")
         self.recording("chsh")
         self.assertFalse(self.run_step(STEPS["install_login_shell"]))
-        self.assertIn(f"[install] Changing login shell from unknown to {self.zsh}\n", self.said())
+        self.assertIn(f"[install] Changing login shell from unknown to {self.fish}\n", self.said())
         self.assertIn("ERROR: chsh exited 0 but the login shell is still unknown\n", self.said())
 
 
