@@ -248,7 +248,54 @@ bind-key -T copy-mode-vi v send-keys -X begin-selection
 # is the one writer.
 bind-key -T copy-mode-vi y send-keys -X pipe-and-cancel '~/.config/tmux/copy.sh'
 bind-key -T copy-mode-vi Enter send-keys -X pipe-and-cancel '~/.config/tmux/copy.sh'
-bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X pipe-and-cancel '~/.config/tmux/copy.sh'
+# A mouse copy stays where it is, like Claude Code: pipe-no-clear keeps copy
+# mode and the highlight, and the client moves to the mouse-copied table. There
+# a click clears the highlight and the wheel scrolls, both staying in the table,
+# and typing leaves copy mode and sends the key to the shell. Any other key
+# falls through to copy-mode-vi and leaves the table.
+#
+# Each key is bound by name because a binding on Any cannot tell which key was
+# pressed: #{key_string} is empty there. The pane_in_mode test covers a pane
+# that the wheel has already scrolled out of copy mode.
+bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X pipe-no-clear '~/.config/tmux/copy.sh' \; switch-client -T mouse-copied
+bind-key -T copy-mode-vi DoubleClick1Pane select-pane \; send-keys -X select-word \; send-keys -X pipe-no-clear '~/.config/tmux/copy.sh' \; switch-client -T mouse-copied
+bind-key -T copy-mode-vi TripleClick1Pane select-pane \; send-keys -X select-line \; send-keys -X pipe-no-clear '~/.config/tmux/copy.sh' \; switch-client -T mouse-copied
+bind-key -T copy-mode-vi MouseDown1Pane select-pane \; send-keys -X clear-selection
+
+bind-key -T mouse-copied MouseDown1Pane {
+    select-pane -t=
+    if -F -t= '#{pane_in_mode}' {
+        send-keys -X clear-selection
+        switch-client -T mouse-copied
+    } {
+        send-keys -M
+    }
+}
+bind-key -T mouse-copied WheelUpPane {
+    if -F -t= '#{pane_in_mode}' {
+        select-pane -t=
+        send-keys -X -N 5 scroll-up
+        switch-client -T mouse-copied
+    } {
+        if -F -t= '#{mouse_any_flag}' { send-keys -M } { select-pane -t= ; copy-mode -e ; send-keys -M }
+    }
+}
+bind-key -T mouse-copied WheelDownPane {
+    select-pane -t=
+    if -F -t= '#{pane_in_mode}' {
+        send-keys -X -N 5 scroll-down
+        switch-client -T mouse-copied
+    } {
+        send-keys -M
+    }
+}
+{{- range $k := splitList "" "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789`~!@#$%^&*()-_=+[]{}\\|;:\",.<>/?" }}
+bind-key -T mouse-copied '{{ $k }}' if -F '#{pane_in_mode}' 'send-keys -X cancel' \; send-keys -l '{{ $k }}'
+{{- end }}
+bind-key -T mouse-copied "'" if -F '#{pane_in_mode}' 'send-keys -X cancel' \; send-keys -l "'"
+{{- range $k := list "Space" "BSpace" "Enter" "Tab" "Up" "Down" "Left" "Right" "C-c" "C-d" "C-r" }}
+bind-key -T mouse-copied {{ $k }} if -F '#{pane_in_mode}' 'send-keys -X cancel' \; send-keys {{ $k }}
+{{- end }}
 
 # The four options tmux-sensible sets that this file does not already set for
 # itself (escape-time and focus-events are above). They are inlined rather than
