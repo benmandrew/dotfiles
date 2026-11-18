@@ -9,3 +9,7 @@ Library/Application Support/Code/User/settings.json
 .local/bin/recolour-icons
 .local/bin/tmux-pane-scope
 {{ end }}
+.config/nvim/CLAUDE.md
+.config/doom/CLAUDE.md
+.config/fish/CLAUDE.md
+.config/obsidian/CLAUDE.md
