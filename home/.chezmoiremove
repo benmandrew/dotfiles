@@ -30,3 +30,7 @@
 .config/wezterm
 # The idle hook kept WezTerm's name after it stopped touching WezTerm.
 .claude/wezterm-notify.sh
+
+# systemd-oomd 249 reads ManagedOOM settings from the system manager only, so
+# this drop-in asking it to watch app.slice did nothing.
+.config/systemd/user/app.slice.d

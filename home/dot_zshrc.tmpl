@@ -707,9 +707,20 @@ RPROMPT=''
 # `main` session, as every interactive shell did before e87f557. Other
 # terminals, such as VS Code's, open a plain shell. Ghostty sets TERM_PROGRAM,
 # and tmux overwrites it, so a pane's own shells do not nest.
+_tmux_attach_main() {
+{{- if eq .chezmoi.os "linux" }}
+  # Start the server as tmux.service, outside this terminal's cgroup, so an OOM
+  # kill of the terminal leaves the server alive. If the unit cannot start, the
+  # client below starts a server here, as before.
+  tmux has-session -t main 2>/dev/null ||
+    systemctl --user start tmux.service 2>/dev/null
+{{- end }}
+  tmux new-session -A -s main
+}
+
 if [[ -o interactive ]] && [[ -z "$TMUX" ]] && [[ -z "$SSH_CONNECTION" ]] &&
    [[ "$TERM_PROGRAM" == ghostty ]] && [[ -z "$SSH_TMUX_DISABLE" ]]; then
-  tmux new-session -A -s main
+  _tmux_attach_main
 fi
 
 if [[ -o interactive ]] && [[ -z "$TMUX" ]] && [[ -n "$SSH_CONNECTION" ]]; then
@@ -718,7 +729,7 @@ if [[ -o interactive ]] && [[ -z "$TMUX" ]] && [[ -n "$SSH_CONNECTION" ]]; then
     case "$SSH_ORIGINAL_COMMAND" in
       scp*|rsync*) ;;
       *)
-        tmux new-session -A -s main
+        _tmux_attach_main
         ;;
     esac
   fi

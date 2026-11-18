@@ -1,0 +1,14 @@
+#!/bin/bash
+# Enable the tmux server unit and load jobs.slice. Enabling does not start the
+# server; the Ghostty shell in ~/.zshrc starts it when no server is running.
+# tmux-service-hash: {{ include "dot_config/systemd/user/tmux.service" | sha256sum }}
+# jobs-slice-hash: {{ include "dot_config/systemd/user/jobs.slice" | sha256sum }}
+set -euo pipefail
+{{- if eq .chezmoi.os "linux" }}
+
+if ! systemctl --user show-environment >/dev/null 2>&1; then
+    exit 0
+fi
+systemctl --user daemon-reload
+systemctl --user enable --quiet tmux.service
+{{- end }}

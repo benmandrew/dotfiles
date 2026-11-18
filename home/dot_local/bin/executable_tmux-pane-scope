@@ -1,0 +1,93 @@
+#!/bin/sh
+# Put tmux processes where an OOM kill takes one pane at most: each pane in a
+# scope of its own in jobs.slice, and the server outside it.
+#
+#   tmux-pane-scope pane <pid>   move a pane's process tree, unless it is
+#                                already in jobs.slice
+#   tmux-pane-scope migrate      move every pane of the running server, and the
+#                                server itself into session.slice
+#
+# tmux's pane-creating hooks in ~/.tmux.conf call `pane` for each new pane.
+# `migrate` moves a server that started before this existed, without
+# restarting it.
+#
+# systemd adopts running pids into a new transient scope through
+# StartTransientUnit. A process forked during the move stays behind.
+set -eu
+
+# The pid and every descendant, one to a line.
+descendants() {
+    ps -eo pid=,ppid= | awk -v root="$1" '
+        { parent[$1] = $2 }
+        END {
+            keep[root] = 1
+            do {
+                grew = 0
+                for (p in parent) if (!(p in keep) && (parent[p] in keep)) { keep[p] = 1; grew = 1 }
+            } while (grew)
+            for (p in keep) print p
+        }'
+}
+
+# adopt <unit> <slice> <pid>...
+adopt() {
+    unit=$1
+    slice=$2
+    shift 2
+    busctl --user call org.freedesktop.systemd1 /org/freedesktop/systemd1 \
+        org.freedesktop.systemd1.Manager StartTransientUnit 'ssa(sv)a(sa(sv))' \
+        "${unit}" fail 3 PIDs au "$#" "$@" Slice s "${slice}" \
+        CollectMode s inactive-or-failed 0 >/dev/null
+}
+
+in_slice() {
+    case "$(cat "/proc/$1/cgroup" 2>/dev/null || true)" in
+        */"$2"/*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# A process can exit between the ps snapshot and the call, and systemd then
+# refuses the whole call, so drop pids that have gone and retry with a fresh
+# snapshot.
+move_pane() {
+    for _ in 1 2 3 4 5; do
+        [ -d "/proc/$1" ] || return 0
+        # shellcheck disable=SC2310  # in_slice returns a test result, not an error
+        if in_slice "$1" jobs.slice; then return 0; fi
+        pids=
+        for p in $(descendants "$1"); do
+            [ -d "/proc/${p}" ] && pids="${pids} ${p}"
+        done
+        # shellcheck disable=SC2086,SC2310  # one pid per word; a refusal is retried
+        if adopt "tmux-pane-$1.scope" jobs.slice ${pids} 2>/dev/null; then
+            return 0
+        fi
+    done
+    echo "tmux-pane-scope: could not move pane $1" >&2
+    return 1
+}
+
+case "${1:-}" in
+    pane)
+        move_pane "$2"
+        ;;
+    migrate)
+        status=0
+        panes=$(tmux list-panes -a -F '#{pane_pid}')
+        for pid in ${panes}; do
+            # shellcheck disable=SC2310  # one failed pane must not stop the rest
+            move_pane "${pid}" || status=1
+        done
+        server=$(tmux display -p '#{pid}')
+        # shellcheck disable=SC2310  # in_slice returns a test result, not an error
+        if ! in_slice "${server}" session.slice; then
+            adopt "tmux-server-${server}.scope" session.slice "${server}"
+        fi
+        exit "${status}"
+        ;;
+    *)
+        echo "usage: tmux-pane-scope pane <pid> | migrate" >&2
+        exit 2
+        ;;
+esac

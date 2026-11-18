@@ -1,0 +1,72 @@
+#!/bin/bash
+# Who an out-of-memory kill lands on.
+#
+# Ubuntu has systemd-oomd watch the whole user manager, user@.service, with a
+# 50% pressure limit. Pressure counts up the cgroup tree, so a job capped in its
+# own slice still pushed the whole tree past the limit, and oomd killed the
+# Ghostty scope, which then held tmux and every pane. systemd 249 offers no
+# finer control: it ignores ManagedOOMPreference on a cgroup the root user does
+# not own, and ManagedOOM settings on user units altogether. So oomd stops
+# watching the user tree, the memory cap on jobs.slice stops a runaway job, and
+# earlyoom covers everything else, with --avoid in place of the preference oomd
+# cannot read.
+#
+# This writes under /etc, so it needs sudo. Without it the script prints the
+# steps and leaves the apply to finish.
+set -euo pipefail
+{{- if eq .chezmoi.os "linux" }}
+
+if ! command -v apt-get >/dev/null 2>&1; then
+    exit 0
+fi
+
+oomd_file="/etc/systemd/system/user@$(id -u).service.d/90-oomd.conf"
+oomd_want=$'[Service]\nManagedOOMMemoryPressure=auto'
+
+# The unit splits $EARLYOOM_ARGS on whitespace and drops no quotes, so the
+# pattern holds no space and no quote: tmux names its processes "tmux: server"
+# and "tmux: client". earlyoom matches the 15-character process name. The rest
+# keep the desktop and the Claude sessions alive; the kill goes to the largest
+# other process.
+earlyoom_file=/etc/default/earlyoom
+earlyoom_want='EARLYOOM_ARGS="-r 3600 --avoid ^(tmux:.*|ghostty|gnome-shell|Xwayland|claude|systemd|sshd)$"'
+
+current() { cat "$1" 2>/dev/null || true; }
+
+have_oomd=$(current "${oomd_file}")
+have_earlyoom=$(current "${earlyoom_file}")
+if [[ "${have_oomd}" == "${oomd_want}" ]] &&
+    [[ "${have_earlyoom}" == "${earlyoom_want}" ]] &&
+    systemctl is-active --quiet earlyoom; then
+    exit 0
+fi
+
+configure() {
+    sudo mkdir -p "$(dirname "${oomd_file}")"
+    printf '%s\n' "${oomd_want}" | sudo tee "${oomd_file}" >/dev/null
+    sudo systemctl daemon-reload
+    if ! dpkg-query -W -f='${Status}' earlyoom 2>/dev/null | grep -q 'ok installed'; then
+        sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y earlyoom
+    fi
+    printf '%s\n' "${earlyoom_want}" | sudo tee "${earlyoom_file}" >/dev/null
+    sudo systemctl enable --quiet earlyoom
+    sudo systemctl restart earlyoom
+}
+
+if [[ -t 0 ]]; then
+    # shellcheck disable=SC2310  # a failure falls through to the manual steps
+    if configure; then
+        exit 0
+    fi
+fi
+
+cat >&2 <<MSG
+configure-oom: could not finish. As root:
+  write to ${oomd_file}:
+${oomd_want}
+  apt-get install earlyoom
+  write to ${earlyoom_file}:
+${earlyoom_want}
+  systemctl daemon-reload && systemctl enable --now earlyoom && systemctl restart earlyoom
+MSG
+{{- end }}

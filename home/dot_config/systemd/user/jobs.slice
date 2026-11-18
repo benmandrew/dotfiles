@@ -1,0 +1,14 @@
+# Everything started from a tmux pane: each pane is its own scope in here, and
+# batch jobs can go in child slices such as jobs-hunt.slice. MemoryMax keeps
+# their reclaim inside this slice, so the desktop does not stall, and at the cap
+# the kernel kills the largest process in it, which is usually the job. There
+# is no MemoryHigh: interactive panes live here too, and it would throttle them
+# along with the job that filled the slice.
+#
+# No ManagedOOM settings: systemd-oomd 249 takes them from the system manager
+# only, and ignores them on user units.
+[Unit]
+Description=tmux panes and batch jobs, capped together
+
+[Slice]
+MemoryMax=22G

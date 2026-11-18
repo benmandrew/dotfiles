@@ -7,4 +7,5 @@ Library/Application Support/Code/User/settings.json
 .config/systemd
 .local/bin/code
 .local/bin/recolour-icons
+.local/bin/tmux-pane-scope
 {{ end }}

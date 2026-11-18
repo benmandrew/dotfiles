@@ -117,6 +117,22 @@ bind X confirm-before -p "kill-pane #P? (y/n)" kill-pane
 # Enable mouse control (clickable windows, panes, resizable panes)
 set -g mouse on
 set -g default-terminal "tmux-256color"
+{{- if eq .chezmoi.os "linux" }}
+
+# Each pane runs in a scope of its own in jobs.slice, whose memory cap keeps a
+# job's reclaim away from the server and the desktop, and an OOM kill of one
+# pane leaves the server and the other panes. The hooks move each new pane's process tree
+# there through ~/.local/bin/tmux-pane-scope, including panes created with a
+# command, such as resurrect's restored ones, which default-command would miss.
+# tmux has no hook after respawn-pane, so a respawned pane stays with the
+# server. Without a user manager to talk to, such as in a container, panes stay
+# put.
+if-shell 'systemctl --user show-environment >/dev/null 2>&1' {
+    set-hook -g after-new-session[50] 'run-shell -b "~/.local/bin/tmux-pane-scope pane #{pane_pid}"'
+    set-hook -g after-new-window[50] 'run-shell -b "~/.local/bin/tmux-pane-scope pane #{pane_pid}"'
+    set-hook -g after-split-window[50] 'run-shell -b "~/.local/bin/tmux-pane-scope pane #{pane_pid}"'
+}
+{{- end }}
 
 # Status bar — Hacktober palette, as in the Ghostty config
 set -g status-style bg=#141414,fg=#c9c9c9

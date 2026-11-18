@@ -1,0 +1,18 @@
+# The tmux server runs here, outside the Ghostty scope, so an OOM kill of a
+# terminal window no longer takes every pane with it. Panes leave this cgroup at
+# once: hooks in ~/.tmux.conf move each one to a scope in jobs.slice.
+[Unit]
+Description=tmux server
+
+[Service]
+# With the core session services, away from the app scopes.
+Slice=session.slice
+Type=forking
+# A server already running on the default socket, such as one a client started
+# before this unit existed, skips the unit instead of failing it.
+ExecCondition=/bin/sh -c '! tmux has-session 2>/dev/null'
+ExecStart=tmux new-session -d -s main
+ExecStop=tmux kill-server
+
+[Install]
+WantedBy=default.target
