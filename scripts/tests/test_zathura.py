@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from installer.steps import STEPS
+from installer.steps import STEPS, zathura
 
 from .support import StepCase
 
@@ -95,35 +95,54 @@ class ZathuraMacosTest(StepCase):
 
 
 class ZathuraLinuxTest(StepCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.env["WAYLAND_DISPLAY"] = "wayland-0"
+        self.zathura = self.home / ".nix-profile" / "bin" / "zathura"
+        self.listing = self.home / "profile.json"
+        self.listing.write_text('{"elements": {}}')
+        # `nix profile install` leaves a zathura in the profile and lists it.
+        self.fake(
+            "nix",
+            f'#!/bin/sh\nif [ "$2" = list ]; then cat "{self.listing}"; exit 0; fi\n'
+            'echo "nix $*" >>"$FAKE_CALLS"\n'
+            f'mkdir -p "{self.zathura.parent}"\n'
+            f"printf '#!/bin/sh\\n' >\"{self.zathura}\"\n"
+            f'chmod +x "{self.zathura}"\n',
+        )
+
+    def linux(self, upgrade: bool = False) -> bool:
+        return self.run_step(STEPS["install_zathura"], upgrade=upgrade)
+
     def test_headless(self) -> None:
-        self.assertTrue(self.run_step(STEPS["install_zathura"]))
+        del self.env["WAYLAND_DISPLAY"]
+        self.assertTrue(self.linux())
         self.assertEqual(
             self.said(),
             "[install] zathura: no display session detected; skipping on headless Linux\n",
         )
+        self.assertEqual(self.called(), [])
 
     def test_install(self) -> None:
-        self.env["DISPLAY"] = ":0"
-        self.fake("dpkg", "#!/bin/sh\nexit 1\n")
-        self.installer("apt-get", creates="zathura")
-        self.assertTrue(self.run_step(STEPS["install_zathura"]))
+        self.assertTrue(self.linux())
         self.assertEqual(self.said(), "[install] Installing zathura\n")
-        self.assertEqual(self.called(), ["apt-get install -y zathura zathura-pdf-poppler"])
+        self.assertEqual(self.called(), [f"nix profile install --impure --expr {zathura.NIX_EXPR}"])
 
-    def test_present(self) -> None:
-        self.env["WAYLAND_DISPLAY"] = "wayland-0"
-        self.fake("dpkg", "#!/bin/sh\nexit 0\n")
-        self.fake("zathura", "#!/bin/sh\n")
-        self.recording("apt-get")
-        self.assertTrue(self.run_step(STEPS["install_zathura"]))
+    def test_present_and_upgrade(self) -> None:
+        self.listing.write_text('{"elements": {"zathura-with-plugins": {"active": true}}}')
+        self.assertTrue(self.linux())
         self.assertEqual(self.said(), "[install] zathura already installed; skipping\n")
-        self.assertTrue(self.run_step(STEPS["install_zathura"], upgrade=True))
-        self.assertEqual(len(self.called()), 1)
+        self.assertEqual(self.called(), [])
+        self.assertTrue(self.linux(upgrade=True))
+        self.assertEqual(
+            self.called(),
+            [
+                "nix profile remove zathura-with-plugins",
+                f"nix profile install --impure --expr {zathura.NIX_EXPR}",
+            ],
+        )
 
-    def test_a_viewer_without_its_backend_is_installed(self) -> None:
-        self.env["DISPLAY"] = ":0"
-        self.fake("dpkg", "#!/bin/sh\nexit 1\n")
-        self.fake("zathura", "#!/bin/sh\n")
-        self.recording("apt-get")
-        self.assertTrue(self.run_step(STEPS["install_zathura"]))
+    def test_an_unreadable_listing_installs(self) -> None:
+        self.listing.write_text("not json")
+        self.assertTrue(self.linux())
         self.assertEqual(self.said(), "[install] Installing zathura\n")

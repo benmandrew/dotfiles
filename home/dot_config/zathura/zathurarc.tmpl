@@ -17,8 +17,15 @@ set synctex true
 # not the visible reveal, and focus/flags/activation-tokens don't move it either.
 set synctex-editor-command "code --reuse-window --goto %{input}:%{line}"
 
-# Start in inverted colours; Ctrl+R toggles it per-document.
+# Start in inverted colours; Ctrl+R toggles it per document. This needs the
+# nix profile's zathura on Linux: jammy's 0.4.9 recolours on one render thread,
+# and a quick run of scroll keys left the view lagging after the keys stopped.
+# Ctrl+R still takes a moment, since every page on screen renders again.
 set recolor true
+# Keep each pixel's hue and map only its lightness, so coloured text, links and
+# figures stay coloured. Without it a recoloured page is a grey scale.
+set recolor-keephue true
+#
 # recolor-lightcolor and default-bg both default to #000000, so a recoloured
 # page is invisible against the space around it. Lift the page off the
 # background and widen the 1px default gap.

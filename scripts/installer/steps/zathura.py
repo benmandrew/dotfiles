@@ -1,8 +1,16 @@
 """zathura, a keyboard-driven PDF viewer.
 
 The managed zathurarc wires up SyncTeX inverse search into VS Code, so the
-build has to have SyncTeX support: Debian's package does, but the macOS formula
-makes it an :optional dependency, hence --with-synctex.
+build has to have SyncTeX support: the nixpkgs build does, but the macOS
+formula makes it an :optional dependency, hence --with-synctex.
+
+Linux takes zathura from the nix profile, since Ubuntu 22.04's apt holds 0.4.9.
+That version recolours each page pixel by pixel on its one render thread, so
+with `recolor` on, a quick run of scroll keys queued renders that kept the view
+lagging after the keys stopped. nixpkgs' wrapper bundles the PDF backend with
+zathura, and picks MuPDF unless told otherwise; the expression turns that off.
+An entry added from an expression has no flake attribute for `nix profile
+upgrade` to follow, so an upgrade removes it and adds it again.
 
 macOS has no zathura in homebrew-core, so this uses the community tap. That tap
 builds from source and ships each document backend as its own formula, so a
@@ -25,12 +33,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .. import apt, brew, tools
+from .. import brew, tools
 from ..runner import Step, StepContext, StepFailed
 
 TAP = "homebrew-zathura/zathura"
 BACKEND = "zathura-pdf-poppler"
 PLUGIN = "libpdf-poppler.dylib"
+NIX_ENTRY = "zathura-with-plugins"
+NIX_EXPR = (
+    'let p = (builtins.getFlake "nixpkgs").legacyPackages.${builtins.currentSystem};'
+    " in p.zathura.override { useMupdf = false; }"
+)
 
 
 def _tap_is_trusted(context: StepContext) -> bool:
@@ -97,6 +110,27 @@ def _link_pdf_plugin(context: StepContext) -> None:
     link.symlink_to(plugin)
 
 
+def _in_nix_profile(context: StepContext) -> bool:
+    listing = context.capture(["nix", "profile", "list", "--json"], quiet=True) or ""
+    try:
+        return NIX_ENTRY in json.loads(listing)["elements"]
+    except (ValueError, LookupError, TypeError):
+        return False
+
+
+def _install_linux(context: StepContext) -> None:
+    tools.require_command(context, "nix")
+    present = _in_nix_profile(context)
+    if not tools.announce(context, "zathura", present):
+        return
+    if present:
+        context.run(["nix", "profile", "remove", NIX_ENTRY])
+    context.run(["nix", "profile", "install", "--impure", "--expr", NIX_EXPR])
+    zathura = context.home / ".nix-profile" / "bin" / "zathura"
+    tools.note_shadowed(context, "zathura", zathura)
+    tools.require_runs(context, zathura, "--version")
+
+
 def install_zathura(context: StepContext) -> None:
     if context.host.system == "Darwin":
         _install_macos(context)
@@ -106,11 +140,7 @@ def install_zathura(context: StepContext) -> None:
     if not (context.env.get("DISPLAY") or context.env.get("WAYLAND_DISPLAY")):
         context.log("zathura: no display session detected; skipping on headless Linux")
         return
-    present = context.which("zathura") is not None and apt.installed(context, BACKEND)
-    if not tools.announce(context, "zathura", present):
-        return
-    apt.install(context, "zathura", BACKEND)
-    tools.require_runs(context, "zathura", "--version")
+    _install_linux(context)
 
 
 STEPS = (Step("install_zathura", install_zathura),)
