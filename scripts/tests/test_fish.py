@@ -32,6 +32,7 @@ class FishTest(StepCase):
             (apt, "KEYRINGS", self.keyrings),
             (apt, "SOURCES", self.sources),
             (tools, "OS_RELEASE", self.os_release),
+            (fish, "FISH", self.bin / "fish"),
         ):
             patch = mock.patch.object(module, name, value)
             patch.start()
@@ -48,6 +49,20 @@ class FishTest(StepCase):
             self.assertTrue(self.run_step(STEPS["install_fish"]))
             self.assertIn(f"[install] fish {version} is at least 4.0; skipping\n", self.said())
         self.assertEqual(self.requests(), [])
+
+    def test_a_fish_elsewhere_on_path_is_not_enough(self) -> None:
+        # A nix-profile fish passed the old guard and left no /usr/bin/fish
+        # for install_login_shell.
+        other = Path(self.system)
+        (other / "fish").write_text("#!/bin/sh\necho 'fish, version 4.8.0'\n")
+        (other / "fish").chmod(0o755)
+        (self.bin / "fish").unlink()
+        self.recording("apt-get")
+        self.assertFalse(self.run_step(STEPS["install_fish"]))
+        self.assertIn(
+            "[install] Installing fish from the fish-shell PPA (distro fish is absent)\n",
+            self.said(),
+        )
 
     def test_a_ppa_is_for_ubuntu_alone(self) -> None:
         self.os_release.write_text('ID=debian\nVERSION_CODENAME="bookworm"\n')
@@ -101,4 +116,4 @@ class FishTest(StepCase):
             f' && echo "fish, version 4.2.1" && exit 0\\nexit 1\\n\' >"{broken}"\n',
         )
         self.assertFalse(self.run_step(STEPS["install_fish"]))
-        self.assertIn("ERROR: fish does not run after installing", self.said())
+        self.assertIn(f"ERROR: {broken} does not run after installing", self.said())

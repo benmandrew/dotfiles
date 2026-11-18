@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from .. import apt, tools
 from ..runner import Step, StepContext, StepFailed
@@ -17,6 +18,10 @@ FISH_MIN_VERSION = "4.0"
 FISH_PPA_FINGERPRINT = "88421E703EDC7AF54967DED473C9FCC9E2BB48DA"
 KEY_URL = apt.keyserver_url(FISH_PPA_FINGERPRINT)
 ARCHIVE = "https://ppa.launchpadcontent.net/fish-shell/release-4/ubuntu"
+# The one install_login_shell takes on Linux. Checked by path, since a fish
+# first on PATH, from a nix profile or a devShell, says nothing about whether
+# this one exists.
+FISH = Path("/usr/bin/fish")
 
 # fish prints "fish, version 4.0.2"; a pre-release can drop the patch number.
 _VERSION = re.compile(r"\d+\.\d+(?:\.\d+)?")
@@ -24,7 +29,7 @@ _VERSION = re.compile(r"\d+\.\d+(?:\.\d+)?")
 
 def _version(context: StepContext) -> str:
     """The installed fish's version, or "" where there is none."""
-    found = _VERSION.search(context.capture(["fish", "--version"], quiet=True) or "")
+    found = _VERSION.search(context.capture([str(FISH), "--version"], quiet=True) or "")
     return found.group() if found else ""
 
 
@@ -53,7 +58,7 @@ def install_fish(context: StepContext) -> None:
         )
     # --version answers without starting the interpreter, so also run a
     # command, with no config, as the login shell will.
-    tools.require_runs(context, "fish", "--no-config", "-c", "exit 0")
+    tools.require_runs(context, FISH, "--no-config", "-c", "exit 0")
     context.log(f"fish is now {version}")
 
 
