@@ -43,6 +43,7 @@ icons:
     libreoffice-writer.desktop: tone
     org.gnome.Calculator.desktop: tone
     gnome-control-center.desktop: tone
+    update-manager.desktop: tone
     com.microsoft.VSCode.desktop: tone
     ghostty_ghostty.desktop: tone
     google-chrome.desktop: tone
