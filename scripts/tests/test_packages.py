@@ -21,9 +21,9 @@ class AptPackagesTest(StepCase):
         self.recording("apt-get")
 
     def test_only_the_missing_are_installed(self) -> None:
-        self.assertTrue(self.run_apt("git", "zsh", "curl", "entr"))
-        self.assertEqual(self.said(), "[install] Installing missing base packages: zsh entr\n")
-        self.assertEqual(self.called(), ["apt-get update", "apt-get install -y zsh entr"])
+        self.assertTrue(self.run_apt("git", "fish", "curl", "entr"))
+        self.assertEqual(self.said(), "[install] Installing missing base packages: fish entr\n")
+        self.assertEqual(self.called(), ["apt-get update", "apt-get install -y fish entr"])
 
     def test_nothing_missing(self) -> None:
         self.assertTrue(self.run_apt("git", "curl"))
@@ -31,13 +31,13 @@ class AptPackagesTest(StepCase):
         self.assertEqual(self.called(), [])
 
     def test_upgrade_takes_the_whole_list(self) -> None:
-        self.assertTrue(self.run_apt("git", "zsh", upgrade=True))
-        self.assertEqual(self.said(), "[install] Upgrading base packages: git zsh\n")
-        self.assertEqual(self.called(), ["apt-get update", "apt-get install -y git zsh"])
+        self.assertTrue(self.run_apt("git", "fish", upgrade=True))
+        self.assertEqual(self.said(), "[install] Upgrading base packages: git fish\n")
+        self.assertEqual(self.called(), ["apt-get update", "apt-get install -y git fish"])
 
     def test_a_failed_update_fails_the_step(self) -> None:
         self.recording("apt-get", failing="update")
-        self.assertFalse(self.run_apt("zsh"))
+        self.assertFalse(self.run_apt("fish"))
         self.assertEqual(self.called(), ["apt-get update"])
 
 
@@ -48,13 +48,13 @@ class BrewFormulaeTest(StepCase):
 
     def test_missing_formulae_are_installed(self) -> None:
         self.recording("brew", failing="list")
-        self.assertTrue(self.run_brew("git", "zsh"))
-        self.assertEqual(self.said(), "[install] Installing missing Homebrew formulae: git zsh\n")
-        self.assertEqual(self.called()[-2:], ["brew update", "brew install git zsh"])
+        self.assertTrue(self.run_brew("git", "fish"))
+        self.assertEqual(self.said(), "[install] Installing missing Homebrew formulae: git fish\n")
+        self.assertEqual(self.called()[-2:], ["brew update", "brew install git fish"])
 
     def test_nothing_missing(self) -> None:
         self.recording("brew")
-        self.assertTrue(self.run_brew("git", "zsh"))
+        self.assertTrue(self.run_brew("git", "fish"))
         self.assertEqual(self.said(), "[install] Homebrew formulae already installed; skipping\n")
 
     def test_a_failed_batch_upgrade_is_retried_one_formula_at_a_time(self) -> None:

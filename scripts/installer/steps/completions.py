@@ -1,15 +1,11 @@
-"""zsh and fish completions for the tools that can print their own.
+"""fish completions for the tools that can print their own.
 
 These tools ship their completion nowhere useful. The step runs after every
-other one, since it calls each binary. zsh's go to the user site-functions
-directory that home/dot_zshrc.tmpl prepends to fpath; fish's go to the user
+other one, since it calls each binary. The completions go to the user
 vendor_completions.d, which fish puts on $fish_complete_path by default.
 
 A tool whose completion is already installed system-wide is skipped rather than
-shadowed, so a later `brew upgrade` keeps ownership of it. delta is the
-exception that motivated this: nothing ships a _delta, and zsh's bundled _sccs
-registers the name `delta` for SCCS, so without a generated one git-delta
-completes SCCS flags.
+shadowed, so a later `brew upgrade` keeps ownership of it.
 
 fish 4 also embeds completions for uv, uvx, delta, rustup, typst and chezmoi
 in its binary, where no directory check can see them. The generated ones still
@@ -52,21 +48,12 @@ class Shell:
     noun: str
 
 
-SHELLS = (
-    Shell("zsh", "zsh/site-functions", "_", "", "zsh completion function(s)"),
-    Shell("fish", "fish/vendor_completions.d", "", ".fish", "fish completion file(s)"),
-)
+SHELLS = (Shell("fish", "fish/vendor_completions.d", "", ".fish", "fish completion file(s)"),)
 # Where each shell looks by default. Homebrew links a completion here for most
 # of its formulae; the same tool installed from a release tarball on Linux
 # comes with nothing. fish's own completions directory counts too, since fish
 # bundles completions for some of these tools.
 SYSTEM_DIRECTORIES = {
-    "zsh": (
-        Path("/opt/homebrew/share/zsh/site-functions"),
-        Path("/usr/local/share/zsh/site-functions"),
-        Path("/usr/share/zsh/site-functions"),
-        Path("/usr/share/zsh/vendor-completions"),
-    ),
     "fish": (
         Path("/opt/homebrew/share/fish/vendor_completions.d"),
         Path("/usr/local/share/fish/vendor_completions.d"),
@@ -123,14 +110,6 @@ def install_shell_completions(context: StepContext) -> None:
             else:
                 context.log(f"Could not generate {shell.name} completion for {command}; skipping")
         context.log(f"Generated {generated} {shell.noun} in {directory}")
-
-    # compinit caches the command-to-function map in the dump and rereads fpath
-    # only when the dump is stale. Drop it so the next shell picks the new
-    # functions up instead of waiting out the 24-hour timer in .zshrc. fish
-    # keeps no such cache and loads a completion file when first needed.
-    zdotdir = Path(context.env.get("ZDOTDIR") or context.home)
-    for dump in (".zcompdump", ".zcompdump.zwc"):
-        (zdotdir / dump).unlink(missing_ok=True)
 
 
 STEPS = (Step("install_shell_completions", install_shell_completions),)

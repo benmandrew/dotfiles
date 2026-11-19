@@ -108,7 +108,7 @@ def safe_git(context: StepContext, directory: Path, *args: str) -> None:
     """git in a clone, whoever owns it.
 
     safe_git and ensure_user_owns exist because upgrade paths for git-cloned
-    tools (zinit, fzf, tpm) have hit repos owned by root, from an earlier sudo
+    tools (fzf, tpm) have hit repos owned by root, from an earlier sudo
     or CI run, which makes plain git refuse ("dubious ownership") or fail to
     write.
     """

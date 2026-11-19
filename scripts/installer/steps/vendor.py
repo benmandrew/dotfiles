@@ -44,7 +44,7 @@ def _remove_shadowing_starship(context: StepContext, managed: Path) -> None:
     """Delete the copy an earlier version of this step left in /usr/local/bin.
 
     A copy left in the old location is dead weight at best. ~/.local/bin now
-    leads /usr/local/bin in the rendered zshrc, but only for shells started
+    leads /usr/local/bin in config.fish, but only for shells started
     since that change, and anything reading the system PATH still finds the
     stale one first, so the managed binary gets installed and then ignored,
     silently, for as long as the old one exists. Remove it once the new one is

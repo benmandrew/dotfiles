@@ -34,7 +34,7 @@ class TableTest(StepCase):
 class CargoToolCase(StepCase):
     def setUp(self) -> None:
         super().setUp()
-        self.system_completions = Path(self.scratch) / "site-functions"
+        self.system_completions = Path(self.scratch) / "vendor_completions.d"
         patch = mock.patch.object(cargo_tools, "SYSTEM_COMPLETION_DIRS", (self.system_completions,))
         patch.start()
         self.addCleanup(patch.stop)
@@ -53,7 +53,7 @@ class CargoToolCase(StepCase):
         self.serve_tool(
             "RIPGREP_VERSION",
             f"{name}.tar.gz",
-            {f"{name}/rg": prints("ripgrep 15.2.0"), f"{name}/complete/_rg": "#compdef rg"},
+            {f"{name}/rg": prints("ripgrep 15.2.0"), f"{name}/complete/rg.fish": "complete -c rg"},
             checksum=f"{name}.tar.gz.sha256",
         )
 
@@ -61,26 +61,24 @@ class CargoToolCase(StepCase):
 class ReleaseBinaryTest(CargoToolCase):
     def test_install_with_a_checksum_and_a_completion(self) -> None:
         self.serve_ripgrep()
-        (self.home / ".zcompdump").write_text("stale")
         self.assertTrue(self.run_step(STEPS["install_ripgrep"]))
         self.assertEqual(
             self.said(),
-            "[install] Installing rg\n[install] Installed the zsh completion shipped with rg\n",
+            "[install] Installing rg\n[install] Installed the fish completion shipped with rg\n",
         )
         self.assertIn("ripgrep", self.local("rg").read_text())
-        completion = self.home / ".local/share/zsh/site-functions/_rg"
-        self.assertEqual(completion.read_text(), "#compdef rg")
-        self.assertFalse((self.home / ".zcompdump").exists())
+        completion = self.home / ".local/share/fish/vendor_completions.d/rg.fish"
+        self.assertEqual(completion.read_text(), "complete -c rg")
         # A pinned install asks the API nothing.
         self.assertFalse(any("api.github.com" in request for request in self.requests()))
 
     def test_a_system_completion_is_left_alone(self) -> None:
         self.serve_ripgrep()
         self.system_completions.mkdir()
-        (self.system_completions / "_rg").write_text("from a package")
+        (self.system_completions / "rg.fish").write_text("from a package")
         self.assertTrue(self.run_step(STEPS["install_ripgrep"]))
         self.assertEqual(self.said(), "[install] Installing rg\n")
-        self.assertFalse((self.home / ".local/share/zsh/site-functions/_rg").exists())
+        self.assertFalse((self.home / ".local/share/fish/vendor_completions.d/rg.fish").exists())
 
     def test_wrong_checksum(self) -> None:
         self.serve_ripgrep()

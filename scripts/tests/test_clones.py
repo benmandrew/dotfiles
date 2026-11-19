@@ -12,36 +12,6 @@ class ClonesTest(StepCase):
         self.data = self.home / ".local" / "share"
 
     def test_install(self) -> None:
-        self.assertTrue(self.run_step(STEPS["install_zinit"]))
-        self.assertTrue(self.run_step(STEPS["install_fzf_tab"]))
-        self.assertEqual(self.said(), "[install] Installing zinit\n[install] Installing fzf-tab\n")
-        self.assertEqual(
-            self.called(),
-            [
-                # zinit updates itself from its clone, so it gets the history.
-                "git clone https://github.com/zdharma-continuum/zinit.git"
-                f" {self.data}/zinit/zinit.git",
-                f"git clone --depth 1 https://github.com/Aloxaf/fzf-tab.git {self.data}/fzf-tab",
-            ],
-        )
-        self.assertTrue((self.data / "zinit").is_dir())
-
-    def test_present(self) -> None:
-        for clone in clones.CLONES:
-            (self.data / clone.directory / ".git").mkdir(parents=True)
-            self.assertTrue(self.run_step(STEPS[clone.step]))
-        self.assertEqual(
-            self.said(),
-            "[install] zinit already installed; skipping\n"
-            "[install] fzf-tab already installed; skipping\n"
-            "[install] fifc already installed; skipping\n"
-            "[install] nvm.fish already installed; skipping\n"
-            "[install] zsh-autosuggestions already installed; skipping\n"
-            "[install] fzf-git.sh already installed; skipping\n",
-        )
-        self.assertEqual(self.called(), [])
-
-    def test_the_fish_plugins(self) -> None:
         self.assertTrue(self.run_step(STEPS["install_fifc"]))
         self.assertTrue(self.run_step(STEPS["install_nvm_fish"]))
         self.assertEqual(self.said(), "[install] Installing fifc\n[install] Installing nvm.fish\n")
@@ -54,19 +24,30 @@ class ClonesTest(StepCase):
             ],
         )
 
+    def test_present(self) -> None:
+        for clone in clones.CLONES:
+            (self.data / clone.directory / ".git").mkdir(parents=True)
+            self.assertTrue(self.run_step(STEPS[clone.step]))
+        self.assertEqual(
+            self.said(),
+            "[install] fifc already installed; skipping\n"
+            "[install] nvm.fish already installed; skipping\n",
+        )
+        self.assertEqual(self.called(), [])
+
     def test_upgrade_resets_to_the_remote_branch(self) -> None:
         self.env["XDG_DATA_HOME"] = str(self.home / "data")
-        directory = self.home / "data" / "fzf-git.sh"
+        directory = self.home / "data" / "fifc"
         (directory / ".git").mkdir(parents=True)
-        self.assertTrue(self.run_step(STEPS["install_fzf_git"], upgrade=True))
-        self.assertEqual(self.said(), "[install] Upgrading fzf-git.sh\n")
+        self.assertTrue(self.run_step(STEPS["install_fifc"], upgrade=True))
+        self.assertEqual(self.said(), "[install] Upgrading fifc\n")
         git = f"git -c safe.directory={directory} -C {directory}"
         self.assertEqual(self.called(), [f"{git} fetch origin", f"{git} reset --hard origin/main"])
 
     def test_a_failed_fetch_fails_the_step(self) -> None:
-        (self.data / "fzf-tab" / ".git").mkdir(parents=True)
+        (self.data / "fifc" / ".git").mkdir(parents=True)
         self.fake("git", '#!/bin/sh\necho "git $*" >>"$FAKE_CALLS"\nexit 1\n')
-        self.assertFalse(self.run_step(STEPS["install_fzf_tab"], upgrade=True))
+        self.assertFalse(self.run_step(STEPS["install_fifc"], upgrade=True))
         self.assertEqual(len(self.called()), 1)
 
 

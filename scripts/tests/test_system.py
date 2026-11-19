@@ -121,7 +121,7 @@ class LoginShellTest(SystemCase):
         self.assertEqual(self.called(), [f"chsh -s {self.fish} {USER}"])
 
     def test_a_listed_zsh_is_replaced(self) -> None:
-        # zsh stays installed as a fallback, but is no longer the login shell.
+        # A machine set up before fish still logs in to zsh.
         zsh = self.fake("zsh", "#!/bin/sh\n", self.etc / "usr-bin")
         self.record.write_text(f"{zsh}\n")
         self.shells.write_text(f"{zsh}\n{self.fish}\n")

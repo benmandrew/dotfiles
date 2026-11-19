@@ -8,7 +8,6 @@ set -euo pipefail
 # and up to date — changing either included file changes this file's body,
 # which is what actually triggers the re-run.
 # tmux-conf-hash: {{ include "dot_tmux.conf.tmpl" | sha256sum }}
-# zshrc-conf-hash: {{ include "dot_zshrc.tmpl" | sha256sum }}
 # fish-conf-hash: {{ include "dot_config/fish/config.fish.tmpl" | sha256sum }}
 
 if ! command -v tmux >/dev/null 2>&1; then
@@ -30,15 +29,14 @@ if tmux ls >/dev/null 2>&1; then
     # first. And a pane with a half-typed command line has that line in its
     # buffer: without the C-u the command is appended to whatever was already
     # there and Enter runs the pair of them. C-u kills back to the start of the
-    # line in both zsh's emacs bindings and fish's defaults, and the cursor sits
-    # at the end of a typed line.
+    # line in fish's default bindings, and the cursor sits at the end of a
+    # typed line.
     # shellcheck disable=SC2312  # the process substitution masks tmux's
     # status. A tmux that failed here lists no panes, the loop runs zero times
     # and nothing is sent, which is the wanted behaviour rather than something
     # to propagate.
     while read -r pane_id pane_in_mode pane_command; do
         case "${pane_command}" in
-            zsh) rc="${HOME}/.zshrc" ;;
             fish) rc="${HOME}/.config/fish/config.fish" ;;
             *) continue ;;
         esac

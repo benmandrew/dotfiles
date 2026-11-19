@@ -2,7 +2,7 @@
 # No more than 72 chars. ########################### 72 chars is here: #
 #
 # type:  feat, fix, perf, refactor, docs, test, build, ci, chore
-# scope: the area touched, e.g. zsh, git, nvim, scripts (optional)
+# scope: the area touched, e.g. fish, git, nvim, scripts (optional)
 # e.g.   fix(git): stop pruning unpushed local tags
 
 # Leave a blank line between the subject and the body.

@@ -59,12 +59,9 @@
             # the same rule set.
             gitleaks
             # scripts/lint-templates.sh reads a rendered template with each of
-            # these: zsh -n parses the rendered zsh, which shellcheck has no
-            # mode for; jq parses the rendered settings JSON; git parses the
-            # rendered gitconfig. All three resolved from the ambient PATH
-            # before, so the check ran against whatever the machine happened to
-            # have, and against nothing at all on a runner without zsh.
-            zsh
+            # these: jq parses the rendered settings JSON; git parses the
+            # rendered gitconfig. Both resolved from the ambient PATH before,
+            # so the check ran against whatever the machine happened to have.
             # fish --no-execute and fish_indent read the rendered fish config.
             fish
             jq

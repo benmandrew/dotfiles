@@ -1,6 +1,6 @@
 {{- /* The Bash tool runs $SHELL, and fish, the login shell, is not POSIX, so
-       commands written as bash break. zsh, the fallback, breaks them too, since
-       it does not word-split an unquoted $var. Prefer the nix profile's bash, since
+       commands written as bash break. zsh breaks them too, since it does not
+       word-split an unquoted $var. Prefer the nix profile's bash, since
        macOS ships 3.2 as /bin/bash. Claude Code ignores a path that does not
        run and falls back to $SHELL. */ -}}
 {{- $nixBash := joinPath .chezmoi.homeDir ".nix-profile/bin/bash" -}}

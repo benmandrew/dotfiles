@@ -36,7 +36,7 @@ inline_height = 20
 
 ## The preview shows the selected command in full, wrapped, since the results
 ## list truncates it to the width left over after the other columns. It renders
-## text atuin already holds — unlike the fzf-tab previews in dot_zshrc.tmpl,
+## text atuin already holds — unlike the fifc previews in config.fish.tmpl,
 ## nothing is executed to produce it.
 show_preview = true
 

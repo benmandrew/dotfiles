@@ -1,4 +1,4 @@
-.PHONY: all clean test test-py test-container fmt fmt-ci lint lint-sh lint-py lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-templates lint-secrets lint-secrets-history deps hooks pins
+.PHONY: all clean test test-py test-container fmt fmt-ci lint lint-sh lint-py lint-lua lint-actions lint-strip lint-toml lint-typos lint-make lint-templates lint-secrets lint-secrets-history deps hooks pins
 
 BOLD_BLUE := \033[1;34m
 RESET     := \033[0m
@@ -101,7 +101,7 @@ fmt-ci:
 	@shfmt -ln posix -i 4 -ci -d $(SH_SCRIPTS)
 	@ruff format -q --no-cache --check $(PY_SOURCES) $(DEPLOYED_PY)
 
-lint: lint-sh lint-py lint-lua lint-actions lint-zsh lint-toml lint-typos lint-make lint-templates lint-secrets
+lint: lint-sh lint-py lint-lua lint-actions lint-strip lint-toml lint-typos lint-make lint-templates lint-secrets
 
 # gitleaks was pinned, installed by both platform scripts and checked for by
 # verify-install.sh, and then run against nothing: it appeared in no target
@@ -147,9 +147,9 @@ lint-actions:
 # is still read on a Linux CI runner. The cost is that the result is not valid
 # shell, hence --severity=error. lint-templates is the other half; see the
 # header of scripts/lint-templates.sh for the division.
-lint-zsh:
-	@printf '$(BOLD_BLUE)[linting zsh templates]$(RESET)\n'
-	@for f in home/dot_zshrc.tmpl home/dot_fzf.zsh.tmpl home/*.sh.tmpl home/.chezmoitemplates/*.sh.tmpl; do \
+lint-strip:
+	@printf '$(BOLD_BLUE)[linting unrendered shell templates]$(RESET)\n'
+	@for f in home/*.sh.tmpl home/.chezmoitemplates/*.sh.tmpl; do \
 		[ -f "$$f" ] || continue; \
 		sed 's/{{[^{}]*}}//g' "$$f" | shellcheck --shell=bash --severity=error -; \
 	done

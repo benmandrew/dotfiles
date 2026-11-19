@@ -185,12 +185,12 @@ _HOST_TRIPLES = {
     ("Darwin", "x86_64"): (MAC_X86, MAC_FAT),
 }
 
-# Where a package puts a zsh completion function for everyone on the machine.
+# Where a package puts a fish completion for everyone on the machine.
 SYSTEM_COMPLETION_DIRS = (
-    Path("/opt/homebrew/share/zsh/site-functions"),
-    Path("/usr/local/share/zsh/site-functions"),
-    Path("/usr/share/zsh/site-functions"),
-    Path("/usr/share/zsh/vendor-completions"),
+    Path("/opt/homebrew/share/fish/vendor_completions.d"),
+    Path("/usr/local/share/fish/vendor_completions.d"),
+    Path("/usr/share/fish/vendor_completions.d"),
+    Path("/usr/share/fish/completions"),
 )
 
 _VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
@@ -249,32 +249,32 @@ def _install_from_source(context: StepContext, tool: CargoTool) -> None:
 
 
 def _completion_installed(command: str) -> bool:
-    """Whether some package already put a completion for `command` where zsh looks.
+    """Whether some package already put a completion for `command` where fish looks.
 
     Homebrew links one for most of its formulae; the same tool installed from a
     release tarball on Linux comes with nothing.
     """
-    return any((directory / f"_{command}").exists() for directory in SYSTEM_COMPLETION_DIRS)
+    return any((directory / f"{command}.fish").exists() for directory in SYSTEM_COMPLETION_DIRS)
 
 
 def _install_completion(context: StepContext, unpacked: Path, command: str) -> None:
-    """Install the zsh completion a tarball ships, where nothing else provides one.
+    """Install the fish completion a tarball ships, where nothing else provides one.
 
     Several of these tarballs carry a completions/ directory, and for a tool
     with no "print your own completion" subcommand that archive is the only
     source there is: install_shell_completions can generate for uv, fd, delta and
     the rest, but zoxide 0.9.9 has no such subcommand, so on Linux, where these
-    arrive as bare binaries with no package manager to link a site-functions
+    arrive as bare binaries with no package manager to link a completion
     file, `zoxide <TAB>` completed nothing at all. Homebrew links one on macOS,
     which is why the gap only shows on the other platform. Skipped where a
     system-wide copy already exists, so the package manager keeps ownership,
     matching the policy install_shell_completions follows.
     """
-    completion = release.find_file(unpacked, f"_{command}")
+    completion = release.find_file(unpacked, f"{command}.fish")
     if completion is None or _completion_installed(command):
         return
     data_home = context.env.get("XDG_DATA_HOME") or str(context.home / ".local" / "share")
-    target = Path(data_home) / "zsh" / "site-functions" / f"_{command}"
+    target = Path(data_home) / "fish" / "vendor_completions.d" / f"{command}.fish"
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(completion, target)
@@ -284,14 +284,7 @@ def _install_completion(context: StepContext, unpacked: Path, command: str) -> N
         # does not fail the step.
         context.note(str(error))
         return
-    context.log(f"Installed the zsh completion shipped with {command}")
-    # compinit caches the command-to-function map in the dump and only rereads
-    # fpath when the dump is stale, so drop it. Cheap, and this step does not
-    # always run before install_shell_completions, which does the same at the
-    # end of a full run.
-    zdotdir = Path(context.env.get("ZDOTDIR") or context.home)
-    for dump in (".zcompdump", ".zcompdump.zwc"):
-        (zdotdir / dump).unlink(missing_ok=True)
+    context.log(f"Installed the fish completion shipped with {command}")
 
 
 def _install_binary(context: StepContext, tool: CargoTool, triple: str) -> None:
@@ -323,7 +316,7 @@ def _install_binary(context: StepContext, tool: CargoTool, triple: str) -> None:
     _install_completion(context, unpacked, command)
 
     # Delete the build this step left behind before it moved to prebuilt
-    # binaries. ~/.local/bin leads ~/.cargo/bin in the rendered zshrc so the new
+    # binaries. ~/.local/bin leads ~/.cargo/bin in config.fish so the new
     # copy would win there anyway, but verify-install.sh searches the two the
     # other way round, and a stale build answering for the tool on every check
     # is exactly the shadowing install_starship had to unpick for /usr/local.

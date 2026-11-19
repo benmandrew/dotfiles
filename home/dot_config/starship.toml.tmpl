@@ -247,7 +247,7 @@ symbol = " "
 format = ' [$symbol($version)]($style)'
 
 # starship has no LaTeX module. The command runs under sh, since the default
-# STARSHIP_SHELL is zsh and would source ~/.zshenv on every prompt.
+# STARSHIP_SHELL is fish and would read config.fish on every prompt.
 [custom.latex]
 detect_extensions = ['tex', 'ltx', 'cls', 'sty']
 detect_files = ['.latexmkrc', 'latexmkrc']

@@ -93,7 +93,7 @@
     # header below, where git read it as diff.prose.pager and ignored it: a
     # diff driver takes textconv, cachetextconv, binary, command, xfuncname
     # and wordRegex, and no pager. core.pager was therefore unset and git fell
-    # back to $PAGER (dot_zshrc.tmpl:196), so `git diff`, `git log -p` and
+    # back to $PAGER (set in config.fish), so `git diff`, `git log -p` and
     # `git show` rendered through bare moor and never reached delta — which is
     # why navigate and line-numbers below appeared to do nothing. `git add -p`
     # was unaffected, since interactive.diffFilter is a top-level key.

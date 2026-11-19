@@ -34,3 +34,22 @@
 # systemd-oomd 249 reads ManagedOOM settings from the system manager only, so
 # this drop-in asking it to watch app.slice did nothing.
 .config/systemd/user/app.slice.d
+
+# zsh is gone: fish is the only shell this config sets up, and
+# run_before_00-require-fish-login-shell.sh stops an apply on a machine still
+# logging in to anything else. ~/.zsh_history stays, since atuin holds the
+# history only on a machine that imported it.
+.zshrc
+.zshenv
+.zprofile
+.zlogin
+.fzf.zsh
+.zcompdump
+.zcompdump.zwc
+.cache/zsh
+.local/share/zsh
+.local/share/zinit
+.local/share/zsh-nvm
+.local/share/fzf-tab
+.local/share/fzf-git.sh
+.local/share/zsh-autosuggestions

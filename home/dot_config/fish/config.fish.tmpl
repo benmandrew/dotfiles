@@ -1,4 +1,4 @@
-# fish is the login shell. zsh stays installed, with its config, as a fallback.
+# fish is the login shell, and the only shell this config sets up.
 #
 # The file branches on `uname` at run time rather than on .chezmoi.os, so a
 # rendering on one platform still holds the other's arm, and
@@ -10,10 +10,10 @@
 
 set -l os (uname)
 
-# --- Login environment: what ~/.zprofile and ~/.zshenv do for zsh ----------
+# --- Login environment ------------------------------------------------------
 #
-# fish reads neither file, nor /etc/profile. snapd and the other packages that
-# care ship a vendor_conf.d script, and PAM sets /etc/environment.
+# fish reads no /etc/profile. snapd and the other packages that care ship a
+# vendor_conf.d script, and PAM sets /etc/environment.
 if status is-login
     # nix-daemon.fish returns early when this is set, and the tmux server
     # hands it to every pane, so a pane would keep whatever PATH the server
@@ -27,7 +27,7 @@ if status is-login
         end
     end
 
-    # After Nix, as in .zprofile: Homebrew's shellenv prepends, so its bin
+    # After Nix: Homebrew's shellenv prepends, so its bin
     # comes first.
     for brew in /opt/homebrew/bin/brew /home/linuxbrew/.linuxbrew/bin/brew ~/.linuxbrew/bin/brew
         if test -x $brew
@@ -55,7 +55,7 @@ end
 # --- Environment for every fish ---------------------------------------------
 #
 # fish_add_path skips a directory that does not exist and, with --move, moves
-# one already present to the front, as zsh's `typeset -U path` did.
+# one already present to the front, so PATH holds no duplicates.
 switch $os
     case Darwin
         set -gx HOMEBREW_BASE /opt/homebrew/opt
@@ -95,7 +95,7 @@ set -gx WORKSPACE_ROOTS ~/projects
 set -gx CLAUDE_CODE_MAX_OUTPUT_TOKENS 64000
 set -gx _ZO_DOCTOR 0
 set -gx DIRENV_LOG_FORMAT ''
-# A literal, as in .zshrc: dircolors would cost a fork on every start.
+# A literal: dircolors would cost a fork on every start.
 set -gx LS_COLORS "rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35"\
 ":bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00"\
 ":tw=30;42:ow=34;42:st=37;44:ex=01;32"\
@@ -132,8 +132,8 @@ if status is-interactive; or set -q _fifc_launched_by_fzf
     end
 
     # nvm.fish reads nvm's own install tree, so the Node versions installed
-    # under zsh-nvm stay usable. `nvm use` matches against an index that only
-    # `nvm install` and `nvm list-remote` download, so run one of them once.
+    # under nvm before it stay usable. `nvm use` matches against an index that
+    # only `nvm install` and `nvm list-remote` download, so run one of them once.
     if test -d $data_home/nvm.fish
         set -g nvm_data ~/.nvm/versions/node
         contains -- $data_home/nvm.fish/functions $fish_function_path
@@ -169,8 +169,8 @@ if not set -q SSH_AUTH_SOCK; and command -q ssh-agent
 end
 
 # OSC 7 reports the working directory, so tmux and Ghostty open a new pane in
-# it. Before every prompt, as zsh's precmd did, so it is right again after an
-# ssh session that reported a remote one.
+# it. Before every prompt, so it is right again after an ssh session that
+# reported a remote one.
 function _osc7_cwd --on-event fish_prompt
     printf '\e]7;file://%s%s\e\\' $hostname (string escape --style=url -- $PWD)
 end
@@ -283,7 +283,7 @@ function opam --wraps opam
     command opam $argv
 end
 
-# Order as in .zshrc: fzf first, then atuin, so atuin owns Ctrl+R.
+# fzf first, then atuin, so atuin owns Ctrl+R.
 command -q zoxide; and zoxide init fish --cmd cd | source
 command -q direnv; and direnv hook fish | source
 command -q fzf; and fzf --fish | source

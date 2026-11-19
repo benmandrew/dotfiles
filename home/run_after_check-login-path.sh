@@ -14,11 +14,9 @@ set -euo pipefail
 # every .envrc in a flake repository stopped loading, with nothing in the repo
 # changed to explain it.
 #
-# home/dot_zprofile.tmpl now asserts that PATH entry from a file chezmoi owns,
-# which is the actual fix, and the `status is-login` block of
-# home/dot_config/fish/config.fish.tmpl does the same for fish, now the login
-# shell. This is the tripwire for the next thing to break the
-# same way, and it runs after every apply rather than on a content hash, since
+# The `status is-login` block of home/dot_config/fish/config.fish.tmpl now
+# asserts that PATH entry from a file chezmoi owns, which is the actual fix.
+# This is the tripwire for the next thing to break the same way, and it runs after every apply rather than on a content hash, since
 # the change it watches for happens in /etc where no hash of this tree can see
 # it.
 #
@@ -36,11 +34,10 @@ if [[ ! -r /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]] &&
     exit 0
 fi
 
-# The login shell install_login_shell sets: fish from the paths it takes, or
-# the zsh kept as a fallback where there is no fish. Found by path, not on
-# PATH, since PATH is the thing under suspicion.
+# The login shell install_login_shell sets: fish from the paths it takes.
+# Found by path, not on PATH, since PATH is the thing under suspicion.
 login_shell=""
-for candidate in /usr/bin/fish /opt/homebrew/bin/fish /usr/bin/zsh /bin/zsh; do
+for candidate in /usr/bin/fish /opt/homebrew/bin/fish; do
     if [[ -x "${candidate}" ]]; then
         login_shell="${candidate}"
         break
@@ -55,9 +52,8 @@ fi
 # inheriting it would leave the profile directory wherever the caller happened
 # to have it, and the answer would describe chezmoi's parent shell instead of
 # the machine. Under -l -c, fish runs the `status is-login` block of
-# config.fish but nothing guarded by `status is-interactive`, and zsh reads
-# .zshenv, .zprofile and .zlogin but skips .zshrc, so nothing interactive
-# writes to the stdout being read here. Quoted, fish joins $PATH with colons.
+# config.fish but nothing guarded by `status is-interactive`, so nothing
+# interactive writes to the stdout being read here. Quoted, fish joins $PATH with colons.
 # That understates the real PATH by whatever the interactive setup prepends,
 # which can only move bash earlier, so a pass here is a pass in the
 # interactive shell direnv runs from.
@@ -85,5 +81,5 @@ printf "\033[1;33m[warn]\033[0m login shell resolves bash to %s (%s)\n" \
 printf "       nix-direnv needs 4.4 or newer, so every flake .envrc will fail to load.\n" >&2
 printf "       ~/.nix-profile/bin is missing from %s's login PATH. Check the Nix block in\n" \
     "${login_shell}" >&2
-printf "       ~/.config/fish/config.fish (or ~/.zprofile under zsh), then run: chezmoi apply\n" >&2
+printf "       ~/.config/fish/config.fish, then run: chezmoi apply\n" >&2
 exit 0

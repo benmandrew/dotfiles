@@ -4,22 +4,21 @@ set -euo pipefail
 # Render every chezmoi template, then lint each rendering with the real linter
 # for the language it produces.
 #
-# This runs beside the strip pass in `make lint-zsh` rather than replacing it,
+# This runs beside the strip pass in `make lint-strip` rather than replacing it,
 # because the two read different things. The strip pass deletes `{{ ... }}`
 # with sed, which leaves both arms of an `{{ if eq .chezmoi.os "darwin" }}`
 # concatenated into a file no shell would accept, so shellcheck can only run
 # there at --severity=error without drowning in damage the strip itself did.
-# A rendering is real shell and takes --enable all, shfmt, and for the zsh
-# files a `zsh -n` parse that shellcheck cannot do at all. What a rendering
-# cannot see is the arm not taken: eight of these templates branch on
+# A rendering is real shell and takes --enable all and shfmt. What a rendering
+# cannot see is the arm not taken: seven of the shell templates branch on
 # .chezmoi.os or .chezmoi.arch, and CI is Linux only, so the darwin side of
 # each would go unread if the strip pass were dropped.
 #
 # --source is not optional. Without it chezmoi resolves the source directory
 # from the destination, which on a CI runner is not this checkout, and
-# home/.chezmoidata.yaml is then never read: dot_zshrc.tmpl renders with its
-# whole ATUIN_HOST_NAME block missing, exits 0, and the check passes having
-# read a file that is not the one being shipped.
+# home/.chezmoidata.yaml is then never read: config.fish.tmpl renders without
+# its ATUIN_HOST_NAME line, exits 0, and the check passes having read a file
+# that is not the one being shipped.
 
 # The script's own parent rather than git's top level: the pre-commit hook runs
 # this from a checkout of the index in a temporary directory, which is not a
@@ -40,9 +39,6 @@ status=0
 # neither to its exit status.
 classify() {
     case "$1" in
-        home/dot_zshrc.tmpl | home/dot_zprofile.tmpl | home/dot_zshenv.tmpl | home/dot_fzf.zsh.tmpl)
-            printf 'zsh'
-            ;;
         home/dot_config/fish/*.fish.tmpl) printf 'fish' ;;
         home/run_*.sh.tmpl) printf 'bash' ;;
         # The modify_ one-liners render to the same script as the fragment they
@@ -58,7 +54,6 @@ classify() {
 }
 
 seen=0
-zsh_files=()
 fish_files=()
 bash_files=()
 sh_files=()
@@ -87,7 +82,6 @@ while IFS= read -r -d '' template; do
     seen=$((seen + 1))
     dialect="$(classify "${template}")"
     case "${dialect}" in
-        zsh) zsh_files+=("${rendered}") ;;
         fish) fish_files+=("${rendered}") ;;
         bash) bash_files+=("${rendered}") ;;
         sh) sh_files+=("${rendered}") ;;
@@ -135,13 +129,6 @@ if ((${#sh_files[@]} > 0)); then
         "${deployed_exclude[@]}" "${sh_files[@]}" || status=1
     shfmt -ln posix -i 4 -ci -d "${sh_files[@]}" || status=1
 fi
-
-# zsh's own parser, which is the only thing that reads zsh. shellcheck has no
-# zsh mode and the strip pass has to lie to it with --shell=bash; -n parses
-# without running a line of it.
-for rendered in "${zsh_files[@]}"; do
-    zsh -n "${rendered}" || status=1
-done
 
 # fish parses its own rendering, and fish_indent holds it to the one layout
 # fish has. The config branches on `uname` at run time, never on .chezmoi.os,

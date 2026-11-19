@@ -147,7 +147,7 @@ def _run_installer(context: StepContext, installer: Path, texdir: Path, mirror: 
     """Install into `texdir` and return its bin directory.
 
     A per-user install, so tlmgr runs without sudo. instopt_adjustpath links
-    every binary into ~/.local/bin, which .zshrc puts ahead of /usr/bin, so the
+    every binary into ~/.local/bin, which config.fish puts ahead of /usr/bin, so the
     year directory never appears on PATH and a new year only relinks:
     install-tl replaces an existing symlink and warns past a regular file.
     install-tl leaves tlmgr on the mirror it installed from (instopt_adjustrepo

@@ -84,7 +84,6 @@ check_cmd_optional() {
 
 check_cmd git
 check_cmd curl
-check_cmd zsh
 check_cmd fish
 check_cmd tmux -V
 # entr has no version flag, and every invocation without a file list on stdin
@@ -94,15 +93,8 @@ check_cmd entr --no-probe
 # the running kernel, which is the broken case this should warn about.
 check_cmd_optional perf
 
-check_dir "zinit" "${HOME}/.local/share/zinit/zinit.git"
-check_dir "fzf-tab" "${HOME}/.local/share/fzf-tab"
 check_dir "fifc" "${HOME}/.local/share/fifc"
 check_dir "nvm.fish" "${HOME}/.local/share/nvm.fish"
-check_dir "zsh-autosuggestions" "${HOME}/.local/share/zsh-autosuggestions"
-# install_shell_completions generates this one on every platform: no package
-# ships a _delta, and zsh's bundled _sccs claims the command name, so its
-# absence means git-delta is completing SCCS flags.
-check_file "zsh completions" "${HOME}/.local/share/zsh/site-functions/_delta"
 
 check_cmd rustup
 check_cmd cargo
@@ -158,17 +150,16 @@ check_file "nix-direnv wired into direnvrc" "${HOME}/.config/direnv/direnvrc"
 # already set: inheriting it from the caller leaves the profile directory
 # wherever the caller happened to have it, and the answer says more about this
 # script's parent than about the machine. It runs the login shell
-# install_login_shell sets, fish, or the zsh kept as a fallback where there is
-# no fish, found by path since PATH is the thing under suspicion. Under -l -c,
-# fish runs the `status is-login` block of config.fish but nothing guarded by
-# `status is-interactive`, and zsh reads .zshenv, .zprofile and .zlogin but
-# skips .zshrc, so nothing interactive writes to the stdout being read here.
+# install_login_shell sets, fish, found by path since PATH is the thing under
+# suspicion. Under -l -c, fish runs the `status is-login` block of config.fish
+# but nothing guarded by `status is-interactive`, so nothing interactive writes
+# to the stdout being read here.
 # Quoted, fish joins $PATH with colons. That understates the real PATH by
 # whatever the interactive setup prepends, which can only move bash earlier, so
 # a pass here is a pass in the interactive shell direnv actually runs from.
 check_bash_version() {
     local login_shell="" candidate login_path bash_path version major minor
-    for candidate in /usr/bin/fish /opt/homebrew/bin/fish /usr/bin/zsh /bin/zsh; do
+    for candidate in /usr/bin/fish /opt/homebrew/bin/fish; do
         if [[ -x "${candidate}" ]]; then
             login_shell="${candidate}"
             break
@@ -240,8 +231,6 @@ check_cmd cargo-fuzz
 check_cmd cargo-llvm-cov llvm-cov --version
 check_cmd cross
 check_cmd samply
-
-check_dir "fzf-git.sh" "${HOME}/.local/share/fzf-git.sh"
 
 # Neither of these is a binary on PATH, and both are skipped by the install
 # when gh is unauthenticated — which it is on any box that has not had

@@ -1,5 +1,4 @@
-"""Tools that are a git clone: the zsh and fish plugins, fzf and the tmux plugin
-manager."""
+"""Tools that are a git clone: the fish plugins, fzf and the tmux plugin manager."""
 
 from __future__ import annotations
 
@@ -22,47 +21,18 @@ class Clone:
     directory: str
     url: str
     branch: str
-    shallow: bool = True
 
 
 CLONES = (
-    Clone(
-        "install_zinit",
-        "zinit",
-        "zinit/zinit.git",
-        "https://github.com/zdharma-continuum/zinit.git",
-        "main",
-        shallow=False,
-    ),
-    Clone(
-        "install_fzf_tab", "fzf-tab", "fzf-tab", "https://github.com/Aloxaf/fzf-tab.git", "master"
-    ),
-    # fifc is fish's counterpart to fzf-tab, and nvm.fish its node version
-    # manager, since nvm itself is a POSIX shell function fish cannot load. The fish
-    # config sources both from their clones, as the zsh config does fzf-tab.
+    # fifc puts an fzf picker on fish's tab completion, and nvm.fish is its node
+    # version manager, since nvm itself is a POSIX shell function fish cannot
+    # load. The fish config sources both from their clones.
     Clone("install_fifc", "fifc", "fifc", "https://github.com/gazorby/fifc.git", "main"),
     Clone(
         "install_nvm_fish",
         "nvm.fish",
         "nvm.fish",
         "https://github.com/jorgebucaran/nvm.fish.git",
-        "main",
-    ),
-    Clone(
-        "install_zsh_autosuggestions",
-        "zsh-autosuggestions",
-        "zsh-autosuggestions",
-        "https://github.com/zsh-users/zsh-autosuggestions.git",
-        "master",
-    ),
-    # fzf-git.sh binds git objects (branches, tags, hashes, remotes, stashes)
-    # onto fzf pickers. Clone-and-source, like fzf-tab, so the clone is all the
-    # step does; the shell config sources it.
-    Clone(
-        "install_fzf_git",
-        "fzf-git.sh",
-        "fzf-git.sh",
-        "https://github.com/junegunn/fzf-git.sh.git",
         "main",
     ),
 )
@@ -88,8 +58,7 @@ def install(context: StepContext, clone: Clone) -> None:
         return
     context.log(f"Installing {clone.name}")
     directory.parent.mkdir(parents=True, exist_ok=True)
-    depth = ["--depth", "1"] if clone.shallow else []
-    context.run(["git", "clone", *depth, clone.url, str(directory)])
+    context.run(["git", "clone", "--depth", "1", clone.url, str(directory)])
 
 
 def _fzf_binary(context: StepContext, root: Path) -> None:

@@ -67,7 +67,7 @@ class PlanTest(unittest.TestCase):
         self.assertIn("build-essential", first.args)
         self.assertEqual(first.title.split()[:2], ["install_apt_packages_if_missing", "git"])
         formulae = next(s for s in steps(MACOS) if s.name == "install_brew_formulae_if_missing")
-        self.assertEqual(formulae.args, ("git", "zsh", "fish", "tmux", "node", "entr"))
+        self.assertEqual(formulae.args, ("git", "fish", "tmux", "node", "entr"))
 
     def test_linux_keeps_apt_from_asking(self) -> None:
         self.assertIn(("DEBIAN_FRONTEND", "noninteractive"), LINUX.env)
