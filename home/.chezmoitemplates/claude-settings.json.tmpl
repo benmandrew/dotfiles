@@ -7,6 +7,7 @@
 {
   "env": {
     "CLAUDE_CODE_NO_FLICKER": "1",
+    "DISABLE_TELEMETRY": "1",
     "CLAUDE_CODE_SHELL": {{ if stat $nixBash }}{{ $nixBash | quote }}{{ else }}"/bin/bash"{{ end }}
   },
   "includeCoAuthoredBy": false,
