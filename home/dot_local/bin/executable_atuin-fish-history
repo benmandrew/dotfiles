@@ -1,0 +1,47 @@
+#!/bin/sh
+# Export atuin's history into a fish history file, so fish's autosuggestions
+# draw on every synced machine. config.fish points fish_history at the file
+# and runs this in the background when a shell starts.
+#
+#   atuin-fish-history [--force]
+#
+# The export keeps the 20,000 most recently used unique commands. fish reads
+# its history file in full on first use, at about 1 ms per 1,000 entries.
+# A run within ten minutes of the last export does nothing, unless --force.
+#
+# The file is replaced by rename, so fish never reads half of it. Commands fish
+# appended since the last export are dropped, since atuin holds them too.
+set -eu
+
+limit=20000
+data=${XDG_DATA_HOME:-$HOME/.local/share}
+db=$data/atuin/history.db
+out=$data/fish/atuin_history
+
+command -v sqlite3 >/dev/null 2>&1 || exit 0
+test -r "$db" || exit 0
+
+if test "${1:-}" != --force; then
+    recent=$(find "$out" -mmin -10 2>/dev/null || true)
+    test -z "$recent" || exit 0
+fi
+
+mkdir -p "$data/fish"
+tmp=$(mktemp "$out.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+
+# fish escapes a backslash as \\ and a newline as \n inside `cmd:`. atuin
+# stores timestamps in nanoseconds and fish in seconds. Oldest first, as fish
+# writes them.
+sqlite3 -readonly -batch -noheader -list "$db" >"$tmp" <<EOF
+select '- cmd: '
+       || replace(replace(command, '\\', '\\\\'), char(10), '\\n')
+       || char(10) || '  when: ' || (t / 1000000000)
+from (select command, max(timestamp) as t from history
+      where deleted_at is null group by command
+      order by t desc limit $limit)
+order by t;
+EOF
+
+mv -f "$tmp" "$out"
+trap - EXIT

@@ -293,6 +293,15 @@ if command -q atuin
     set -gx ATUIN_HOST_NAME {{ $atuinHost }}
 {{- end }}
     atuin init fish --disable-up-arrow --disable-ai | source
+    # Autosuggestions read fish's own history alone, so atuin-fish-history
+    # exports atuin's into a fish history file, off the startup path. The
+    # first shell keeps the default file until the export exists.
+    set -l fish_data (set -q XDG_DATA_HOME; and echo $XDG_DATA_HOME; or echo ~/.local/share)/fish
+    test -e $fish_data/atuin_history; and set -g fish_history atuin
+    if command -q atuin-fish-history
+        atuin-fish-history </dev/null >/dev/null 2>&1 &
+        disown
+    end
 end
 if command -q starship
     starship init fish | source
