@@ -1,0 +1,19 @@
+# chezmoi writes each script to a new temporary file and runs it. On macOS the
+# first exec of a new executable costs 140 to 300 ms while the system checks
+# it, and every apply makes the files anew. Run through an interpreter, the
+# script is only read, and bash or sh is the file exec'd: 190 ms fell to 26 ms
+# for the run_before_ guard, and 305 ms to 13 ms for a modify_ script.
+#
+# chezmoi picks an interpreter by the target's extension. Every run_*.sh here
+# starts #!/bin/bash, so they run as before. The modify_*.json scripts start
+# #!/bin/sh, and no other kind of .json target is ever run; a modify_*.json in
+# another language needs its own extension.
+#
+# chezmoi reads this template only on `chezmoi init`. Until a machine runs it,
+# every chezmoi command warns that the config template has changed.
+
+[interpreters.sh]
+    command = "/bin/bash"
+
+[interpreters.json]
+    command = "/bin/sh"
