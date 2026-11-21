@@ -269,6 +269,28 @@ bind-key -T copy-mode-vi S-M-Up {
     send-keys -X end-of-line
     send-keys -X other-end
 }
+# Shift-Alt-Down steps forward one command. The selected command needs a prompt
+# after it to end at, so when next-prompt does not move, the live prompt was
+# the last mark and the key leaves copy mode.
+bind-key -T copy-mode-vi S-M-Down {
+    send-keys -X clear-selection
+    send-keys -X next-prompt
+    set -pF @prompt-pos '#{scroll_position}.#{copy_cursor_y}'
+    send-keys -X next-prompt
+    if -F '#{==:#{@prompt-pos},#{scroll_position}.#{copy_cursor_y}}' {
+        send-keys -X cancel
+    } {
+        send-keys -X previous-prompt
+        send-keys -X cursor-down
+        send-keys -X start-of-line
+        send-keys -X begin-selection
+        send-keys -X next-prompt
+        send-keys -X cursor-up
+        if -F '#{==:#{copy_cursor_line},}' { send-keys -X cursor-up }
+        send-keys -X end-of-line
+        send-keys -X other-end
+    }
+}
 # A full-screen program keeps the key. send-keys runs the copy-mode-vi binding
 # above, since a pane in copy mode takes keys through its mode's table.
 bind-key -n S-M-Up if -F '#{alternate_on}' { send-keys S-M-Up } { copy-mode; send-keys S-M-Up }
