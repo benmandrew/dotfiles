@@ -248,6 +248,30 @@ bind-key -T copy-mode-vi v send-keys -X begin-selection
 # is the one writer.
 bind-key -T copy-mode-vi y send-keys -X pipe-and-cancel '~/.config/tmux/copy.sh'
 bind-key -T copy-mode-vi Enter send-keys -X pipe-and-cancel '~/.config/tmux/copy.sh'
+
+# Shift-Alt-Up selects the last command line and its output, and each repeat
+# steps back one command; y copies it. It finds prompts by fish's OSC 133;A
+# mark, so it needs the fish_prompt wrapper in config.fish.
+#
+# The mark sits on starship's first line, so the selection runs from the line
+# below one mark to the line above the next, less starship's blank line. It
+# ends with the cursor at the start, where the next repeat begins.
+bind-key -T copy-mode-vi S-M-Up {
+    send-keys -X clear-selection
+    send-keys -X previous-prompt
+    send-keys -X previous-prompt
+    send-keys -X cursor-down
+    send-keys -X start-of-line
+    send-keys -X begin-selection
+    send-keys -X next-prompt
+    send-keys -X cursor-up
+    if -F '#{==:#{copy_cursor_line},}' { send-keys -X cursor-up }
+    send-keys -X end-of-line
+    send-keys -X other-end
+}
+# A full-screen program keeps the key. send-keys runs the copy-mode-vi binding
+# above, since a pane in copy mode takes keys through its mode's table.
+bind-key -n S-M-Up if -F '#{alternate_on}' { send-keys S-M-Up } { copy-mode; send-keys S-M-Up }
 # A mouse copy stays where it is, like Claude Code: pipe-no-clear keeps copy
 # mode and the highlight, and the client moves to the mouse-copied table. There
 # a click clears the highlight and the wheel scrolls, both staying in the table,

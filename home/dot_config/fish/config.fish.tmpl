@@ -308,6 +308,15 @@ if command -q starship
     # starship.toml sets no right_format, so the right prompt would only fork
     # starship to print nothing.
     functions --erase fish_right_prompt
+    # tmux's previous-prompt finds a prompt by its OSC 133;A mark, which tmux
+    # drops when a line is cleared from column 0. fish sends the mark just
+    # before starship's leading \e[J, so the wrapper sends it again at the
+    # start of the first line with text, where nothing clears it.
+    functions --copy fish_prompt _starship_fish_prompt
+    function fish_prompt
+        set -l p (_starship_fish_prompt | string collect)
+        printf '%s' (string replace -r -- '^(?:\e\[0?J)?\n*' '$0'\e']133;A'\a "$p" | string collect)
+    end
 end
 
 # Ghostty is only a window around tmux, so a local shell in it attaches the
