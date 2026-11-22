@@ -246,16 +246,22 @@ function mkcd
     mkdir -p -- $argv[1]; and cd -- $argv[1]
 end
 
+# Native tools need a display; over SSH there is none, so the copy goes to the
+# outer terminal over OSC 52, through tmux when inside it (as copy.sh does).
 function cpwd
-    for tool in pbcopy wl-copy 'xclip -selection clipboard' 'xsel --clipboard --input'
-        set -l cmd (string split ' ' -- $tool)
-        if command -q $cmd[1]
-            printf %s $PWD | $cmd
-            return
-        end
+    if command -q pbcopy
+        printf %s $PWD | pbcopy
+    else if test -n "$WAYLAND_DISPLAY"; and command -q wl-copy
+        printf %s $PWD | wl-copy
+    else if test -n "$DISPLAY"; and command -q xclip
+        printf %s $PWD | xclip -selection clipboard
+    else if test -n "$DISPLAY"; and command -q xsel
+        printf %s $PWD | xsel --clipboard --input
+    else if set -q TMUX
+        printf %s $PWD | tmux load-buffer -w -
+    else
+        printf '\e]52;c;%s\a' (printf %s $PWD | base64 | string join '')
     end
-    echo "cpwd: no clipboard tool found (pbcopy, wl-copy, xclip, xsel)" >&2
-    return 1
 end
 
 function gws
