@@ -4,16 +4,13 @@
 # script is only read, and bash or sh is the file exec'd: 190 ms fell to 26 ms
 # for the run_before_ guard, and 305 ms to 13 ms for a modify_ script.
 #
-# chezmoi picks an interpreter by the target's extension. Every run_*.sh here
-# starts #!/bin/bash, so they run as before. The modify_*.json scripts start
-# #!/bin/sh, and no other kind of .json target is ever run; a modify_*.json in
-# another language needs its own extension.
+# chezmoi picks an interpreter by the script's extension and strips that
+# extension from the target name. Every run_*.sh here starts #!/bin/bash. The
+# modify_ scripts are named settings.json.sh, so bash runs them and the target
+# keeps .json; an interpreter for .json would write to a file named settings.
 #
 # chezmoi reads this template only on `chezmoi init`. Until a machine runs it,
 # every chezmoi command warns that the config template has changed.
 
 [interpreters.sh]
     command = "/bin/bash"
-
-[interpreters.json]
-    command = "/bin/sh"

@@ -53,3 +53,10 @@
 .local/share/fzf-tab
 .local/share/fzf-git.sh
 .local/share/zsh-autosuggestions
+
+# A .json interpreter stripped the extension from the modify_ scripts' targets,
+# so they wrote these instead of settings.json.
+.claude/settings
+.claude-work/settings
+.config/Code/User/settings
+Library/Application Support/Code/User/settings
