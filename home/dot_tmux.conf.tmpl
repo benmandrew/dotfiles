@@ -1,30 +1,36 @@
-# C-a arms the prefix table for one second, then drops it. tmux's own
-# prefix-timeout cannot do this: it compares times only when the next key
-# arrives, so nothing repaints the leader chip when the second runs out, and it
-# stays lit until the next keystroke. So C-a is a root binding with its own
-# timer, and the prefix option is None. The timer is a delayed run-shell -C,
-# which forks nothing.
+# Command mode. C-a moves the client from root, where keys reach the pane, to
+# the cmd key table, where they run tmux commands. Most commands stay in
+# command mode, so a sequence of them needs one C-a. The mode ends one second
+# after C-a or the last such command, or at once on C-a or Escape. The status
+# bar and pane borders show the mode (see "Status bar" and "Pane borders"
+# below).
 #
-# @prefix-seq counts presses. Each timer carries the count from its own press
-# (##{ survives the first expansion as #{, so the comparison runs when the
-# timer fires), and drops the table only if no later press has re-armed it.
-# Without that, C-a n C-a within a second would lose the second prefix early.
+# cmd is built from the prefix table by ~/.config/tmux/cmd-table.sh, after tpm
+# near the end of this file has added its keys. So each plain `bind` below
+# still writes to prefix, which only that script reads. The prefix option is
+# None, so no key enters prefix itself.
 #
-# prefix-timeout stays 0: switch-client -T does not stamp the table's activity
-# time, so tmux's own check would see a stale time and drop a fresh prefix.
+# Every switch is followed by a full refresh-client, since tmux repaints only
+# the status line on a table change, and the borders would keep the old mode.
 #
-# A repeat binding (-r, such as the default C-arrow resize) shares the timer,
-# so a repeat chain ends one second after the C-a that started it.
+# @cmd-arm starts the one-second timer. C-a runs it, and so does every binding
+# that stays in cmd, through run -C '#{@cmd-arm}', which keeps the commands in
+# one place instead of quoting them into each generated binding. run -C runs
+# tmux commands and forks nothing. tmux's own prefix-timeout cannot do this: it
+# compares times only when the next key arrives, so nothing would repaint the
+# bar when the second ran out.
+#
+# @cmd-seq counts the timers started. Each timer carries the count from its own
+# start (##{ survives the first expansion as #{, so the comparison runs when the
+# timer fires), and ends the mode only if no later command has started another.
+# A timer that fires after the mode has already ended switches root to root,
+# which changes nothing.
 unbind C-b
+# The old prefix C-a, which sent a literal C-a. `a` in cmd does that now.
+unbind C-a
 set -g prefix None
-set -g prefix-timeout 0
-bind -n C-a {
-    switch-client -T prefix
-    refresh-client -S
-    set -gF @prefix-seq '#{e|+:#{@prefix-seq},1}'
-    run -b -d 1 -C "if -F '##{==:##{@prefix-seq},#{@prefix-seq}}' { switch-client -T root; refresh-client -S }"
-}
-bind C-a send-keys C-a
+set -g @cmd-arm "set -gF @cmd-seq '#{e|+:#{@cmd-seq},1}' ; run -b -d 1 -C \"if -F '##{==:##{@cmd-seq},#{@cmd-seq}}' { switch-client -T root; refresh-client }\""
+bind -n C-a { switch-client -T cmd; refresh-client; run -C '#{@cmd-arm}' }
 
 # RGB for truecolor; extkeys so tmux passes through distinct codes for
 # modified keys (e.g. Ctrl/Option+arrow) instead of collapsing them; hyperlinks
@@ -94,24 +100,25 @@ bind h select-pane -L
 bind j select-pane -D
 bind k select-pane -U
 bind l select-pane -R
-bind x kill-pane
 # Move the window one place along, as WezTerm's MoveTabRelative did. Without
 # select-window, focus would stay on the index and land on the swapped-in window.
 bind N { swap-window -t +1; select-window -t +1 }
 bind P { swap-window -t -1; select-window -t -1 }
 
-# The three defaults the bindings above displaced, given somewhere else to live.
-# Shift is the free half of each key: s, l and x are taken by the bindings
-# above, and their uppercase forms are unbound.
+# The defaults the bindings above displaced, given somewhere else to live.
+# Shift is the free half of each key: s and l are taken by the bindings above,
+# and their uppercase forms are unbound.
 #
 # last-window is the one that is missed most, so it also gets Tab, which is where
 # the muscle memory for "the other one" already is.
 bind S choose-tree -Zs
 bind Tab last-window
 bind L last-window
-# `x` is deliberately unconfirmed. This is the same kill with the prompt tmux
-# ships by default, for the pane you are less sure about.
-bind X confirm-before -p "kill-pane #P? (y/n)" kill-pane
+# Killing a pane takes x and a y at the prompt, since command mode leaves a
+# stray key nearer to hand than the prefix did. X kills the window and every
+# pane in it, behind the same single prompt.
+bind x confirm-before -p "kill-pane #P? (y/n)" kill-pane
+bind X confirm-before -p "kill-window #W? (y/n)" kill-window
 
 
 # Enable mouse control (clickable windows, panes, resizable panes)
@@ -134,9 +141,20 @@ if-shell 'systemctl --user show-environment >/dev/null 2>&1' {
 }
 {{- end }}
 
-# Status bar — Hacktober palette, as in the Ghostty config
-set -g status-style bg=#141414,fg=#c9c9c9
-set -g window-status-style bg=#191918,fg=#c9c9c9
+# Status bar — Hacktober palette, as in the Ghostty config. In command mode the
+# whole bar turns a dark amber, with the yellow of the active pane border as its
+# text, which shows the mode on a window with a single pane, where tmux draws
+# no border. The border yellow itself was too bright across the full bar.
+# The current window chip stays orange in both modes. tmux expands these styles
+# and formats for each client, as it does the border styles, so a second client
+# in text mode keeps the dark bar.
+#
+# @cmd-mode holds the test, and #{E:@cmd-mode} expands it where it is used.
+# Commas inside a #{?…} branch are escaped as #, since a bare comma would end
+# the branch.
+set -g @cmd-mode '#{==:#{client_key_table},cmd}'
+set -g status-style '#{?#{E:@cmd-mode},bg=#3d3424#,fg=#ebc587,bg=#141414#,fg=#c9c9c9}'
+set -g window-status-style '#{?#{E:@cmd-mode},bg=#3d3424#,fg=#ebc587,bg=#191918#,fg=#c9c9c9}'
 set -g window-status-current-style bg=#c75a22,fg=#141414,bold
 # A window is drawn as " <index> <bar><name> ".
 #
@@ -154,7 +172,7 @@ set -g window-status-current-style bg=#c75a22,fg=#141414,bold
 # claude session in it produces no bar, leaving the index against the name as
 # before. Both styles have to hand the name its own colours back afterwards,
 # since window-status-style is what they overrode to get here.
-set -g window-status-format ' #[fg=#464444,nobold]#I #(~/.local/bin/claude-pane-session status "#{pane_pid}")#[fg=#c9c9c9,nobold]#{=24:#(~/.local/bin/claude-pane-session name "#{pane_pid}" "#{window_name}")} '
+set -g window-status-format ' #[fg=#{?#{E:@cmd-mode},#ac9166,#464444},nobold]#I #(~/.local/bin/claude-pane-session status "#{pane_pid}")#[fg=#{?#{E:@cmd-mode},#ebc587,#c9c9c9},nobold]#{=24:#(~/.local/bin/claude-pane-session name "#{pane_pid}" "#{window_name}")} '
 set -g window-status-current-format ' #[fg=#6d371b,nobold]#I #(~/.local/bin/claude-pane-session status-current "#{pane_pid}")#[fg=#141414,bold]#{=24:#(~/.local/bin/claude-pane-session name "#{pane_pid}" "#{window_name}")} '
 set -g window-status-separator ""
 # Named by directory, so the name says where the window is working.
@@ -163,28 +181,21 @@ set -g automatic-rename-format '#{b:pane_current_path}'
 set -g set-titles on
 set -g set-titles-string '#{=24:#(~/.local/bin/claude-pane-session name "#{pane_pid}" "#{window_name}")}'
 
-# Pane borders: active uses Hacktober orange, as the current window chip does
-set -g pane-active-border-style fg=#c75a22
-set -g pane-border-style fg=#464444
+# Pane borders: active uses Hacktober orange, as the current window chip does.
+# In command mode every border turns yellow, the active one brighter. tmux
+# expands the style as a format for each client, so a second client attached in
+# text mode keeps its own borders.
+set -g pane-active-border-style '#{?#{==:#{client_key_table},cmd},fg=#ebc587,fg=#c75a22}'
+set -g pane-border-style '#{?#{==:#{client_key_table},cmd},fg=#ac9166,fg=#464444}'
 
 set -g status-position top
 # Single writer for the session cache the per-window name lookups read. tmux
 # expands status-left once per tick, against N times for the window list, so
 # putting the one ps snapshot and jq pass here keeps each window's lookup down to
-# an awk over the cache. It prints nothing, and the leader chip follows it.
-#
-# The leader chip renders ⌃a (U+2303 UP ARROWHEAD, matching
-# the C-a prefix set at the top of this file). #{?client_prefix,…} picks the
-# style: orange #c75a22 on #141414 and bold while the prefix is armed, the tab
-# bar's hover grey #464444 on the bar's own #141414 otherwise. The chip holds a
-# constant width in both states and signals by colour alone, so arming the
-# prefix does not shift the window list sideways. The C-a binding and its timer
-# at the top of this file repaint the status line with refresh-client -S, so
-# this needs no polling and does not depend on status-interval. Commas inside
-# the #{?…} branches are escaped as #, since a bare comma there would end the
-# branch.
+# an awk over the cache. It prints nothing, so the window list starts at the
+# left edge; the pane borders show command mode.
 set -g status-left-length 20
-set -g status-left '#(~/.local/bin/claude-pane-session refresh)#{?client_prefix,#[bg=#c75a22#,fg=#141414#,bold],#[bg=#141414#,fg=#464444#,nobold]} ⌃a #[bg=#141414,fg=#c9c9c9,nobold] '
+set -g status-left '#(~/.local/bin/claude-pane-session refresh)'
 set -g status-right-length 120
 # The busy/idle bar on the window chips does not wait on the tick. Claude's
 # UserPromptSubmit and Stop hooks, and the scripts that write a bell or a title,
@@ -204,7 +215,7 @@ set -g status-interval 5
 # One #() job for all three metrics rather than three. tmux cannot split a job's
 # output across fields, so the glyphs and gaps between them moved into the
 # script; the host stays here, since tmux already knows it.
-set -g status-right "#[bg=#191918,fg=#c9c9c9] 󰒋 #{host_short}  #(~/.config/tmux/status.sh) "
+set -g status-right "#[bg=#{?#{E:@cmd-mode},#3d3424,#191918},fg=#{?#{E:@cmd-mode},#ebc587,#c9c9c9}] 󰒋 #{host_short}  #(~/.config/tmux/status.sh) "
 
 # Drop the attention flag of every claude session in a window once it is looked
 # at. pane-focus-in covers the terminal regaining focus and a change of
@@ -373,6 +384,26 @@ set -g @plugin 'tmux-plugins/tmux-resurrect'
 set -g @resurrect-capture-pane-contents 'on'
 set -g @resurrect-strategy-nvim 'session'
 if-shell '[ -f ~/.tmux/plugins/tpm/tpm ]' "run '~/.tmux/plugins/tpm/tpm'"
+
+# Command mode's key table, built here because tpm has now bound its keys into
+# prefix. The keys named below stay in command mode after they run, and so does
+# every repeat binding, such as the arrow resizes. Any other prefix key runs
+# once and returns to text mode. That set includes the keys that open a pane
+# mode, such as [ for copy mode and S for choose-tree: while cmd is active its
+# bindings take every key, and the mode would never see one.
+#
+# A reload leaves cmd in place for the script to overwrite. `unbind -a -T cmd`
+# would drop every client in command mode back to root, r included.
+run '~/.config/tmux/cmd-table.sh Tab Space 0 1 2 3 4 5 6 7 8 9 L N P X c h j k l n o p r s v x z'
+# These follow the script, which would overwrite them with a prefix binding of
+# the same key.
+bind -T cmd C-a    { switch-client -T root; refresh-client }
+bind -T cmd Escape { switch-client -T root; refresh-client }
+# A literal C-a for the program in the pane.
+bind -T cmd a      { send-keys C-a; refresh-client }
+# A key cmd lacks would fall through to root and leave the borders stale. This
+# catches it: the client returns to text mode and the key is discarded.
+bind -T cmd Any refresh-client
 
 # Saving and restoring without tmux-continuum. Continuum saved on a timer by
 # prepending a #() job to status-right, which cost about 50 ms on every status

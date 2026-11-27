@@ -8,6 +8,7 @@ set -euo pipefail
 # and up to date — changing either included file changes this file's body,
 # which is what actually triggers the re-run.
 # tmux-conf-hash: {{ include "dot_tmux.conf.tmpl" | sha256sum }}
+# cmd-table-hash: {{ include "dot_config/tmux/executable_cmd-table.sh" | sha256sum }}
 # fish-conf-hash: {{ include "dot_config/fish/config.fish.tmpl" | sha256sum }}
 
 if ! command -v tmux >/dev/null 2>&1; then
