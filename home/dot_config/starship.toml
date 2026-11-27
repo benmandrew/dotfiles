@@ -1,0 +1,39 @@
+# Get editor completions based on the config schema
+"$schema" = 'https://starship.rs/config-schema.json'
+
+# Inserts a blank line between shell prompts. tmux's Shift-Alt-Up selection
+# skips this line, and finds the OSC 133;A mark on the first of two lines.
+add_newline = true
+
+# One probe that hangs holds the prompt for this long.
+command_timeout = 500
+
+# Directory and git state only. Without $all, starship runs no other module,
+# so no language probe runs.
+format = "$directory$git_branch$git_commit$git_state$git_status$line_break$character"
+
+[directory]
+format = '[\[$path\]]($style)'
+read_only = " 󰌾"
+
+[character]
+success_symbol = '[\$](bold green)'
+error_symbol = '[\$](bold red)'
+
+[git_branch]
+style = "purple"
+format = '[\[$branch(:$remote_branch)\]]($style)'
+
+[git_commit]
+tag_symbol = '  '
+
+[git_status]
+# gitoxide's untracked-file walk took 57 ms in a 19k-file repo, against 27 ms
+# through the git binary.
+use_git_executable = true
+style = "red"
+format = '([\[$all_status\]]($style))'
+conflicted = ''
+ahead = ''
+behind = ''
+diverged = ''
