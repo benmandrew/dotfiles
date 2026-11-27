@@ -150,8 +150,8 @@ def note_shadowed(context: StepContext, command: str, target: str | Path) -> Non
 
     A step that installs to a fixed path can still lose to a copy from a
     different install method, which then answers for the tool on every call.
-    Name that copy rather than delete it: unlike the old starship in
-    /usr/local/bin, it may belong to a package manager. Nothing is said when
+    Name that copy rather than delete it, since it may belong to a package
+    manager. Nothing is said when
     the command is not on PATH at all, as on a machine that has not run
     chezmoi apply.
     """

@@ -26,6 +26,12 @@
 .claude/RTK.md
 .claude-work/RTK.md
 
+# starship is gone: functions/fish_prompt.fish draws the prompt with one git
+# fork. Its binary came from the vendor installer, and fish cached its init.
+.config/starship.toml
+.local/bin/starship
+.cache/fish/init/starship-*.fish
+
 # WezTerm is gone: Ghostty is the terminal, with tmux doing the multiplexing.
 .config/wezterm
 # The idle hook kept WezTerm's name after it stopped touching WezTerm.

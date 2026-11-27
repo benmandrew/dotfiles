@@ -318,8 +318,8 @@ def _install_binary(context: StepContext, tool: CargoTool, triple: str) -> None:
     # Delete the build this step left behind before it moved to prebuilt
     # binaries. ~/.local/bin leads ~/.cargo/bin in config.fish so the new
     # copy would win there anyway, but verify-install.sh searches the two the
-    # other way round, and a stale build answering for the tool on every check
-    # is exactly the shadowing install_starship had to unpick for /usr/local.
+    # other way round, and a stale build would answer for the tool on every
+    # check.
     (context.home / ".cargo" / "bin" / command).unlink(missing_ok=True)
     tools.note_shadowed(context, command, target)
     tools.require_runs(context, target, *_probe(command))

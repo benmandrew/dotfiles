@@ -272,7 +272,6 @@ check_cmd uv
 check_cmd uvx
 
 check_cmd ccusage
-check_cmd starship
 
 if [[ "${headless_linux}" == false ]]; then
     # install_ghostty takes the snap on Linux, and skips a machine without snapd.

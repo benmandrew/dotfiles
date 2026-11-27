@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-from unittest import mock
-
 from installer.steps import STEPS, vendor
 
 from .support import StepCase
@@ -34,31 +31,6 @@ class VendorTest(StepCase):
         self.assertEqual(self.said(), "[install] Upgrading uv\n")
         self.assertEqual(self.called(), ["uv self update", "uv --version"])
         self.assertEqual(self.requests(), [])
-
-    def test_starship_goes_to_local_bin(self) -> None:
-        self.serve(vendor.STARSHIP_URL, installs("starship"))
-        self.assertTrue(self.run_step(STEPS["install_starship"]))
-        self.assertEqual(self.said(), "[install] Installing Starship\n")
-        self.assertEqual(
-            self.called(), [f"starship-installer -y -b {self.home}/.local/bin bin_path="]
-        )
-
-    def test_starship_removes_the_copy_it_used_to_install(self) -> None:
-        stale = self.fake("starship", "#!/bin/sh\n", Path(self.scratch) / "usr-local-bin")
-        self.serve(vendor.STARSHIP_URL, installs("starship"))
-        with mock.patch.object(vendor, "STALE_STARSHIP", stale):
-            self.assertTrue(self.run_step(STEPS["install_starship"]))
-        self.assertEqual(
-            self.said(),
-            "[install] Installing Starship\n"
-            f"[install] Removing stale {stale}, superseded by {self.home}/.local/bin/starship\n",
-        )
-        self.assertFalse(stale.exists())
-
-    def test_starship_present(self) -> None:
-        self.fake("starship", "#!/bin/sh\n")
-        self.assertTrue(self.run_step(STEPS["install_starship"]))
-        self.assertEqual(self.said(), "[install] Starship already installed; skipping\n")
 
     def test_direnv_is_told_where_to_go(self) -> None:
         self.serve(vendor.DIRENV_URL, installs("direnv"))
