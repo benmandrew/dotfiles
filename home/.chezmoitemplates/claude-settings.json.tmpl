@@ -2,13 +2,21 @@
        commands written as bash break. zsh breaks them too, since it does not
        word-split an unquoted $var. Prefer the nix profile's bash, since
        macOS ships 3.2 as /bin/bash. Claude Code ignores a path that does not
-       run and falls back to $SHELL. */ -}}
+       run and falls back to $SHELL. On Linux the wrapper in
+       ~/.local/libexec/claude-capped runs that bash under the memory cap of
+       jobs-claude.slice. */ -}}
 {{- $nixBash := joinPath .chezmoi.homeDir ".nix-profile/bin/bash" -}}
+{{- $shell := "/bin/bash" -}}
+{{- if eq .chezmoi.os "linux" -}}
+{{-   $shell = joinPath .chezmoi.homeDir ".local/libexec/claude-capped/bash" -}}
+{{- else if stat $nixBash -}}
+{{-   $shell = $nixBash -}}
+{{- end -}}
 {
   "env": {
     "CLAUDE_CODE_NO_FLICKER": "1",
     "DISABLE_TELEMETRY": "1",
-    "CLAUDE_CODE_SHELL": {{ if stat $nixBash }}{{ $nixBash | quote }}{{ else }}"/bin/bash"{{ end }}
+    "CLAUDE_CODE_SHELL": {{ $shell | quote }}
   },
   "includeCoAuthoredBy": false,
   "attribution": {

@@ -1,0 +1,20 @@
+#!/bin/bash
+{{- /* Claude Code accepts a CLAUDE_CODE_SHELL path only when it contains
+       "bash" or "zsh", so this file is named bash. */}}
+{{- $nixBash := joinPath .chezmoi.homeDir ".nix-profile/bin/bash" }}
+# The shell for Claude Code's Bash and Monitor tools, set as CLAUDE_CODE_SHELL.
+# Each shell, and every program it starts, runs in a transient scope in
+# jobs-claude.slice, whose memory cap kills a runaway command before it fills
+# the machine. systemd-run --scope execs the shell in place, so the pid, the
+# file descriptors, the environment and the working directory stay the same.
+#
+# Without the user bus there is no slice to join, so the shell runs uncapped.
+# When the bus is up but systemd-run cannot make the scope, the command fails
+# without running.
+real={{ if stat $nixBash }}{{ $nixBash | quote }}{{ else }}/bin/bash{{ end }}
+
+if [[ -S "${XDG_RUNTIME_DIR-}/bus" ]] && command -v systemd-run >/dev/null; then
+    exec systemd-run --user --scope --quiet --collect --slice=jobs-claude.slice \
+        -- "${real}" "$@"
+fi
+exec "${real}" "$@"

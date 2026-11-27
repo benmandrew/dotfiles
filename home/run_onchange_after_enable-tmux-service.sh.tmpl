@@ -1,8 +1,10 @@
 #!/bin/bash
-# Enable the tmux server unit and load jobs.slice. Enabling does not start the
-# server; the Ghostty shell in config.fish starts it when no server is running.
+# Enable the tmux server unit and load jobs.slice and jobs-claude.slice.
+# Enabling does not start the server; the Ghostty shell in config.fish starts it
+# when no server is running.
 # tmux-service-hash: {{ include "dot_config/systemd/user/tmux.service" | sha256sum }}
 # jobs-slice-hash: {{ include "dot_config/systemd/user/jobs.slice" | sha256sum }}
+# jobs-claude-slice-hash: {{ include "dot_config/systemd/user/jobs-claude.slice" | sha256sum }}
 set -euo pipefail
 {{- if eq .chezmoi.os "linux" }}
 

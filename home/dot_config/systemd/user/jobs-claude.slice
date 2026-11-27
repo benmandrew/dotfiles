@@ -1,0 +1,13 @@
+# Commands from Claude Code's Bash and Monitor tools, each in a scope of its own
+# here. The wrapper shell ~/.local/libexec/claude-capped/bash puts them here.
+# At the cap the kernel kills the largest process in this slice, which is the
+# runaway command; the claude process, its terminal and the other panes sit
+# outside it. The cap is a share of physical memory, so it fits each machine,
+# and stays below the 22G of jobs.slice, so this slice reaches its cap first.
+# No swap, so a runaway command is killed at once instead of thrashing.
+[Unit]
+Description=Claude Code tool commands, capped together
+
+[Slice]
+MemoryMax=50%
+MemorySwapMax=0

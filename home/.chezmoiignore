@@ -8,6 +8,7 @@ Library/Application Support/Code/User/settings.json
 .local/bin/code
 .local/bin/recolour-icons
 .local/bin/tmux-pane-scope
+.local/libexec/claude-capped
 {{ end }}
 .config/nvim/CLAUDE.md
 .config/doom/CLAUDE.md
