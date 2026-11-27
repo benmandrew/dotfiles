@@ -43,3 +43,7 @@ Spawning is authorised without an explicit request, but it is not the default ac
 - Anything reachable in two or three tool calls goes inline.
 
 Pin `model: haiku` (or `sonnet` where haiku is too weak) on any agent that does not write code or make judgement calls. `effort` cannot be set per call. Brief each agent with the goal, file paths and what is ruled out, and ask for a short reply.
+
+## Worktrees
+
+Create git worktrees only with the EnterWorktree tool, which puts them in `.claude/worktrees/` at the repository root. Never run `git worktree add` with a path beside the repository; a hook denies it.
