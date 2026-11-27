@@ -1,6 +1,6 @@
 # fish is the login shell, and the only shell this config sets up.
 #
-# The file branches on `uname` at run time rather than on .chezmoi.os, so a
+# The file tests for the OS at run time rather than branching on .chezmoi.os, so a
 # rendering on one platform still holds the other's arm, and
 # scripts/lint-templates.sh parses both.
 #
@@ -8,7 +8,9 @@
 # fzf runs for each fifc preview. The environment sections come first and
 # apply to all of them; the interactive one is guarded.
 
-set -l os (uname)
+# Only macOS has /System/Library, and the test saves forking uname.
+set -l os Linux
+test -d /System/Library/CoreServices; and set os Darwin
 
 # --- Login environment ------------------------------------------------------
 #
@@ -177,8 +179,11 @@ end
 
 bind ctrl-x,ctrl-e edit_command_buffer
 
+# A function, since alias costs 3 ms of parsing at every start.
 if command -q moor
-    alias less moor
+    function less --wraps moor
+        moor $argv
+    end
 end
 
 # Abbreviations expand on the line before running, so history and atuin record
@@ -289,16 +294,51 @@ function opam --wraps opam
     command opam $argv
 end
 
+# Each tool prints the same init script until it, or a config file named with
+# --depends, changes, so the script is cached under a name made from their
+# mtimes and the arguments. Forking all five tools cost 50 ms at every start.
+# rm -r ~/.cache/fish/init forces a refresh.
+function _source_cached_init
+    argparse --stop-nonopt 'd/depends=+' -- $argv; or return
+    set -l bin (command -s $argv[1]); or return
+    set -l dir (set -q XDG_CACHE_HOME; and echo $XDG_CACHE_HOME; or echo ~/.cache)/fish/init
+    set -l key (string join ' ' -- (path mtime -- $bin $_flag_depends) $argv[2..] | string escape --style=var)
+    set -l cache $dir/$argv[1]-$key.fish
+    if not test -r $cache
+        mkdir -p $dir
+        set -l stale $dir/$argv[1]-*.fish
+        rm -f $stale
+        if command $argv >$cache.$fish_pid
+            mv -f $cache.$fish_pid $cache
+        else
+            rm -f $cache.$fish_pid
+            return 1
+        end
+    end
+    source $cache
+end
+
 # fzf first, then atuin, so atuin owns Ctrl+R.
-command -q zoxide; and zoxide init fish --cmd cd | source
-command -q direnv; and direnv hook fish | source
-command -q fzf; and fzf --fish | source
+_source_cached_init zoxide init fish --cmd cd
+_source_cached_init direnv hook fish
+_source_cached_init fzf --fish
 if command -q atuin
 {{- $atuinHost := index .atuin.hostnames .chezmoi.hostname | default "" }}
 {{- if $atuinHost }}
     set -gx ATUIN_HOST_NAME {{ $atuinHost }}
 {{- end }}
-    atuin init fish --disable-up-arrow --disable-ai | source
+    # The init script forks `atuin uuid` for a session id that is not set
+    # yet. The kernel's UUID, in atuin's unhyphenated form, costs no fork.
+    if test -r /proc/sys/kernel/random/uuid
+        and begin
+            not set -q ATUIN_SESSION; or test "$ATUIN_SHLVL" != "$SHLVL"
+        end
+        read -l uuid </proc/sys/kernel/random/uuid
+        set -gx ATUIN_SESSION (string replace --all -- - '' $uuid)
+        set -gx ATUIN_SHLVL $SHLVL
+    end
+    _source_cached_init --depends (set -q ATUIN_CONFIG_DIR; and echo $ATUIN_CONFIG_DIR; or echo ~/.config/atuin)/config.toml \
+        atuin init fish --disable-up-arrow --disable-ai
     # Autosuggestions read fish's own history alone, so atuin-fish-history
     # exports atuin's into a fish history file, off the startup path. The
     # first shell keeps the default file until the export exists.
@@ -310,7 +350,7 @@ if command -q atuin
     end
 end
 if command -q starship
-    starship init fish | source
+    _source_cached_init starship init fish --print-full-init
     # starship.toml sets no right_format, so the right prompt would only fork
     # starship to print nothing.
     functions --erase fish_right_prompt
@@ -324,6 +364,7 @@ if command -q starship
         printf '%s' (string replace -r -- '^(?:\e\[0?J)?\n*' '$0'\e']133;A'\a "$p" | string collect)
     end
 end
+functions --erase _source_cached_init
 
 # Ghostty is only a window around tmux, so a local shell in it attaches the
 # `main` session, and so does an SSH login, except one carrying scp or rsync.
